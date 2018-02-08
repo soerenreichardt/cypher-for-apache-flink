@@ -18,38 +18,37 @@ package org.opencypher.caps.impl.spark.physical.operators
 import java.net.URI
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.functions.{asc, desc, monotonically_increasing_id, udf}
-import org.apache.spark.sql.types.{ArrayType, LongType, StructField, StructType}
+import org.apache.spark.sql.functions.{asc, desc, monotonically_increasing_id}
+import org.apache.spark.sql.types.{StructField, StructType}
 import org.opencypher.caps.api.CAPSSession
 import org.opencypher.caps.api.exception.{IllegalArgumentException, IllegalStateException, NotImplementedException}
 import org.opencypher.caps.api.schema.Schema
 import org.opencypher.caps.api.types._
-import org.opencypher.caps.api.value.CAPSInteger
+import org.opencypher.caps.api.value.CypherValue._
 import org.opencypher.caps.impl.record._
-import org.opencypher.caps.impl.spark.SparkSQLExprMapper.asSparkSQLExpr
+import org.opencypher.caps.impl.spark.SparkSQLExprMapper._
 import org.opencypher.caps.impl.spark.convert.SparkUtils._
-import org.opencypher.caps.impl.spark.physical.operators.PhysicalOperator.{assertIsNode, columnName}
-import org.opencypher.caps.impl.spark.physical.{PhysicalResult, RuntimeContext, cypherFilter, udfUtils}
+import org.opencypher.caps.impl.spark.physical.operators.CAPSPhysicalOperator.{assertIsNode, columnName}
+import org.opencypher.caps.impl.spark.physical.{CAPSPhysicalResult, CAPSRuntimeContext}
 import org.opencypher.caps.impl.spark.{CAPSGraph, CAPSRecords, SparkColumnName}
 import org.opencypher.caps.impl.syntax.RecordHeaderSyntax._
 import org.opencypher.caps.ir.api.block.{Asc, Desc, SortItem}
 import org.opencypher.caps.ir.api.expr._
-import org.opencypher.caps.ir.impl.convert.toJava
 import org.opencypher.caps.ir.impl.syntax.ExprSyntax._
 import org.opencypher.caps.logical.impl.{ConstructedEntity, _}
 
-private[spark] abstract class UnaryPhysicalOperator extends PhysicalOperator {
+private[spark] abstract class UnaryPhysicalOperator extends CAPSPhysicalOperator {
 
-  def in: PhysicalOperator
+  def in: CAPSPhysicalOperator
 
-  override def execute(implicit context: RuntimeContext): PhysicalResult = executeUnary(in.execute)
+  override def execute(implicit context: CAPSRuntimeContext): CAPSPhysicalResult = executeUnary(in.execute)
 
-  def executeUnary(prev: PhysicalResult)(implicit context: RuntimeContext): PhysicalResult
+  def executeUnary(prev: CAPSPhysicalResult)(implicit context: CAPSRuntimeContext): CAPSPhysicalResult
 }
 
-final case class Cache(in: PhysicalOperator) extends UnaryPhysicalOperator with InheritedHeader {
+final case class Cache(in: CAPSPhysicalOperator) extends UnaryPhysicalOperator with InheritedHeader {
 
-  override def executeUnary(prev: PhysicalResult)(implicit context: RuntimeContext): PhysicalResult = {
+  override def executeUnary(prev: CAPSPhysicalResult)(implicit context: CAPSRuntimeContext): CAPSPhysicalResult = {
     context.cache.getOrElse(in, {
       prev.records.cache()
       context.cache(in) = prev
@@ -59,11 +58,11 @@ final case class Cache(in: PhysicalOperator) extends UnaryPhysicalOperator with 
 
 }
 
-final case class Scan(in: PhysicalOperator, inGraph: LogicalGraph, v: Var, header: RecordHeader)
+final case class Scan(in: CAPSPhysicalOperator, inGraph: LogicalGraph, v: Var, header: RecordHeader)
   extends UnaryPhysicalOperator {
 
   // TODO: Move to Graph interface?
-  override def executeUnary(prev: PhysicalResult)(implicit context: RuntimeContext): PhysicalResult = {
+  override def executeUnary(prev: CAPSPhysicalResult)(implicit context: CAPSRuntimeContext): CAPSPhysicalResult = {
     val graphs = prev.graphs
     val graph = graphs(inGraph.name)
     val records = v.cypherType match {
@@ -75,44 +74,40 @@ final case class Scan(in: PhysicalOperator, inGraph: LogicalGraph, v: Var, heade
         throw IllegalArgumentException("an entity type", x)
     }
     assert(header == records.header)
-    PhysicalResult(records, graphs)
+    CAPSPhysicalResult(records, graphs)
   }
 }
 
-final case class Unwind(in: PhysicalOperator, list: Expr, item: Var, header: RecordHeader)
+final case class Unwind(in: CAPSPhysicalOperator, list: Expr, item: Var, header: RecordHeader)
   extends UnaryPhysicalOperator {
 
   import scala.collection.JavaConverters._
 
-  override def executeUnary(prev: PhysicalResult)(implicit context: RuntimeContext): PhysicalResult = {
+  override def executeUnary(prev: CAPSPhysicalResult)(implicit context: CAPSRuntimeContext): CAPSPhysicalResult = {
     prev.mapRecordsWithDetails { records =>
       val itemColumn = columnName(header.slotFor(item))
       val newData = list match {
         // the list is external: we create a dataframe and crossjoin with it
         case Param(name) =>
           // we need a Java list of rows to construct a DataFrame
-          toJava(context.parameters(name)) match {
-            case t: TraversableOnce[_] =>
-              val list = t.map(Row(_)).toList.asJava
-
+          context.parameters(name).as[CypherList] match {
+            case Some(l) =>
               val sparkType = toSparkType(item.cypherType)
               val nullable = item.cypherType.isNullable
               val schema = StructType(Seq(StructField(itemColumn, sparkType, nullable)))
 
-              val df = records.caps.sparkSession.createDataFrame(list, schema)
+              val javaRowList = l.unwrap.map(Row(_)).asJava
+              val df = records.caps.sparkSession.createDataFrame(javaRowList, schema)
 
               records.data.crossJoin(df)
 
-            case x =>
-              throw IllegalArgumentException("a list", x)
+            case None =>
+              throw IllegalArgumentException("a list", list)
           }
 
         // the list lives in a column: we explode it
         case expr =>
-          val listColumn = asSparkSQLExpr(records.header, expr, records.data) match {
-            case Some(c) => c
-            case None => throw IllegalArgumentException(s"a column for the list $expr")
-          }
+          val listColumn = expr.asSparkSQLExpr(records.header, records.data, context)
 
           records.data.withColumn(itemColumn, functions.explode(listColumn))
       }
@@ -122,10 +117,10 @@ final case class Unwind(in: PhysicalOperator, list: Expr, item: Var, header: Rec
   }
 }
 
-final case class Alias(in: PhysicalOperator, expr: Expr, alias: Var, header: RecordHeader)
+final case class Alias(in: CAPSPhysicalOperator, expr: Expr, alias: Var, header: RecordHeader)
   extends UnaryPhysicalOperator {
 
-  override def executeUnary(prev: PhysicalResult)(implicit context: RuntimeContext): PhysicalResult = {
+  override def executeUnary(prev: CAPSPhysicalResult)(implicit context: CAPSRuntimeContext): CAPSPhysicalResult = {
     prev.mapRecordsWithDetails { records =>
       val oldSlot = records.header.slotsFor(expr).head
 
@@ -145,28 +140,24 @@ final case class Alias(in: PhysicalOperator, expr: Expr, alias: Var, header: Rec
   }
 }
 
-final case class Project(in: PhysicalOperator, expr: Expr, header: RecordHeader) extends UnaryPhysicalOperator {
+final case class Project(in: CAPSPhysicalOperator, expr: Expr, header: RecordHeader) extends UnaryPhysicalOperator {
 
-  override def executeUnary(prev: PhysicalResult)(implicit context: RuntimeContext): PhysicalResult = {
+  override def executeUnary(prev: CAPSPhysicalResult)(implicit context: CAPSRuntimeContext): CAPSPhysicalResult = {
     prev.mapRecordsWithDetails { records =>
-      val newData = asSparkSQLExpr(header, expr, records.data) match {
-        case None => throw NotImplementedException(s"Projecting $expr")
+      val headerNames = header.slotsFor(expr).map(columnName)
+      val dataNames = records.data.columns.toSeq
 
-        case Some(sparkSqlExpr) =>
-          val headerNames = header.slotsFor(expr).map(columnName)
-          val dataNames = records.data.columns.toSeq
+      // TODO: Can optimise for var AS var2 case -- avoid duplicating data
+      val newData = headerNames.diff(dataNames) match {
+        case Seq(one) =>
+          // align the name of the column to what the header expects
+          val newCol = expr.asSparkSQLExpr(header, records.data, context).as(one)
+          val columnsToSelect = records.data.columns
+            .map(records.data.col) :+ newCol
 
-          // TODO: Can optimise for var AS var2 case -- avoid duplicating data
-          headerNames.diff(dataNames) match {
-            case Seq(one) =>
-              // align the name of the column to what the header expects
-              val newCol = sparkSqlExpr.as(one)
-              val columnsToSelect = records.data.columns
-                .map(records.data.col) :+ newCol
-
-              records.data.select(columnsToSelect: _*)
-            case _ => throw IllegalStateException(s"Got multiple slots for expression $expr")
-          }
+          records.data.select(columnsToSelect: _*)
+        case seq if seq.isEmpty => throw IllegalStateException(s"Did not find a slot for expression $expr in $headerNames")
+        case seq => throw IllegalStateException(s"Got multiple slots for expression $expr: $seq")
       }
 
       CAPSRecords.verifyAndCreate(header, newData)(records.caps)
@@ -174,19 +165,13 @@ final case class Project(in: PhysicalOperator, expr: Expr, header: RecordHeader)
   }
 }
 
-final case class Filter(in: PhysicalOperator, expr: Expr, header: RecordHeader) extends UnaryPhysicalOperator {
+final case class Filter(in: CAPSPhysicalOperator, expr: Expr, header: RecordHeader) extends UnaryPhysicalOperator {
 
-  override def executeUnary(prev: PhysicalResult)(implicit context: RuntimeContext): PhysicalResult = {
+  override def executeUnary(prev: CAPSPhysicalResult)(implicit context: CAPSRuntimeContext): CAPSPhysicalResult = {
     prev.mapRecordsWithDetails { records =>
-      val filteredRows =
-        asSparkSQLExpr(records.header, expr, records.data) match {
-          case Some(sqlExpr) =>
-            records.data.where(sqlExpr)
-          case None =>
-            val predicate = cypherFilter(header, expr)
-            records.data.filter(predicate)
-        }
+      val filteredRows = records.data.where(expr.asSparkSQLExpr(header, records.data, context))
 
+      // TODO: is this necessary? Filter should just remove rows
       val selectedColumns = header.slots.map { c =>
         val name = columnName(c)
         filteredRows.col(name)
@@ -199,21 +184,22 @@ final case class Filter(in: PhysicalOperator, expr: Expr, header: RecordHeader) 
   }
 }
 
-final case class ProjectExternalGraph(in: PhysicalOperator, name: String, uri: URI) extends UnaryPhysicalOperator with InheritedHeader {
+final case class ProjectExternalGraph(in: CAPSPhysicalOperator, name: String, uri: URI) extends UnaryPhysicalOperator with InheritedHeader {
 
-  override def executeUnary(prev: PhysicalResult)(implicit context: RuntimeContext): PhysicalResult =
+  override def executeUnary(prev: CAPSPhysicalResult)(implicit context: CAPSRuntimeContext): CAPSPhysicalResult =
     prev.withGraph(name -> resolve(uri))
 
 }
 
 final case class ProjectPatternGraph(
-  in: PhysicalOperator,
+  in: CAPSPhysicalOperator,
   toCreate: Set[ConstructedEntity],
   name: String,
-  schema: Schema)
-  extends UnaryPhysicalOperator with InheritedHeader {
+  schema: Schema,
+  header: RecordHeader)
+  extends UnaryPhysicalOperator {
 
-  override def executeUnary(prev: PhysicalResult)(implicit context: RuntimeContext): PhysicalResult = {
+  override def executeUnary(prev: CAPSPhysicalResult)(implicit context: CAPSRuntimeContext): CAPSPhysicalResult = {
     val input = prev.records
 
     val baseTable =
@@ -301,12 +287,11 @@ final case class ProjectPatternGraph(
 }
 
 final case class RemoveAliases(
+  in: CAPSPhysicalOperator,
   dependentFields: Set[(ProjectedField, ProjectedExpr)],
-  in: PhysicalOperator,
-  header: RecordHeader)
-  extends UnaryPhysicalOperator {
+  header: RecordHeader) extends UnaryPhysicalOperator {
 
-  override def executeUnary(prev: PhysicalResult)(implicit context: RuntimeContext): PhysicalResult = {
+  override def executeUnary(prev: CAPSPhysicalResult)(implicit context: CAPSRuntimeContext): CAPSPhysicalResult = {
     prev.mapRecordsWithDetails { records =>
       val renamed = dependentFields.foldLeft(records.data) {
         case (df, (v, expr)) =>
@@ -318,10 +303,10 @@ final case class RemoveAliases(
   }
 }
 
-final case class SelectFields(in: PhysicalOperator, fields: IndexedSeq[Var], header: RecordHeader)
+final case class SelectFields(in: CAPSPhysicalOperator, fields: IndexedSeq[Var], header: RecordHeader)
   extends UnaryPhysicalOperator {
 
-  override def executeUnary(prev: PhysicalResult)(implicit context: RuntimeContext): PhysicalResult = {
+  override def executeUnary(prev: CAPSPhysicalResult)(implicit context: CAPSRuntimeContext): CAPSPhysicalResult = {
     prev.mapRecordsWithDetails { records =>
       val fieldIndices = fields.zipWithIndex.toMap
 
@@ -349,31 +334,31 @@ final case class SelectFields(in: PhysicalOperator, fields: IndexedSeq[Var], hea
   }
 }
 
-final case class SelectGraphs(in: PhysicalOperator, graphs: Set[String])
+final case class SelectGraphs(in: CAPSPhysicalOperator, graphs: Set[String])
   extends UnaryPhysicalOperator with InheritedHeader {
 
-  override def executeUnary(prev: PhysicalResult)(implicit context: RuntimeContext): PhysicalResult =
+  override def executeUnary(prev: CAPSPhysicalResult)(implicit context: CAPSRuntimeContext): CAPSPhysicalResult =
     prev.selectGraphs(graphs)
 
 }
 
-final case class Distinct(in: PhysicalOperator, header: RecordHeader) extends UnaryPhysicalOperator {
+final case class Distinct(in: CAPSPhysicalOperator, fields: Set[Var])
+  extends UnaryPhysicalOperator with InheritedHeader {
 
-  override def executeUnary(prev: PhysicalResult)(implicit context: RuntimeContext): PhysicalResult = {
+  override def executeUnary(prev: CAPSPhysicalResult)(implicit context: CAPSRuntimeContext): CAPSPhysicalResult = {
     prev.mapRecordsWithDetails { records =>
       val data = records.data
-      val columnNames = header.slots.map(slot => data.col(columnName(slot)))
-      val relevantColumns = data.select(columnNames: _*)
-      val distinctRows = relevantColumns.dropDuplicates(header.fields.toSeq)
+      val relevantColumns = fields.map(header.slotFor).map(columnName)
+      val distinctRows = data.dropDuplicates(relevantColumns.toSeq)
       CAPSRecords.verifyAndCreate(header, distinctRows)(records.caps)
     }
   }
 }
 
-final case class SimpleDistinct(in: PhysicalOperator)
+final case class SimpleDistinct(in: CAPSPhysicalOperator)
   extends UnaryPhysicalOperator with InheritedHeader {
 
-  override def executeUnary(prev: PhysicalResult)(implicit context: RuntimeContext): PhysicalResult = {
+  override def executeUnary(prev: CAPSPhysicalResult)(implicit context: CAPSRuntimeContext): CAPSPhysicalResult = {
     prev.mapRecordsWithDetails { records =>
       CAPSRecords.verifyAndCreate(prev.records.header, records.data.distinct())(records.caps)
     }
@@ -381,22 +366,18 @@ final case class SimpleDistinct(in: PhysicalOperator)
 }
 
 final case class Aggregate(
-  in: PhysicalOperator,
+  in: CAPSPhysicalOperator,
   aggregations: Set[(Var, Aggregator)],
   group: Set[Var],
   header: RecordHeader)
   extends UnaryPhysicalOperator {
 
-  override def executeUnary(prev: PhysicalResult)(implicit context: RuntimeContext): PhysicalResult = {
+  override def executeUnary(prev: CAPSPhysicalResult)(implicit context: CAPSRuntimeContext): CAPSPhysicalResult = {
     prev.mapRecordsWithDetails { records =>
       val inData = records.data
 
-      def withInnerExpr(expr: Expr)(f: Column => Column) = {
-        asSparkSQLExpr(records.header, expr, inData) match {
-          case None => throw NotImplementedException(s"Projecting $expr")
-          case Some(column) => f(column)
-        }
-      }
+      def withInnerExpr(expr: Expr)(f: Column => Column) =
+        f(expr.asSparkSQLExpr(records.header, inData, context))
 
       val data: Either[RelationalGroupedDataset, DataFrame] =
         if (group.nonEmpty) {
@@ -452,10 +433,10 @@ final case class Aggregate(
   }
 }
 
-final case class OrderBy(in: PhysicalOperator, sortItems: Seq[SortItem[Expr]], header: RecordHeader)
-  extends UnaryPhysicalOperator {
+final case class OrderBy(in: CAPSPhysicalOperator, sortItems: Seq[SortItem[Expr]])
+  extends UnaryPhysicalOperator with InheritedHeader {
 
-  override def executeUnary(prev: PhysicalResult)(implicit context: RuntimeContext): PhysicalResult = {
+  override def executeUnary(prev: CAPSPhysicalResult)(implicit context: CAPSRuntimeContext): CAPSPhysicalResult = {
     val getColumnName = (expr: Var) => columnName(prev.records.header.slotFor(expr))
 
     val sortExpression = sortItems.map {
@@ -471,14 +452,14 @@ final case class OrderBy(in: PhysicalOperator, sortItems: Seq[SortItem[Expr]], h
   }
 }
 
-final case class Skip(in: PhysicalOperator, expr: Expr, header: RecordHeader) extends UnaryPhysicalOperator {
+final case class Skip(in: CAPSPhysicalOperator, expr: Expr, header: RecordHeader) extends UnaryPhysicalOperator {
 
-  override def executeUnary(prev: PhysicalResult)(implicit context: RuntimeContext): PhysicalResult = {
+  override def executeUnary(prev: CAPSPhysicalResult)(implicit context: CAPSRuntimeContext): CAPSPhysicalResult = {
     val skip: Long = expr match {
       case IntegerLit(v) => v
       case Param(name) =>
         context.parameters(name) match {
-          case CAPSInteger(v) => v
+          case CypherInteger(l) => l
           case other => throw IllegalArgumentException("a CypherInteger", other)
         }
       case other => throw IllegalArgumentException("an integer literal or parameter", other)
@@ -500,14 +481,14 @@ final case class Skip(in: PhysicalOperator, expr: Expr, header: RecordHeader) ex
   }
 }
 
-final case class Limit(in: PhysicalOperator, expr: Expr, header: RecordHeader) extends UnaryPhysicalOperator {
+final case class Limit(in: CAPSPhysicalOperator, expr: Expr, header: RecordHeader) extends UnaryPhysicalOperator {
 
-  override def executeUnary(prev: PhysicalResult)(implicit context: RuntimeContext): PhysicalResult = {
+  override def executeUnary(prev: CAPSPhysicalResult)(implicit context: CAPSRuntimeContext): CAPSPhysicalResult = {
     val limit: Long = expr match {
       case IntegerLit(v) => v
       case Param(name) =>
         context.parameters(name) match {
-          case CAPSInteger(v) => v
+          case CypherInteger(v) => v
           case other => throw IllegalArgumentException("a CypherInteger", other)
         }
       case other => throw IllegalArgumentException("an integer literal", other)
@@ -520,10 +501,10 @@ final case class Limit(in: PhysicalOperator, expr: Expr, header: RecordHeader) e
 }
 
 // Initialises the table in preparation for variable length expand.
-final case class InitVarExpand(in: PhysicalOperator, source: Var, edgeList: Var, target: Var, header: RecordHeader)
+final case class InitVarExpand(in: CAPSPhysicalOperator, source: Var, edgeList: Var, target: Var, header: RecordHeader)
   extends UnaryPhysicalOperator {
 
-  override def executeUnary(prev: PhysicalResult)(implicit context: RuntimeContext): PhysicalResult = {
+  override def executeUnary(prev: CAPSPhysicalResult)(implicit context: CAPSRuntimeContext): CAPSPhysicalResult = {
     val sourceSlot = header.slotFor(source)
     val edgeListSlot = header.slotFor(edgeList)
     val targetSlot = header.slotFor(target)
@@ -535,7 +516,7 @@ final case class InitVarExpand(in: PhysicalOperator, source: Var, edgeList: Var,
       val keep = inputData.columns.map(inputData.col)
 
       val edgeListColName = columnName(edgeListSlot)
-      val edgeListColumn = udf(udfUtils.initArray _, ArrayType(LongType))()
+      val edgeListColumn = functions.typedLit(Array[Long]())
       val withEmptyList = inputData.withColumn(edgeListColName, edgeListColumn)
 
       val cols = keep ++ Seq(
@@ -549,17 +530,17 @@ final case class InitVarExpand(in: PhysicalOperator, source: Var, edgeList: Var,
   }
 }
 
-final case class EmptyRecords(in: PhysicalOperator, header: RecordHeader)(implicit caps: CAPSSession)
+final case class EmptyRecords(in: CAPSPhysicalOperator, header: RecordHeader)(implicit caps: CAPSSession)
   extends UnaryPhysicalOperator {
 
-  override def executeUnary(prev: PhysicalResult)(implicit context: RuntimeContext): PhysicalResult =
+  override def executeUnary(prev: CAPSPhysicalResult)(implicit context: CAPSRuntimeContext): CAPSPhysicalResult =
     prev.mapRecordsWithDetails(_ => CAPSRecords.empty(header))
 
 }
 
-final case class SetSourceGraph(in: PhysicalOperator, graph: LogicalExternalGraph) extends UnaryPhysicalOperator with InheritedHeader {
+final case class SetSourceGraph(in: CAPSPhysicalOperator, graph: LogicalExternalGraph) extends UnaryPhysicalOperator with InheritedHeader {
 
-  override def executeUnary(prev: PhysicalResult)(implicit context: RuntimeContext): PhysicalResult =
+  override def executeUnary(prev: CAPSPhysicalResult)(implicit context: CAPSRuntimeContext): CAPSPhysicalResult =
     prev.withGraph(graph.name -> resolve(graph.uri))
 
 }

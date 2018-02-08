@@ -23,6 +23,7 @@ import org.neo4j.cypher.internal.v3_4.{expressions => ast}
 import org.opencypher.caps.api.io.PropertyGraphDataSource
 import org.opencypher.caps.api.schema.Schema
 import org.opencypher.caps.api.types._
+import org.opencypher.caps.api.value.CypherValue.CypherMap
 import org.opencypher.caps.ir.api._
 import org.opencypher.caps.ir.api.expr._
 import org.opencypher.caps.ir.test.support.Neo4jAstTestSupport
@@ -39,7 +40,16 @@ class ExpressionConverterTest extends BaseTestSuite with Neo4jAstTestSupport wit
     case _                 => CTWildcard
   }
 
-  it("coalesce") {
+  it("should convert CASE") {
+    convert(parseExpr("CASE WHEN a > b THEN c ELSE d END")) should equal(
+      CaseExpr(IndexedSeq((GreaterThan('a, 'b)(CTBoolean), 'c)), Some('d))()
+    )
+    convert(parseExpr("CASE WHEN a > b THEN c END")) should equal(
+      CaseExpr(IndexedSeq((GreaterThan('a, 'b)(CTBoolean), 'c)), None)()
+    )
+  }
+
+  it("should convert coalesce") {
     convert(parseExpr("coalesce(a, b, c)")) should equal(
       Coalesce(IndexedSeq('a, 'b, 'c))()
     )
@@ -204,7 +214,7 @@ class ExpressionConverterTest extends BaseTestSuite with Neo4jAstTestSupport wit
 
   lazy val testContext = IRBuilderContext.initial(
     "",
-    Map.empty,
+    CypherMap.empty,
     SemanticState.clean,
     IRExternalGraph("", Schema.empty, URI.create("")),
     (resolver) => mock[PropertyGraphDataSource]

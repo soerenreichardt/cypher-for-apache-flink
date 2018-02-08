@@ -21,7 +21,7 @@ import org.opencypher.caps.test.support.creation.caps.CAPSGraphFactory
 import org.opencypher.caps.test.support.creation.propertygraph.CAPSPropertyGraphFactory
 
 abstract class AcceptanceTest
-    extends CAPSTestSuite
+  extends CAPSTestSuite
     with AggregationBehaviour
     with BoundedVarExpandBehaviour
     with ExpandIntoBehaviour
@@ -37,7 +37,8 @@ abstract class AcceptanceTest
 
   def capsGraphFactory: CAPSGraphFactory
 
-  val initGraph: String => CAPSGraph = (createQuery) => capsGraphFactory(CAPSPropertyGraphFactory(createQuery))
+  val initGraph: String => CAPSGraph = (createQuery) =>
+    capsGraphFactory(CAPSPropertyGraphFactory(createQuery))
 
   describe("using " + capsGraphFactory.name) {
     describe("AggregationBehaviour") {

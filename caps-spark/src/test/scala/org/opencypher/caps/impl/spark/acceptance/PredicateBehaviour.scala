@@ -15,12 +15,13 @@
  */
 package org.opencypher.caps.impl.spark.acceptance
 
-import org.opencypher.caps.api.value.{CAPSList, CAPSMap}
+import org.opencypher.caps.api.value.CypherValue._
 import org.opencypher.caps.impl.spark.CAPSGraph
 
 import scala.collection.immutable.Bag
 
-trait PredicateBehaviour { this: AcceptanceTest =>
+trait PredicateBehaviour {
+  this: AcceptanceTest =>
 
   def predicateBehaviour(initGraph: String => CAPSGraph): Unit = {
     test("exists()") {
@@ -29,8 +30,8 @@ trait PredicateBehaviour { this: AcceptanceTest =>
       val result = given.cypher("MATCH (n) WHERE exists(n.id) RETURN n.id")
 
       result.records.toMaps should equal(Bag(
-        CAPSMap("n.id" -> 1),
-        CAPSMap("n.id" -> 2)
+        CypherMap("n.id" -> 1),
+        CypherMap("n.id" -> 2)
       ))
     }
 
@@ -43,7 +44,7 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
       // Then
       result.records.toMaps should equal(Bag(
-        CAPSMap("a.val" -> 2)
+        CypherMap("a.val" -> 2)
       ))
 
       // And
@@ -55,11 +56,11 @@ trait PredicateBehaviour { this: AcceptanceTest =>
       val given = initGraph("""CREATE (:A {val: 1}), (:A {val: 2}), (:A {val: 3})""")
 
       // When
-      val result = given.cypher("MATCH (a:A) WHERE a.val IN $list RETURN a.val", Map("list" -> CAPSList(Seq(-1, 2, 5, 0))))
+      val result = given.cypher("MATCH (a:A) WHERE a.val IN $list RETURN a.val", Map("list" -> CypherList(-1, 2, 5, 0)))
 
       // Then
       result.records.toMaps should equal(Bag(
-        CAPSMap("a.val" -> 2)
+        CypherMap("a.val" -> 2)
       ))
 
       // And
@@ -75,8 +76,8 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
       // Then
       result.records.toMaps should equal(Bag(
-        CAPSMap("a.val" -> 1),
-        CAPSMap("a.val" -> 2)
+        CypherMap("a.val" -> 1),
+        CypherMap("a.val" -> 2)
       ))
 
       // And
@@ -92,8 +93,8 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
       // Then
       result.records.toMaps should equal(Bag(
-        CAPSMap("a.val" -> 1),
-        CAPSMap("a.val" -> 2)
+        CypherMap("a.val" -> 1),
+        CypherMap("a.val" -> 2)
       ))
 
       // And
@@ -102,20 +103,21 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
     test("or with and") {
       // Given
-      val given = initGraph("""CREATE (:A {val: 1, name: 'a'})
-                                 |CREATE (:A {val: 2, name: 'a'})
-                                 |CREATE (:A {val: 3, name: 'e'})
-                                 |CREATE (:A {val: 4})
-                                 |CREATE (:A {val: 5, name: 'e'})
-                               """.stripMargin)
+      val given = initGraph(
+        """CREATE (:A {val: 1, name: 'a'})
+          |CREATE (:A {val: 2, name: 'a'})
+          |CREATE (:A {val: 3, name: 'e'})
+          |CREATE (:A {val: 4})
+          |CREATE (:A {val: 5, name: 'e'})
+        """.stripMargin)
 
       // When
       val result = given.cypher("MATCH (a:A) WHERE a.val = 1 OR (a.val >= 4 AND a.name = 'e') RETURN a.val, a.name")
 
       // Then
       result.records.toMaps should equal(Bag(
-        CAPSMap("a.val" -> 1, "a.name" -> "a"),
-        CAPSMap("a.val" -> 5, "a.name" -> "e")
+        CypherMap("a.val" -> 1, "a.name" -> "a"),
+        CypherMap("a.val" -> 5, "a.name" -> "e")
       ))
 
       // And
@@ -126,11 +128,11 @@ trait PredicateBehaviour { this: AcceptanceTest =>
       // Given
       val given = initGraph(
         """ CREATE (:A {val: 1})-[:REL]->(:B {p: 2})
-           |CREATE (:A {val: 2})-[:REL]->(:B {p: 1})
-           |CREATE (:A {val: 100})-[:REL]->(:B {p: 100})
-           |CREATE (:A {val: 1})-[:REL]->(:B)
-           |CREATE (:A)-[:REL]->(:B {p: 2})
-           |CREATE (:A)-[:REL]->(:B)
+          |CREATE (:A {val: 2})-[:REL]->(:B {p: 1})
+          |CREATE (:A {val: 100})-[:REL]->(:B {p: 100})
+          |CREATE (:A {val: 1})-[:REL]->(:B)
+          |CREATE (:A)-[:REL]->(:B {p: 2})
+          |CREATE (:A)-[:REL]->(:B)
         """.stripMargin)
 
       // When
@@ -138,80 +140,158 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
       // Then
       result.records.toMaps should equal(Bag(
-        CAPSMap("b.p" -> 100)
+        CypherMap("b.p" -> 100)
       ))
 
       // And
       result.graphs shouldBe empty
     }
 
-    test("less than") {
+    describe("comparison operators") {
+      test("less than") {
 
-      // Given
-      val given = initGraph("""CREATE (:Node {val: 4})-[:REL]->(:Node {val: 5})""")
+        // Given
+        val given = initGraph("""CREATE (:Node {val: 4})-[:REL]->(:Node {val: 5})""")
 
-      // When
-      val result = given.cypher("MATCH (n:Node)-->(m:Node) WHERE n.val < m.val RETURN n.val")
+        // When
+        val result = given.cypher("MATCH (n:Node)-->(m:Node) WHERE n.val < m.val RETURN n.val")
 
-      // Then
-      result.records.toMaps should equal(Bag(
-        CAPSMap("n.val" -> 4)
-      ))
+        // Then
+        result.records.toMaps should equal(Bag(
+          CypherMap("n.val" -> 4)
+        ))
 
-      // And
-      result.graphs shouldBe empty
+        // And
+        result.graphs shouldBe empty
+      }
+
+      it("compares less than between different types") {
+
+        // Given
+        val given = initGraph("""CREATE (:A {val: 4})-[:REL]->(:B {val: 'string'})""")
+
+        // When
+        val result = given.cypher("MATCH (a:A)-->(b:B) WHERE a.val < b.val RETURN a.val")
+
+        // Then
+        result.records.iterator.toBag shouldBe empty
+
+        // And
+        result.graphs shouldBe empty
+      }
+
+      test("less than or equal") {
+        // Given
+        val given = initGraph(
+          """
+            |CREATE (:Node {id: 1, val: 4})-[:REL]->(:Node {id: 2, val: 5})-[:REL]->(:Node {id: 3, val: 5})
+            |""".stripMargin)
+
+        // When
+        val
+        result = given.cypher("MATCH (n:Node)-->(m:Node) WHERE n.val <= m.val RETURN n.id, n.val")
+
+        // Then
+        result.records.toMaps should equal(Bag(
+          CypherMap("n.id" -> 1, "n.val" -> 4),
+          CypherMap("n.id" -> 2, "n.val" -> 5)
+        ))
+        // And
+        result.graphs shouldBe empty
+      }
+
+      it("compares less than or equal between different types") {
+
+        // Given
+        val given = initGraph("""CREATE (:A {val: 4})-[:REL]->(:B {val: 'string'})""")
+
+        // When
+        val result = given.cypher("MATCH (a:A)-->(b:B) WHERE a.val <= b.val RETURN a.val")
+
+        // Then
+        result.records.iterator.toBag shouldBe empty
+
+        // And
+        result.graphs shouldBe empty
+      }
+
+      test("greater than") {
+        // Given
+        val given = initGraph("""CREATE (:Node {val: 4})-[:REL]->(:Node {val: 5})""")
+
+        // When
+        val result = given.cypher("MATCH (n:Node)<--(m:Node) WHERE n.val > m.val RETURN n.val")
+
+        // Then
+        result.records.toMaps should equal(Bag(
+          CypherMap("n.val" -> 5)
+        ))
+
+        // And
+        result.graphs shouldBe empty
+      }
+
+      it("compares greater than between different types") {
+
+        // Given
+        val given = initGraph("""CREATE (:A {val: 4})-[:REL]->(:B {val: 'string'})""")
+
+        // When
+        val result = given.cypher("MATCH (a:A)-->(b:B) WHERE a.val > b.val RETURN a.val")
+
+        // Then
+        result.records.iterator.toBag shouldBe empty
+
+        // And
+        result.graphs shouldBe empty
+      }
+
+      test("greater than or equal") {
+        // Given
+        val given = initGraph("""CREATE (:Node {id: 1, val: 4})-[:REL]->(:Node {id: 2, val: 5})-[:REL]->(:Node {id: 3, val: 5})""")
+
+        // When
+        val result = given.cypher("MATCH (n:Node)<--(m:Node) WHERE n.val >= m.val RETURN n.id, n.val")
+
+        // Then
+        result.records.toMaps should equal(Bag(
+          CypherMap("n.id" -> 2, "n.val" -> 5),
+          CypherMap("n.id" -> 3, "n.val" -> 5)
+        ))
+
+        // And
+        result.graphs shouldBe empty
+      }
+
+      it("compares greater than or equal between different types") {
+
+        // Given
+        val given = initGraph("""CREATE (:A {val: 4})-[:REL]->(:B {val: 'string'})""")
+
+        // When
+        val result = given.cypher("MATCH (a:A)-->(b:B) WHERE a.val >= b.val RETURN a.val")
+
+        // Then
+        result.records.iterator.toBag shouldBe empty
+
+        // And
+        result.graphs shouldBe empty
+      }
     }
 
-    test("less than or equal") {
-      // Given
-      val given = initGraph(
+    it("can chain range predicates") {
+      val graph = initGraph("CREATE ({val: 10}), ({val: 0}), ({val: 11})")
+
+      val query =
         """
-          |CREATE (:Node {id: 1, val: 4})-[:REL]->(:Node {id: 2, val: 5})-[:REL]->(:Node {id: 3, val: 5})
-       |""".stripMargin)
+          |MATCH (a)
+          |WHERE 0 < a.val <= 10
+          |RETURN a.val
+        """.stripMargin
 
-      // When
-      val result = given.cypher("MATCH (n:Node)-->(m:Node) WHERE n.val <= m.val RETURN n.id, n.val")
-
-      // Then
-      result.records.toMaps should equal(Bag(
-        CAPSMap("n.id" -> 1, "n.val" -> 4),
-        CAPSMap("n.id" -> 2, "n.val" -> 5)
+      graph.cypher(query).records.iterator.toBag should equal(Bag(
+        CypherMap("a.val" -> 10)
       ))
-      // And
-      result.graphs shouldBe empty
-    }
-
-    test("greater than") {
-      // Given
-      val given = initGraph("""CREATE (:Node {val: 4})-[:REL]->(:Node {val: 5})""")
-
-      // When
-      val result = given.cypher("MATCH (n:Node)<--(m:Node) WHERE n.val > m.val RETURN n.val")
-
-      // Then
-      result.records.toMaps should equal(Bag(
-        CAPSMap("n.val" -> 5)
-      ))
-
-      // And
-      result.graphs shouldBe empty
-    }
-
-    test("greater than or equal") {
-      // Given
-      val given = initGraph("""CREATE (:Node {id: 1, val: 4})-[:REL]->(:Node {id: 2, val: 5})-[:REL]->(:Node {id: 3, val: 5})""")
-
-      // When
-      val result = given.cypher("MATCH (n:Node)<--(m:Node) WHERE n.val >= m.val RETURN n.id, n.val")
-
-      // Then
-      result.records.toMaps should equal(Bag(
-        CAPSMap("n.id" -> 2, "n.val" -> 5),
-        CAPSMap("n.id" -> 3, "n.val" -> 5)
-      ))
-
-      // And
-      result.graphs shouldBe empty
     }
 
     test("float conversion for integer division") {
@@ -223,8 +303,8 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
       // Then
       result.records.toMaps should equal(Bag(
-        CAPSMap("n.id" -> 1),
-        CAPSMap("n.id" -> 2)
+        CypherMap("n.id" -> 1),
+        CypherMap("n.id" -> 2)
       ))
 
       // And
@@ -245,7 +325,7 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
       // Then
       result.records.toMaps should equal(Bag(
-        CAPSMap("a.id" -> 1L, "b.id" -> 3L)
+        CypherMap("a.id" -> 1L, "b.id" -> 3L)
       ))
     }
 
@@ -258,7 +338,7 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
       // Then
       result.records.toMaps should equal(Bag(
-        CAPSMap("a.id" -> 1L, "b.id" -> 3L)
+        CypherMap("a.id" -> 1L, "b.id" -> 3L)
       ))
     }
 
@@ -275,7 +355,7 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
       // Then
       result.records.toMaps should equal(Bag(
-        CAPSMap("a.id" -> 1L)
+        CypherMap("a.id" -> 1L)
       ))
     }
 
@@ -292,7 +372,7 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
       // Then
       result.records.toMaps should equal(Bag(
-        CAPSMap("a.id" -> 1L, "b.id" -> 2L)
+        CypherMap("a.id" -> 1L, "b.id" -> 2L)
       ))
     }
 
@@ -309,7 +389,7 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
       // Then
       result.records.toMaps should equal(Bag(
-        CAPSMap("a.id" -> 1L, "b.id" -> 2L)
+        CypherMap("a.id" -> 1L, "b.id" -> 2L)
       ))
     }
 
@@ -326,7 +406,7 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
       // Then
       result.records.toMaps should equal(Bag(
-        CAPSMap("a.id" -> 1L, "b.id" -> 2L)
+        CypherMap("a.id" -> 1L, "b.id" -> 2L)
       ))
     }
 
@@ -339,8 +419,8 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
       // Then
       result.records.toMaps should equal(Bag(
-        CAPSMap("a.id" -> 1L, "b.id" -> 2L),
-        CAPSMap("a.id" -> 2L, "b.id" -> 3L)
+        CypherMap("a.id" -> 1L, "b.id" -> 2L),
+        CypherMap("a.id" -> 2L, "b.id" -> 3L)
       ))
     }
 
@@ -361,8 +441,8 @@ trait PredicateBehaviour { this: AcceptanceTest =>
         """.stripMargin)
 
       result.records.toMaps should equal(Bag(
-        CAPSMap("a.id" -> 1),
-        CAPSMap("a.id" -> 3)
+        CypherMap("a.id" -> 1),
+        CypherMap("a.id" -> 3)
       ))
     }
 
@@ -379,7 +459,7 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
       // Then
       result.records.toMaps should equal(Bag(
-        CAPSMap("a.id" -> 1L)
+        CypherMap("a.id" -> 1L)
       ))
     }
 
@@ -392,7 +472,7 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
       // Then
       result.records.toMaps should equal(Bag(
-        CAPSMap("a.id" -> 1L)
+        CypherMap("a.id" -> 1L)
       ))
     }
 
@@ -411,7 +491,7 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
         // Then
         result.records.toMaps should equal(Bag(
-          CAPSMap("a.id" -> 1L, "b.id" -> 3L)
+          CypherMap("a.id" -> 1L, "b.id" -> 3L)
         ))
       }
 
@@ -424,7 +504,7 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
         // Then
         result.records.toMaps should equal(Bag(
-          CAPSMap("a.id" -> 1L, "b.id" -> 3L)
+          CypherMap("a.id" -> 1L, "b.id" -> 3L)
         ))
       }
 
@@ -441,7 +521,7 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
         // Then
         result.records.toMaps should equal(Bag(
-          CAPSMap("a.id" -> 1L)
+          CypherMap("a.id" -> 1L)
         ))
       }
 
@@ -458,7 +538,7 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
         // Then
         result.records.toMaps should equal(Bag(
-          CAPSMap("a.id" -> 1L, "b.id" -> 2L)
+          CypherMap("a.id" -> 1L, "b.id" -> 2L)
         ))
       }
 
@@ -475,7 +555,7 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
         // Then
         result.records.toMaps should equal(Bag(
-          CAPSMap("a.id" -> 1L, "b.id" -> 2L)
+          CypherMap("a.id" -> 1L, "b.id" -> 2L)
         ))
       }
 
@@ -492,7 +572,7 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
         // Then
         result.records.toMaps should equal(Bag(
-          CAPSMap("a.id" -> 1L, "b.id" -> 2L)
+          CypherMap("a.id" -> 1L, "b.id" -> 2L)
         ))
       }
 
@@ -505,8 +585,8 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
         // Then
         result.records.toMaps should equal(Bag(
-          CAPSMap("a.id" -> 1L, "b.id" -> 2L),
-          CAPSMap("a.id" -> 2L, "b.id" -> 3L)
+          CypherMap("a.id" -> 1L, "b.id" -> 2L),
+          CypherMap("a.id" -> 2L, "b.id" -> 3L)
         ))
       }
 
@@ -527,8 +607,8 @@ trait PredicateBehaviour { this: AcceptanceTest =>
           """.stripMargin)
 
         result.records.toMaps should equal(Bag(
-          CAPSMap("a.id" -> 1),
-          CAPSMap("a.id" -> 3)
+          CypherMap("a.id" -> 1),
+          CypherMap("a.id" -> 3)
         ))
       }
 
@@ -545,7 +625,7 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
         // Then
         result.records.toMaps should equal(Bag(
-          CAPSMap("a.id" -> 1L)
+          CypherMap("a.id" -> 1L)
         ))
       }
 
@@ -558,7 +638,7 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
         // Then
         result.records.toMaps should equal(Bag(
-          CAPSMap("a.id" -> 1L)
+          CypherMap("a.id" -> 1L)
         ))
       }
     }
@@ -578,7 +658,7 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
         // Then
         result.records.toMaps should equal(Bag(
-          CAPSMap("a.id" -> 1L, "b.id" -> 3L)
+          CypherMap("a.id" -> 1L, "b.id" -> 3L)
         ))
       }
 
@@ -591,7 +671,7 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
         // Then
         result.records.toMaps should equal(Bag(
-          CAPSMap("a.id" -> 1L, "b.id" -> 3L)
+          CypherMap("a.id" -> 1L, "b.id" -> 3L)
         ))
       }
 
@@ -608,7 +688,7 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
         // Then
         result.records.toMaps should equal(Bag(
-          CAPSMap("a.id" -> 1L)
+          CypherMap("a.id" -> 1L)
         ))
       }
 
@@ -625,7 +705,7 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
         // Then
         result.records.toMaps should equal(Bag(
-          CAPSMap("a.id" -> 1L, "b.id" -> 2L)
+          CypherMap("a.id" -> 1L, "b.id" -> 2L)
         ))
       }
 
@@ -642,7 +722,7 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
         // Then
         result.records.toMaps should equal(Bag(
-          CAPSMap("a.id" -> 1L, "b.id" -> 2L)
+          CypherMap("a.id" -> 1L, "b.id" -> 2L)
         ))
       }
 
@@ -659,7 +739,7 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
         // Then
         result.records.toMaps should equal(Bag(
-          CAPSMap("a.id" -> 1L, "b.id" -> 2L)
+          CypherMap("a.id" -> 1L, "b.id" -> 2L)
         ))
       }
 
@@ -672,8 +752,8 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
         // Then
         result.records.toMaps should equal(Bag(
-          CAPSMap("a.id" -> 1L, "b.id" -> 2L),
-          CAPSMap("a.id" -> 2L, "b.id" -> 3L)
+          CypherMap("a.id" -> 1L, "b.id" -> 2L),
+          CypherMap("a.id" -> 2L, "b.id" -> 3L)
         ))
       }
 
@@ -694,8 +774,8 @@ trait PredicateBehaviour { this: AcceptanceTest =>
           """.stripMargin)
 
         result.records.toMaps should equal(Bag(
-          CAPSMap("a.id" -> 1),
-          CAPSMap("a.id" -> 3)
+          CypherMap("a.id" -> 1),
+          CypherMap("a.id" -> 3)
         ))
       }
 
@@ -712,7 +792,7 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
         // Then
         result.records.toMaps should equal(Bag(
-          CAPSMap("a.id" -> 1L)
+          CypherMap("a.id" -> 1L)
         ))
       }
 
@@ -725,7 +805,7 @@ trait PredicateBehaviour { this: AcceptanceTest =>
 
         // Then
         result.records.toMaps should equal(Bag(
-          CAPSMap("a.id" -> 1L)
+          CypherMap("a.id" -> 1L)
         ))
       }
     }

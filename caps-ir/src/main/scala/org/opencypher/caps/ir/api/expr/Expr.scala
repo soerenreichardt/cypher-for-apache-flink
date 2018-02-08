@@ -139,23 +139,32 @@ final class Ors(_exprs: Set[Expr])(val cypherType: CypherType = CTWildcard) exte
   override protected def hashPrime: Int = 61
 }
 
-final case class Not(expr: Expr)(val cypherType: CypherType = CTWildcard) extends Expr {
+sealed trait PredicateExpression extends Expr {
+  def inner: Expr
+}
+
+final case class Not(expr: Expr)(val cypherType: CypherType = CTWildcard) extends PredicateExpression {
+  def inner = expr
   override def withoutType = s"NOT ${expr.withoutType}"
 }
 
-final case class HasLabel(node: Expr, label: Label)(val cypherType: CypherType = CTWildcard) extends Expr {
+final case class HasLabel(node: Expr, label: Label)(val cypherType: CypherType = CTWildcard) extends PredicateExpression {
+  def inner = node
   override def withoutType: String = s"${node.withoutType}:${label.name}"
 }
 
-final case class HasType(rel: Expr, relType: RelType)(val cypherType: CypherType = CTWildcard) extends Expr {
+final case class HasType(rel: Expr, relType: RelType)(val cypherType: CypherType = CTWildcard) extends PredicateExpression {
+  def inner = rel
   override def withoutType: String = s"type(${rel.withoutType}) = '${relType.name}'"
 }
 
-final case class IsNull(expr: Expr)(val cypherType: CypherType = CTWildcard) extends Expr {
+final case class IsNull(expr: Expr)(val cypherType: CypherType = CTWildcard) extends PredicateExpression {
+  def inner = expr
   override def withoutType: String = s"type(${expr.withoutType}) IS NULL"
 }
 
-final case class IsNotNull(expr: Expr)(val cypherType: CypherType = CTWildcard) extends Expr {
+final case class IsNotNull(expr: Expr)(val cypherType: CypherType = CTWildcard) extends PredicateExpression {
+  def inner = expr
   override def withoutType: String = s"type(${expr.withoutType}) IS NOT NULL"
 }
 
@@ -362,4 +371,17 @@ final case class ExistsPatternExpr(targetField: Var, ir: CypherQuery[Expr])(val 
   override def toString = s"$withoutType($cypherType)"
 
   override def withoutType = s"Exists(${ir.info.singleLine}, $targetField)"
+}
+
+final case class CaseExpr(alternatives: IndexedSeq[(Expr, Expr)], default: Option[Expr])
+  (val cypherType: CypherType = CTWildcard) extends Expr {
+
+  override def toString: String = s"$withoutType($cypherType)"
+
+  override def withoutType: String = {
+    val alternativesString = alternatives
+      .map(pair => pair._1.withoutType -> pair._2.withoutType)
+      .mkString("[", ", ", "]")
+    s"CaseExpr($alternativesString, $default)"
+  }
 }

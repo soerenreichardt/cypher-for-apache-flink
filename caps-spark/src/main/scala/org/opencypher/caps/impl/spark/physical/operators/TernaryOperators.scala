@@ -16,36 +16,35 @@
 package org.opencypher.caps.impl.spark.physical.operators
 
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.functions.udf
-import org.apache.spark.sql.types.{ArrayType, BooleanType, LongType}
 import org.opencypher.caps.api.types.CTNode
 import org.opencypher.caps.impl.record.{OpaqueField, ProjectedExpr, RecordHeader, RecordSlot}
-import org.opencypher.caps.impl.spark.physical.operators.PhysicalOperator.{assertIsNode, columnName, joinRecords}
-import org.opencypher.caps.impl.spark.physical.{PhysicalResult, RuntimeContext, udfUtils}
+import org.opencypher.caps.impl.spark.CAPSFunctions._
+import org.opencypher.caps.impl.spark.physical.operators.CAPSPhysicalOperator.{assertIsNode, columnName, joinRecords}
+import org.opencypher.caps.impl.spark.physical.{CAPSPhysicalResult, CAPSRuntimeContext}
 import org.opencypher.caps.impl.spark.{CAPSRecords, ColumnNameGenerator}
 import org.opencypher.caps.ir.api.expr.{EndNode, Var}
 import org.opencypher.caps.logical.impl.{Directed, Direction, Undirected}
 
-private[spark] abstract class TernaryPhysicalOperator extends PhysicalOperator {
+private[spark] abstract class TernaryPhysicalOperator extends CAPSPhysicalOperator {
 
-  def first: PhysicalOperator
+  def first: CAPSPhysicalOperator
 
-  def second: PhysicalOperator
+  def second: CAPSPhysicalOperator
 
-  def third: PhysicalOperator
+  def third: CAPSPhysicalOperator
 
-  override def execute(implicit context: RuntimeContext): PhysicalResult =
+  override def execute(implicit context: CAPSRuntimeContext): CAPSPhysicalResult =
     executeTernary(first.execute, second.execute, third.execute)
 
-  def executeTernary(first: PhysicalResult, second: PhysicalResult, third: PhysicalResult)(
-      implicit context: RuntimeContext): PhysicalResult
+  def executeTernary(first: CAPSPhysicalResult, second: CAPSPhysicalResult, third: CAPSPhysicalResult)(
+      implicit context: CAPSRuntimeContext): CAPSPhysicalResult
 }
 
 // This maps a Cypher pattern such as (s)-[r]->(t), where s is solved by first, r is solved by second and t is solved by third
 final case class ExpandSource(
-    first: PhysicalOperator,
-    second: PhysicalOperator,
-    third: PhysicalOperator,
+    first: CAPSPhysicalOperator,
+    second: CAPSPhysicalOperator,
+    third: CAPSPhysicalOperator,
     source: Var,
     rel: Var,
     target: Var,
@@ -53,7 +52,7 @@ final case class ExpandSource(
     removeSelfRelationships: Boolean = false)
     extends TernaryPhysicalOperator {
 
-  override def executeTernary(first: PhysicalResult, second: PhysicalResult, third: PhysicalResult)(implicit context: RuntimeContext): PhysicalResult = {
+  override def executeTernary(first: CAPSPhysicalResult, second: CAPSPhysicalResult, third: CAPSPhysicalResult)(implicit context: CAPSRuntimeContext): CAPSPhysicalResult = {
     val relationships = getRelationshipData(second.records)
 
     val sourceSlot = first.records.header.slotFor(source)
@@ -70,10 +69,10 @@ final case class ExpandSource(
     assertIsNode(targetSlotInRel)
 
     val joinedRecords = joinRecords(header, Seq(targetSlotInRel -> targetSlot))(sourceAndRel, third.records)
-    PhysicalResult(joinedRecords, first.graphs ++ second.graphs ++ third.graphs)
+    CAPSPhysicalResult(joinedRecords, first.graphs ++ second.graphs ++ third.graphs)
   }
 
-  private def getRelationshipData(rels: CAPSRecords)(implicit context: RuntimeContext): CAPSRecords = {
+  private def getRelationshipData(rels: CAPSRecords)(implicit context: CAPSRuntimeContext): CAPSRecords = {
     if(removeSelfRelationships) {
       val data = rels.data
       val startNodeColumn = data.col(columnName(rels.header.sourceNodeSlot(rel)))
@@ -88,9 +87,9 @@ final case class ExpandSource(
 // this performs m joins with second to step all steps, then drops n of these steps
 // edgeList is what is bound to r; a list of relationships (currently just the ids)
 final case class BoundedVarExpand(
-    first: PhysicalOperator,
-    second: PhysicalOperator,
-    third: PhysicalOperator,
+    first: CAPSPhysicalOperator,
+    second: CAPSPhysicalOperator,
+    third: CAPSPhysicalOperator,
     rel: Var,
     edgeList: Var,
     target: Var,
@@ -102,11 +101,11 @@ final case class BoundedVarExpand(
     isExpandInto: Boolean)
     extends TernaryPhysicalOperator {
 
-  override def executeTernary(first: PhysicalResult, second: PhysicalResult, third: PhysicalResult)
-    (implicit context: RuntimeContext): PhysicalResult = {
+  override def executeTernary(first: CAPSPhysicalResult, second: CAPSPhysicalResult, third: CAPSPhysicalResult)
+    (implicit context: CAPSRuntimeContext): CAPSPhysicalResult = {
     val expanded = expand(first.records, second.records)
 
-    PhysicalResult(finalize(expanded, third.records), first.graphs ++ second.graphs ++ third.graphs)
+    CAPSPhysicalResult(finalize(expanded, third.records), first.graphs ++ second.graphs ++ third.graphs)
   }
 
   private def iterate(lhs: DataFrame, rels: DataFrame)(
@@ -124,10 +123,9 @@ final case class BoundedVarExpand(
 
     val joined = lhs.join(rels, expandColumn === startColumn, "inner")
 
-    val appendUdf = udf(udfUtils.arrayAppend _, ArrayType(LongType))
-    val extendedArray = appendUdf(lhs.col(edgeListColName), relIdColumn)
+    val extendedArray = array_append_long(lhs.col(edgeListColName), relIdColumn)
     val withExtendedArray = joined.withColumn(listTempColName, extendedArray)
-    val arrayContains = udf(udfUtils.contains _, BooleanType)(withExtendedArray.col(edgeListColName), relIdColumn)
+    val arrayContains = array_contains(withExtendedArray.col(edgeListColName), relIdColumn)
     val filtered = withExtendedArray.filter(!arrayContains)
 
     // TODO: Try and get rid of the Var rel here

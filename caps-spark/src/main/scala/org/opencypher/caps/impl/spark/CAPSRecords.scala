@@ -28,13 +28,14 @@ import org.opencypher.caps.api.exception.{DuplicateSourceColumnException, Illega
 import org.opencypher.caps.api.io.conversion.{NodeMapping, RelationshipMapping}
 import org.opencypher.caps.api.schema.{EntityTable, NodeTable, RelationshipTable}
 import org.opencypher.caps.api.types._
+import org.opencypher.caps.api.value.CypherValue.CypherMap
 import org.opencypher.caps.api.value._
 import org.opencypher.caps.impl.record.CAPSRecordHeader._
 import org.opencypher.caps.impl.record.{CAPSRecordHeader, _}
 import org.opencypher.caps.impl.spark.CAPSRecords.{prepareDataFrame, verifyAndCreate}
 import org.opencypher.caps.impl.spark.DfUtils._
 import org.opencypher.caps.impl.spark.convert.SparkUtils._
-import org.opencypher.caps.impl.spark.convert.rowToCypherMap
+import org.opencypher.caps.impl.spark.convert.{SparkUtils, rowToCypherMap}
 import org.opencypher.caps.impl.syntax.RecordHeaderSyntax._
 import org.opencypher.caps.impl.util.PrintOptions
 import org.opencypher.caps.ir.api.expr._
@@ -119,26 +120,26 @@ sealed abstract class CAPSRecords(override val header: RecordHeader, val data: D
     *
     * @return a dataset of CypherMaps.
     */
-  def toCypherMaps: Dataset[CAPSMap] = {
+  def toCypherMaps: Dataset[CypherMap] = {
     import encoders._
     data.map(rowToCypherMap(header))
   }
 
-  override def iterator: Iterator[CAPSMap] = {
+  override def iterator: Iterator[CypherMap] = {
     import scala.collection.JavaConverters._
 
     toLocalIterator.asScala
   }
 
-  def toLocalIterator: java.util.Iterator[CAPSMap] = {
+  def toLocalIterator: java.util.Iterator[CypherMap] = {
     toCypherMaps.toLocalIterator()
   }
 
-  def foreachPartition(f: Iterator[CAPSMap] => Unit): Unit = {
+  def foreachPartition(f: Iterator[CypherMap] => Unit): Unit = {
     toCypherMaps.foreachPartition(f)
   }
 
-  def collect(): Array[CAPSMap] =
+  def collect(): Array[CypherMap] =
     toCypherMaps.collect()
 
   /**
@@ -352,7 +353,9 @@ object CAPSRecords {
     val dfWithCompatibleTypes: DataFrame = toCast.foldLeft(initialDataFrame) {
       case (df, field) =>
         val castType = cypherCompatibleDataType(field.dataType).getOrElse(
-          throw IllegalArgumentException("a Spark type supported by Cypher", s"type ${field.dataType} of field $field"))
+          throw IllegalArgumentException(
+            s"a Spark type supported by Cypher: ${supportedTypes.mkString("[", ", ", "]")}",
+            s"type ${field.dataType} of field $field"))
         df.mapColumn(field.name)(_.cast(castType))
     }
     dfWithCompatibleTypes

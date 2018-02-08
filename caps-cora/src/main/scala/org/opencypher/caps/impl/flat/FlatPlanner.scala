@@ -16,13 +16,13 @@
 package org.opencypher.caps.impl.flat
 
 import org.opencypher.caps.api.exception.NotImplementedException
-import org.opencypher.caps.api.value.CypherValue
+import org.opencypher.caps.api.value.CypherValue._
 import org.opencypher.caps.impl.record.{ProjectedExpr, ProjectedField}
 import org.opencypher.caps.ir.api.util.DirectCompilationStage
 import org.opencypher.caps.logical.impl.LogicalOperator
 import org.opencypher.caps.logical.{impl => logical}
 
-final case class FlatPlannerContext(parameters: Map[String, CypherValue])
+final case class FlatPlannerContext(parameters: CypherMap)
 
 class FlatPlanner extends DirectCompilationStage[LogicalOperator, FlatOperator, FlatPlannerContext] {
 
@@ -35,7 +35,9 @@ class FlatPlanner extends DirectCompilationStage[LogicalOperator, FlatOperator, 
         producer.cartesianProduct(process(lhs), process(rhs))
 
       case logical.Select(fields, graphs, in, _) =>
-        val withAliasesRemoved = producer.removeAliases(fields, process(in))
+        val withAliasesRemoved = if (fields.nonEmpty) {
+          producer.removeAliases(fields, process(in))
+        } else process(in)
         producer.select(fields, graphs, withAliasesRemoved)
 
       case logical.Filter(expr, in, _) =>
