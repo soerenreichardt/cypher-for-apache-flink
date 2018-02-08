@@ -1,8 +1,8 @@
 package org.opencypher.caps.flink
 
-import org.apache.flink.api.common.typeinfo.TypeInformation
-import org.apache.flink.table.api.{Table, Types}
-import org.opencypher.caps.api.exception.{IllegalArgumentException, NotImplementedException}
+import org.apache.flink.api.common.typeinfo.{TypeInformation}
+import org.apache.flink.table.api.Types
+import org.apache.flink.table.api.Table
 import org.opencypher.caps.api.types._
 
 object FlinkUtils {
@@ -14,37 +14,17 @@ object FlinkUtils {
       case Types.BOOLEAN => Some(CTBoolean)
       case Types.DOUBLE => Some(CTFloat)
 //      TODO: other datatypes
-      case _ => None
-    }
-
-    cypherType
-  }
-
-  def toFlinkType(ct: CypherType): TypeInformation[_] = ct match {
-    case CTNull | CTVoid => throw NotImplementedException("")
-    case _ => ct.material match {
-      case CTString => Types.STRING
-      case CTInteger => Types.INT
-      case CTBoolean => Types.BOOLEAN
-      case CTFloat => Types.DOUBLE
-      case _: CTNode => Types.LONG
-      case _: CTRelationship => Types.LONG
-
-      case x =>
-        throw NotImplementedException("")
     }
   }
 
   def cypherTypeForColumn(table: Table, columnName: String): CypherType = {
-    val cypherType = cypherCompatibleDataType(table.getSchema.getType(columnName).getOrElse(throw IllegalArgumentException("")))
-        .flatMap(fromFlinkType(_))
-    cypherType.getOrElse(
-      throw IllegalArgumentException("")
-    )
+    val cypherType = fromFlinkType(table.getSchema.getType(columnName).getOrElse(
+      throw IllegalArgumentException
+    ))
   }
 
   def cypherCompatibleDataType(flinkType: TypeInformation[_]): Option[TypeInformation[_]] = flinkType match {
-    case Types.BYTE | Types.SHORT | Types.INT | Types.DECIMAL => Some(Types.LONG)
+    case Types.BYTE | Types.SHORT | Types.INT => Some(Types.LONG)
     case Types.FLOAT => Some(Types.DOUBLE)
     case compatible if fromFlinkType(flinkType).isDefined => Some(compatible)
   }
