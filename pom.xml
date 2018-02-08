@@ -18,6 +18,7 @@
         <module>caps-tck</module>
         <module>caps-ir</module>
         <module>caps-cora</module>
+        <module>caps-flink</module>
     </modules>
 
     <properties>
