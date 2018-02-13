@@ -9,7 +9,6 @@ import org.opencypher.caps.api.graph.{CypherResult, CypherSession, PropertyGraph
 import org.opencypher.caps.api.io.{PersistMode, PropertyGraphDataSource}
 import org.opencypher.caps.api.value.CypherValue
 import org.opencypher.caps.api.value.CypherValue.CypherMap
-import org.opencypher.caps.flink.value.{CAPFNode, CAPFRelationship}
 import org.opencypher.caps.impl.flat.FlatPlanner
 import org.opencypher.caps.ir.impl.parse.CypherParser
 import org.opencypher.caps.logical.impl.{LogicalOperatorProducer, LogicalOptimizer, LogicalPlanner}
@@ -19,7 +18,7 @@ trait CAPFSession extends CypherSession {
   def env = ExecutionEnvironment.getExecutionEnvironment
   def tableEnv = TableEnvironment.getTableEnvironment(env)
 
-  override def readFrom[N <: Node : TypeTag, R <: Relationship : TypeTag](
+  def readFrom[N <: Node : TypeTag, R <: Relationship : TypeTag](
     nodes: Seq[N],
     relationships: Seq[R] = Seq.empty): PropertyGraph = {
     implicit val session: CAPFSession = this
@@ -48,9 +47,7 @@ object CAPFSession extends CAPFSession {
     cypherOnGraph(CAPFGraph.empty(this), query, parameters)
 
 
-  override def cypherOnGraph(graph: PropertyGraph, query: String, parameters: CypherMap): CypherResult = {
-
-  }
+  override def cypherOnGraph(graph: PropertyGraph, query: String, parameters: CypherMap): CypherResult = ???
 
   /**
     * Reads a graph from the argument URI.
