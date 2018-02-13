@@ -5,7 +5,7 @@ import org.apache.flink.table.api.Table
 import org.opencypher.caps.api.io.conversion.{EntityMapping, NodeMapping, RelationshipMapping}
 import org.opencypher.caps.api.schema.Schema
 import org.opencypher.caps.api.types.{CypherType, DefiniteCypherType}
-import org.opencypher.caps.flink.value.CAPFNode
+import org.opencypher.caps.flink.FlinkUtils._
 
 sealed trait EntityTable {
 

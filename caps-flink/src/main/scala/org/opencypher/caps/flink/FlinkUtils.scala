@@ -15,16 +15,20 @@ object FlinkUtils {
       case Types.DOUBLE => Some(CTFloat)
 //      TODO: other datatypes
     }
+
+    cypherType
   }
 
   def cypherTypeForColumn(table: Table, columnName: String): CypherType = {
-    val cypherType = fromFlinkType(table.getSchema.getType(columnName).getOrElse(
+    val cypherType = cypherCompatibleDataType(table.getSchema.getType(columnName).getOrElse(throw IllegalArgumentException))
+        .flatMap(fromFlinkType(_))
+    cypherType.getOrElse(
       throw IllegalArgumentException
-    ))
+    )
   }
 
   def cypherCompatibleDataType(flinkType: TypeInformation[_]): Option[TypeInformation[_]] = flinkType match {
-    case Types.BYTE | Types.SHORT | Types.INT => Some(Types.LONG)
+    case Types.BYTE | Types.SHORT | Types.INT | Types.DECIMAL => Some(Types.LONG)
     case Types.FLOAT => Some(Types.DOUBLE)
     case compatible if fromFlinkType(flinkType).isDefined => Some(compatible)
   }
