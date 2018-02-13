@@ -1,5 +1,7 @@
 package org.opencypher.caps.flink
 
+import org.opencypher.caps.flink.schema.{Labels, Node, Relationship, RelationshipType}
+
 import scala.annotation.StaticAnnotation
 import scala.reflect.runtime.universe._
 import scala.tools.reflect.ToolBox

@@ -1,24 +1,24 @@
 package org.opencypher.caps.flink
 
-import org.apache.flink.streaming.api.scala._
-import org.opencypher.caps.api.value.CypherValue.{CypherInteger, CypherMap, CypherString}
+import org.opencypher.caps.api._
+import org.opencypher.caps.flink._
+import org.opencypher.caps.flink.schema.{Node, Relationship}
 
 object Demo extends App {
 
-  val session = CAPFSession.create
-
-  val nodesDataSet = session.env.fromCollection(DemoData.nodes)
-  val relsDataSet = session.env.fromCollection(DemoData.rels)
-
-  session.readFrom(nodesDataSet, relsDataSet)
+  CAPFSession.readFrom(DemoData.persons, DemoData.friendships)
 
 }
 
 object DemoData {
 
-  val nodes = Seq(
-    Seq(0L, Set("Person"), CypherMap("name" -> CypherString("Alice"), "age" -> CypherInteger(42))),
-    Seq(1L, Set("Person"), CypherMap("name" -> CypherString("Bob"), "age" -> CypherInteger(23))))
-  val rels = Seq(2L, 0L, 1L, "KNOWS", CypherMap("since" -> CypherString("2018")))
+  case class Person(id: Long, name: String, age: Int) extends Node
 
+  case class Friend(id: Long, source: Long, target: Long, since: String) extends Relationship
+
+  val alice = Person(0, "Alice", 42)
+  val bob = Person(1, "Bob", 23)
+
+  val persons = List(alice, bob)
+  val friendships = List(Friend(0, alice.id, bob.id, "2018"))
 }
