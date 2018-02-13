@@ -2,16 +2,19 @@ package org.opencypher.caps.flink
 
 import java.net.URI
 
-import com.sun.tools.javac.code.TypeTag
+import scala.reflect.runtime.universe._
 import org.apache.flink.api.scala.ExecutionEnvironment
 import org.apache.flink.table.api.TableEnvironment
 import org.opencypher.caps.api.graph.{CypherResult, CypherSession, PropertyGraph}
 import org.opencypher.caps.api.io.{PersistMode, PropertyGraphDataSource}
 import org.opencypher.caps.api.value.CypherValue
 import org.opencypher.caps.api.value.CypherValue.CypherMap
+import org.opencypher.caps.flink.schema.{Node, NodeTable, Relationship, RelationshipTable}
 import org.opencypher.caps.impl.flat.FlatPlanner
 import org.opencypher.caps.ir.impl.parse.CypherParser
 import org.opencypher.caps.logical.impl.{LogicalOperatorProducer, LogicalOptimizer, LogicalPlanner}
+
+import scala.reflect.ClassTag
 
 trait CAPFSession extends CypherSession {
 

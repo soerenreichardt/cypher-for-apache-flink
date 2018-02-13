@@ -1,4 +1,4 @@
-package org.opencypher.caps.flink
+package org.opencypher.caps.flink.schema
 
 import scala.annotation.StaticAnnotation
 
