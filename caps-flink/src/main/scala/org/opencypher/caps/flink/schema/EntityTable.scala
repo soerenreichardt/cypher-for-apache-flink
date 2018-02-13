@@ -1,11 +1,18 @@
-package org.opencypher.caps.flink
+package org.opencypher.caps.flink.schema
 
-import com.sun.tools.javac.code.TypeTag
+import org.apache.flink.api.scala._
 import org.apache.flink.table.api.Table
+import org.apache.flink.types.Row
 import org.opencypher.caps.api.io.conversion.{EntityMapping, NodeMapping, RelationshipMapping}
 import org.opencypher.caps.api.schema.Schema
 import org.opencypher.caps.api.types.{CypherType, DefiniteCypherType}
+import org.opencypher.caps.api.value.CypherValue
 import org.opencypher.caps.flink.FlinkUtils._
+import org.opencypher.caps.flink.{Annotation, _}
+import org.opencypher.caps.impl.record.CypherTable
+
+import scala.reflect.ClassTag
+import scala.reflect.runtime.universe._
 
 sealed trait EntityTable {
 
@@ -15,15 +22,36 @@ sealed trait EntityTable {
 
   def table: Table
 
-  private[capf] def entityType: CypherType with DefiniteCypherType = mapping.cypherType
+  private[caps] def entityType: CypherType with DefiniteCypherType = mapping.cypherType
 
-  private[capf] def records(implicit capf: CAPFSession): CAPFRecords = CAPFRecords.create(this)
+  private[caps] def records(implicit capf: CAPFSession): CAPFRecords = CAPFRecords.create(this)
+
+}
+
+object EntityTable {
+
+  implicit class FlinkTable(val table: Table) extends CypherTable {
+
+    override def columns: Set[String] = table.getSchema.getColumnNames.toSet
+
+    override def columnType: Map[String, CypherType] = columns.map(c => c -> FlinkUtils.cypherTypeForColumn(table, c)).toMap
+
+    /**
+      * Iterator over the rows in this table.
+      */
+    override def rows: Iterator[String => CypherValue.CypherValue] = ???
+
+    /**
+      * @return number of rows in this Table.
+      */
+    override def size: Long = ???
+  }
 
 }
 
 case class NodeTable(mapping: NodeMapping, table: Table)(implicit capf: CAPFSession) extends EntityTable {
   override lazy val schema: Schema = {
-    val nodeDS = capf.tableEnv.toDataSet(table).getType.
+    val nodeDS = capf.tableEnv.toDataSet[Row](table)
     val propertyKeys = mapping.propertyMapping.toSeq.map {
       case (propertyKey, sourceKey) => propertyKey -> cypherTypeForColumn(table, sourceKey)
     }
@@ -43,6 +71,7 @@ object NodeTable {
     val nodeTable = capf.tableEnv.fromDataSet(nodeDS)
     val nodeProperties = properties(nodeTable.getSchema.getColumnNames)
     val nodeMapping = NodeMapping.create(nodeIdKey = Entity.sourceIdKey, impliedLabels = nodeLabels, propertyKeys = nodeProperties)
+    NodeTable(nodeMapping, nodeTable)
   }
 
   private def properties(nodeColumnNames: Seq[String]): Set[String] = {
@@ -74,6 +103,14 @@ object RelationshipTable {
     val relationshipDS = capf.env.fromCollection(relationships)
     val relationshipTable = capf.tableEnv.fromDataSet(relationshipDS)
     val relationshipProperties = properties(relationshipTable.getSchema.getColumnNames.toSet)
+
+    val relationshipMapping = RelationshipMapping.create(Entity.sourceIdKey,
+      Relationship.sourceStartNodeKey,
+      Relationship.sourceEndNodeKey,
+      relationshipType,
+      relationshipProperties)
+
+    RelationshipTable(relationshipMapping, relationshipTable)
   }
 
   private def properties(relColumnNames: Set[String]): Set[String] = {
