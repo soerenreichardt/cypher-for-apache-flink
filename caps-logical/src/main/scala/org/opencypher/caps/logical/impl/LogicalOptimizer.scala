@@ -27,8 +27,7 @@ object LogicalOptimizer extends DirectCompilationStage[LogicalOperator, LogicalO
     val optimizationRules = Seq(pushLabelsIntoScans(labelsForVariables(input)), discardScansForNonexistentLabels)
     optimizationRules.foldLeft(input) {
       // TODO: Evaluate if multiple rewriters could be fused
-      case (tree: LogicalOperator, optimizationRule) =>
-        BottomUp[LogicalOperator](optimizationRule).rewrite(tree)
+      case (tree: LogicalOperator, optimizationRule) => BottomUp[LogicalOperator](optimizationRule).rewrite(tree)
     }
   }
 
@@ -37,13 +36,13 @@ object LogicalOptimizer extends DirectCompilationStage[LogicalOperator, LogicalO
       case (r, n) =>
         n match {
           case Filter(HasLabel(v: Var, Label(name)), _, _) => r.updated(v, r(v) + name)
-          case _                                           => r
+          case _ => r
         }
     }
   }
 
   def pushLabelsIntoScans(labelMap: Map[Var, Set[String]]): PartialFunction[LogicalOperator, LogicalOperator] = {
-    case ns @ NodeScan(v @ Var(name), in, solved) =>
+    case ns@NodeScan(v@Var(name), in, solved) =>
       val updatedLabels = labelMap(v)
       val updatedVar = Var(name)(CTNode(ns.labels ++ updatedLabels))
       val updatedSolved = in.solved.withPredicates(updatedLabels.map(l => HasLabel(v, Label(l))(CTBoolean)).toSeq: _*)
@@ -52,11 +51,13 @@ object LogicalOptimizer extends DirectCompilationStage[LogicalOperator, LogicalO
   }
 
   def discardScansForNonexistentLabels: PartialFunction[LogicalOperator, LogicalOperator] = {
-    case scan @ NodeScan(v, in, _) =>
+    case scan@NodeScan(v, in, _) =>
       def graphSchema = in.sourceGraph.schema
+
       def emptyRecords = EmptyRecords(Set(v), in, scan.solved)
+
       if ((scan.labels.size == 1 && !graphSchema.labels.contains(scan.labels.head)) ||
-          (scan.labels.size > 1 && !graphSchema.labelCombinations.combos.exists(scan.labels.subsetOf(_)))) {
+        (scan.labels.size > 1 && !graphSchema.labelCombinations.combos.exists(scan.labels.subsetOf(_)))) {
         emptyRecords
       } else {
         scan

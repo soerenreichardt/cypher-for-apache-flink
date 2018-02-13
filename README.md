@@ -112,14 +112,14 @@ object Example extends App {
   */
 object SocialNetworkData {
 
-  case class Person(id: Long, name: String) extends schema.Node
+  case class Person(id: Long, name: String, age: Int) extends schema.Node
 
   @schema.RelationshipType("FRIEND_OF")
   case class Friend(id: Long, source: Long, target: Long, since: String) extends schema.Relationship
 
-  val alice = Person(0, "Alice")
-  val bob = Person(1, "Bob")
-  val carol = Person(2, "Carol")
+  val alice = Person(0, "Alice", 10)
+  val bob = Person(1, "Bob", 20)
+  val carol = Person(2, "Carol", 15)
 
   val persons = List(alice, bob, carol)
   val friendships = List(Friend(0, alice.id, bob.id, "23/01/1987"), Friend(1, bob.id, carol.id, "12/12/2009"))
@@ -136,7 +136,7 @@ The above program prints:
 +--------------------------------------------------------------------+
 ```
 
-More examples, including [multiple graph features](https://github.com/opencypher/cypher-for-apache-spark/tree/master/caps-spark/src/main/scala/org/opencypher/caps/demo/MultipleGraphExample.scala), can be found [in the demo package](https://github.com/opencypher/cypher-for-apache-spark/tree/master/caps-spark/src/main/scala/org/opencypher/caps/demo).
+More examples, including [multiple graph features](https://github.com/opencypher/cypher-for-apache-spark/tree/master/caps-spark/src/test/scala/org/opencypher/caps/demo/MultipleGraphExample.scala), can be found [in the demo package](https://github.com/opencypher/cypher-for-apache-spark/tree/master/caps-spark/src/test/scala/org/opencypher/caps/demo).
 
 Remember to add `fork in run := true` in your `build.sbt` for scala projects; this is not CAPS
 specific, but a quirk of spark execution that will help 

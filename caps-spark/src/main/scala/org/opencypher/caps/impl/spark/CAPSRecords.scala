@@ -26,22 +26,23 @@ import org.apache.spark.storage.StorageLevel
 import org.opencypher.caps.api.CAPSSession
 import org.opencypher.caps.api.exception.{DuplicateSourceColumnException, IllegalArgumentException, IllegalStateException}
 import org.opencypher.caps.api.io.conversion.{NodeMapping, RelationshipMapping}
-import org.opencypher.caps.api.schema.{EntityTable, NodeTable, RelationshipTable}
+import org.opencypher.caps.api.schema.EntityTable._
+import org.opencypher.caps.api.schema.{CAPSEntityTable, CAPSNodeTable, CAPSRelationshipTable}
 import org.opencypher.caps.api.types._
-import org.opencypher.caps.api.value.CypherValue.CypherMap
-import org.opencypher.caps.api.value._
+import org.opencypher.caps.api.value.CypherValue.{CypherMap, CypherValue}
 import org.opencypher.caps.impl.record.CAPSRecordHeader._
 import org.opencypher.caps.impl.record.{CAPSRecordHeader, _}
 import org.opencypher.caps.impl.spark.CAPSRecords.{prepareDataFrame, verifyAndCreate}
 import org.opencypher.caps.impl.spark.DfUtils._
 import org.opencypher.caps.impl.spark.convert.SparkUtils._
-import org.opencypher.caps.impl.spark.convert.{SparkUtils, rowToCypherMap}
+import org.opencypher.caps.impl.spark.convert.rowToCypherMap
 import org.opencypher.caps.impl.syntax.RecordHeaderSyntax._
 import org.opencypher.caps.impl.util.PrintOptions
 import org.opencypher.caps.ir.api.expr._
 import org.opencypher.caps.ir.api.{Label, PropertyKey}
 
 import scala.annotation.tailrec
+import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.TypeTag
 
 sealed abstract class CAPSRecords(override val header: RecordHeader, val data: DataFrame)
@@ -50,9 +51,14 @@ sealed abstract class CAPSRecords(override val header: RecordHeader, val data: D
   override def print(implicit options: PrintOptions): Unit =
     RecordsPrinter.print(this)
 
+  override def register(name: String): Unit =
+    data.createOrReplaceTempView(name)
+
   override def size: Long = data.count()
 
   def sparkColumns: IndexedSeq[String] = header.internalHeader.columns
+
+  override lazy val columnType: Map[String, CypherType] = data.columnType
 
   def mapDF(f: DataFrame => DataFrame): CAPSRecords = verifyAndCreate(prepareDataFrame(f(data)))
 
@@ -83,7 +89,7 @@ sealed abstract class CAPSRecords(override val header: RecordHeader, val data: D
 
   def select(fields: Set[Var]): CAPSRecords = {
     val selectedHeader = header.select(fields)
-    val selectedColumnNames = selectedHeader.contents.map(SparkColumnName.of).toSeq
+    val selectedColumnNames = selectedHeader.contents.map(ColumnName.of).toSeq
     val selectedColumns = data.select(selectedColumnNames.head, selectedColumnNames.tail: _*)
     CAPSRecords.verifyAndCreate(selectedHeader, selectedColumns)
   }
@@ -94,7 +100,7 @@ sealed abstract class CAPSRecords(override val header: RecordHeader, val data: D
       this
     } else {
       val cachedData = {
-        val columns = cachedHeader.slots.map(c => new Column(SparkColumnName.of(c.content)))
+        val columns = cachedHeader.slots.map(c => new Column(ColumnName.of(c.content)))
         data.select(columns: _*)
       }
 
@@ -125,9 +131,13 @@ sealed abstract class CAPSRecords(override val header: RecordHeader, val data: D
     data.map(rowToCypherMap(header))
   }
 
-  override def iterator: Iterator[CypherMap] = {
-    import scala.collection.JavaConverters._
+  override def columns: Set[String] = header.fields
 
+  override def rows: Iterator[String => CypherValue] = {
+    toLocalIterator.asScala.map(_.value)
+  }
+
+  override def iterator: Iterator[CypherMap] = {
     toLocalIterator.asScala
   }
 
@@ -166,13 +176,13 @@ sealed abstract class CAPSRecords(override val header: RecordHeader, val data: D
     val renamedSlots = slots.map(_.withOwner(v))
 
     val dataColumnNameToIndex: Map[String, Int] = renamedSlots.map { dataSlot =>
-      val dataColumnName = SparkColumnName.of(dataSlot)
+      val dataColumnName = ColumnName.of(dataSlot)
       val dataColumnIndex = dataSlot.index
       dataColumnName -> dataColumnIndex
     }.toMap
 
     val slotDataSelectors: Seq[Row => Any] = targetHeader.slots.map { targetSlot =>
-      val columnName = SparkColumnName.of(targetSlot)
+      val columnName = ColumnName.of(targetSlot)
       val defaultValue = targetSlot.content.key match {
         case HasLabel(_, l: Label) => entityLabels(l.name)
         case _: Type if entityLabels.size == 1 => entityLabels.head
@@ -201,9 +211,10 @@ sealed abstract class CAPSRecords(override val header: RecordHeader, val data: D
 
   //noinspection AccessorLikeMethodIsEmptyParen
   def toDF(): DataFrame = data
+
 }
 
-object CAPSRecords {
+object CAPSRecords extends CypherRecordsCompanion[CAPSRecords, CAPSSession] {
 
   // Used for Expressions that are not yet tied to a variable
   private[spark] val placeHolderVarName = ""
@@ -243,7 +254,7 @@ object CAPSRecords {
   def create(rdd: JavaRDD[_], beanClass: Class[_])(implicit caps: CAPSSession): CAPSRecords =
     verifyAndCreate(prepareDataFrame(caps.sparkSession.createDataFrame(rdd, beanClass)))
 
-  def create(entityTable: EntityTable)(implicit caps: CAPSSession): CAPSRecords = {
+  def create(entityTable: CAPSEntityTable)(implicit caps: CAPSSession): CAPSRecords = {
     def sourceColumnToPropertyExpressionMapping(variable: Var): Map[String, Expr] = {
       val keyMap = entityTable.mapping.propertyMapping.map {
         case (key, sourceColumn) => sourceColumn -> Property(variable, PropertyKey(key))()
@@ -304,11 +315,13 @@ object CAPSRecords {
     }
 
     val sourceColumnToExpressionMap = entityTable match {
-      case nt: NodeTable => sourceColumnNodeToExpressionMapping(nt.mapping)
-      case rt: RelationshipTable => sourceColumnRelationshipToExpressionMapping(rt.mapping)
+      case nt: CAPSNodeTable => sourceColumnNodeToExpressionMapping(nt.mapping)
+      case rt: CAPSRelationshipTable => sourceColumnRelationshipToExpressionMapping(rt.mapping)
     }
 
-    val (sourceHeader, sourceDataFrame) = prepareDataFrame(entityTable.table)
+    val (sourceHeader, sourceDataFrame) = {
+      prepareDataFrame(entityTable.table.df)
+    }
 
     // Remove columns from source data that are not contained in the mapping.
     // Wrap source expressions in OpaqueField/ProjectedExpr
@@ -334,6 +347,16 @@ object CAPSRecords {
   }
 
   /**
+    * Wraps a Spark SQL table (DataFrame) in a CAPSRecords, making it understandable by Cypher.
+    *
+    * @param df the table to wrap.
+    * @param caps the session to which the resulting CAPSRecords is tied.
+    * @return a Cypher table.
+    */
+  private[spark] def wrap(df: DataFrame)(implicit caps: CAPSSession): CAPSRecords =
+    verifyAndCreate(prepareDataFrame(df))
+
+  /**
     * Validates the data types within the DataFrame for compatibility, creates an initial [[RecordHeader]] and aligns
     * the data frame column names according to that header.
     *
@@ -348,6 +371,9 @@ object CAPSRecords {
     (initialHeader, withRenamedColumns)
   }
 
+  /**
+    * Normalises the dataframe by lifting numeric fields to Long and similar ops.
+    */
   private def generalizeColumnTypes(initialDataFrame: DataFrame): DataFrame = {
     val toCast = initialDataFrame.schema.fields.filter(f => fromSparkType(f.dataType, f.nullable).isEmpty)
     val dfWithCompatibleTypes: DataFrame = toCast.foldLeft(initialDataFrame) {
@@ -415,7 +441,7 @@ object CAPSRecords {
     // Verify column types
     initialHeader.slots.foreach { slot =>
       val dfSchema = initialData.schema
-      val field = dfSchema(SparkColumnName.of(slot))
+      val field = dfSchema(ColumnName.of(slot))
       val cypherType = fromSparkType(field.dataType, field.nullable)
         .getOrElse(throw IllegalArgumentException("a supported Spark type", field.dataType))
       val headerType = slot.content.cypherType
@@ -435,7 +461,7 @@ object CAPSRecords {
     createInternal(initialHeader, initialDataFrame)
   }
 
-  def unit()(implicit caps: CAPSSession): CAPSRecords = {
+  override def unit()(implicit caps: CAPSSession): CAPSRecords = {
     val initialDataFrame = caps.sparkSession.createDataFrame(Seq(EmptyRow()))
     createInternal(RecordHeader.empty, initialDataFrame)
   }

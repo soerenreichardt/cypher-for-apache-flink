@@ -18,10 +18,11 @@ package org.opencypher.caps.test.fixture
 import org.opencypher.caps.impl.spark.CAPSGraph
 import org.opencypher.caps.test.BaseTestSuite
 import org.opencypher.caps.test.support.creation.caps.CAPSScanGraphFactory
-import org.opencypher.caps.test.support.creation.propertygraph.CAPSPropertyGraphFactory
+import org.opencypher.caps.test.support.creation.propertygraph.TestPropertyGraphFactory
 
 trait GraphCreationFixture {
   self: CAPSSessionFixture with BaseTestSuite =>
 
-  val initGraph: String => CAPSGraph = (createQuery) => CAPSScanGraphFactory(CAPSPropertyGraphFactory(createQuery))
+  val initGraph: String => CAPSGraph =
+    (createQuery) => CAPSScanGraphFactory(TestPropertyGraphFactory(createQuery))
 }

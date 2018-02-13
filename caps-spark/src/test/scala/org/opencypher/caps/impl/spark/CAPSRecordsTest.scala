@@ -18,7 +18,7 @@ package org.opencypher.caps.impl.spark
 import org.apache.spark.sql.Row
 import org.opencypher.caps.api.exception.CypherException
 import org.opencypher.caps.api.io.conversion.{NodeMapping, RelationshipMapping}
-import org.opencypher.caps.api.schema.{NodeTable, RelationshipTable}
+import org.opencypher.caps.api.schema.{CAPSNodeTable, CAPSRelationshipTable}
 import org.opencypher.caps.api.types._
 import org.opencypher.caps.api.value.CAPSNode
 import org.opencypher.caps.api.value.CypherValue._
@@ -26,11 +26,39 @@ import org.opencypher.caps.impl.record._
 import org.opencypher.caps.ir.api.expr._
 import org.opencypher.caps.ir.api.{Label, PropertyKey}
 import org.opencypher.caps.test.CAPSTestSuite
-import org.opencypher.caps.test.fixture.GraphCreationFixture
+import org.opencypher.caps.test.fixture.{GraphCreationFixture, TeamDataFixture}
 
 import scala.collection.Bag
 
-class CAPSRecordsTest extends CAPSTestSuite with GraphCreationFixture {
+class CAPSRecordsTest extends CAPSTestSuite with GraphCreationFixture with TeamDataFixture {
+
+  it("can wrap a dataframe") {
+    // Given (generally produced by a SQL query)
+    val records = CAPSRecords.wrap(personDF)
+
+    records.header.slots.map(s => s.content -> s.content.cypherType).toSet should equal(Set(
+      OpaqueField(Var("ID")()) -> CTInteger,
+      OpaqueField(Var("IS_SWEDE")()) -> CTBoolean,
+      OpaqueField(Var("NAME")()) -> CTString.nullable,
+      OpaqueField(Var("NUM")()) -> CTInteger
+    ))
+  }
+
+  it("can be registered and queried from SQL") {
+    // Given
+    CAPSRecords.create(personTable).register("people")
+
+    // When
+    val df = session.sql("SELECT * FROM people")
+
+    // Then
+    df.collect() should equal(Array(
+      Row(1L, true, "Mats", 23),
+      Row(2L, false, "Martin", 42),
+      Row(3L, false, "Max", 1337),
+      Row(4L, false, "Stefan", 9)
+    ))
+  }
 
   test("verify CAPSRecords header") {
     val givenDF = session.createDataFrame(
@@ -46,7 +74,7 @@ class CAPSRecordsTest extends CAPSTestSuite with GraphCreationFixture {
       .withOptionalLabel("Swedish" -> "IS_SWEDE")
       .withPropertyKey("name" -> "NAME")
 
-    val nodeTable = NodeTable(givenMapping, givenDF)
+    val nodeTable = CAPSNodeTable(givenMapping, givenDF)
 
     val records = CAPSRecords.create(nodeTable)
 
@@ -76,7 +104,7 @@ class CAPSRecordsTest extends CAPSTestSuite with GraphCreationFixture {
       .relType("NEXT")
       .withPropertyKey("color" -> "COLOR")
 
-    val relTable = RelationshipTable(givenMapping, givenDF)
+    val relTable = CAPSRelationshipTable(givenMapping, givenDF)
 
     val records = CAPSRecords.create(relTable)
 
@@ -92,20 +120,21 @@ class CAPSRecordsTest extends CAPSTestSuite with GraphCreationFixture {
   }
 
   test("contract relationships with a dynamic type") {
+    import org.opencypher.caps.impl.spark.convert.SparkUtils.NullabilityOps
     val givenDF = session.createDataFrame(
           Seq(
             (10L, 1L, 2L, "RED"),
             (11L, 2L, 3L, "BLUE"),
             (12L, 3L, 4L, "GREEN"),
             (13L, 4L, 1L, "YELLOW")
-      )).toDF("ID", "FROM", "TO", "COLOR")
+      )).toDF("ID", "FROM", "TO", "COLOR").setNonNullable("COLOR")
 
     val givenMapping = RelationshipMapping.on("ID")
       .from("FROM")
       .to("TO")
       .withSourceRelTypeKey("COLOR", Set("RED", "BLUE", "GREEN", "YELLOW"))
 
-    val relTable = RelationshipTable(givenMapping, givenDF)
+    val relTable = CAPSRelationshipTable(givenMapping, givenDF)
 
     val records = CAPSRecords.create(relTable)
 
