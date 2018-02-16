@@ -15,8 +15,8 @@
  */
 package org.opencypher.caps.ir.impl.refactor.instances
 
-import org.opencypher.caps.api.exception.NotImplementedException
 import org.opencypher.caps.api.types.{CTNode, CTRelationship}
+import org.opencypher.caps.impl.exception.NotImplementedException
 import org.opencypher.caps.ir.api.block.MatchBlock
 import org.opencypher.caps.ir.api.expr.{Expr, HasLabel, HasType, Var}
 import org.opencypher.caps.ir.api.{IRField, Label}
@@ -41,7 +41,7 @@ trait ExprBlockInstances {
 
       override def outputs(block: MatchBlock[Expr]): Set[IRField] = {
         val opaqueTypedFields = block.binds.fields
-        val predicates = block.where.elements
+        val predicates = block.where
 
         predicates.foldLeft(opaqueTypedFields) {
           case (fields, predicate) =>

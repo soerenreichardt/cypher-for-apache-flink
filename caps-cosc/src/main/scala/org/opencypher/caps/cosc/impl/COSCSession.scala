@@ -19,15 +19,16 @@ import java.net.URI
 import java.util.UUID
 
 import org.opencypher.caps.api.configuration.CoraConfiguration.PrintFlatPlan
-import org.opencypher.caps.api.exception.UnsupportedOperationException
 import org.opencypher.caps.api.graph.{CypherResult, CypherSession, PropertyGraph}
 import org.opencypher.caps.api.io.{PersistMode, PropertyGraphDataSource}
 import org.opencypher.caps.api.schema.Schema
+import org.opencypher.caps.api.table.CypherRecords
 import org.opencypher.caps.api.value.CypherValue
 import org.opencypher.caps.api.value.CypherValue.CypherMap
 import org.opencypher.caps.cosc.impl.COSCConverters._
 import org.opencypher.caps.cosc.impl.datasource.{COSCGraphSourceHandler, COSCPropertyGraphDataSource, COSCSessionPropertyGraphDataSourceFactory}
 import org.opencypher.caps.cosc.impl.planning.{COSCPhysicalOperatorProducer, COSCPhysicalPlannerContext}
+import org.opencypher.caps.impl.exception.UnsupportedOperationException
 import org.opencypher.caps.impl.flat.{FlatPlanner, FlatPlannerContext}
 import org.opencypher.caps.impl.physical.PhysicalPlanner
 import org.opencypher.caps.impl.util.Measurement.time
@@ -68,10 +69,10 @@ class COSCSession(private val graphSourceHandler: COSCGraphSourceHandler) extend
     * @param parameters parameters used by the Cypher query
     * @return result of the query
     */
-  override def cypher(query: String, parameters: CypherMap): CypherResult =
-    cypherOnGraph(COSCGraph.empty(this), query, parameters)
+  override def cypher(query: String, parameters: CypherMap = CypherMap.empty, drivingTable: Option[CypherRecords] = None): CypherResult =
+    cypherOnGraph(COSCGraph.empty(this), query, parameters, drivingTable)
 
-  override def cypherOnGraph(graph: PropertyGraph, query: String, parameters: CypherMap): CypherResult = {
+  override def cypherOnGraph(graph: PropertyGraph, query: String, parameters: CypherMap, drivingTable: Option[CypherRecords]): CypherResult = {
     val ambientGraph = getAmbientGraph(graph)
 
     val (stmt, extractedLiterals, semState) = time("AST construction")(parser.process(query)(CypherParser.defaultContext))
@@ -84,13 +85,13 @@ class COSCSession(private val graphSourceHandler: COSCGraphSourceHandler) extend
     val logicalPlannerContext = LogicalPlannerContext(graph.schema, Set.empty, ir.model.graphs.andThen(sourceAt), ambientGraph)
     val logicalPlan = time("Logical planning")(logicalPlanner(ir)(logicalPlannerContext))
     val optimizedLogicalPlan = time("Logical optimization")(logicalOptimizer(logicalPlan)(logicalPlannerContext))
-    if (PrintLogicalPlan.get()) {
+    if (PrintLogicalPlan.isSet) {
       println(logicalPlan.pretty)
       println(optimizedLogicalPlan.pretty)
     }
 
     val flatPlan = time("Flat planning")(flatPlanner(optimizedLogicalPlan)(FlatPlannerContext(parameters)))
-    if (PrintFlatPlan.get()) println(flatPlan.pretty)
+    if (PrintFlatPlan.isSet) println(flatPlan.pretty)
 
     val coscPlannerContext = COSCPhysicalPlannerContext(this, readFrom, COSCRecords.unit()(self), allParameters)
     val coscPlan = time("Physical planning")(physicalPlanner.process(flatPlan)(coscPlannerContext))
@@ -152,4 +153,13 @@ class COSCSession(private val graphSourceHandler: COSCGraphSourceHandler) extend
 
     IRExternalGraph(name, ambient.schema, uri)
   }
+
+  /**
+    * Mounts the given property graph to session-local storage under the given path. The specified graph will be
+    * accessible under the session-local URI scheme, e.g. {{{session://$path}}}.
+    *
+    * @param graph property graph to register
+    * @param path  path at which this graph can be accessed via {{{session://$path}}}
+    */
+  override def mount(graph: PropertyGraph, path: String): Unit = ???
 }

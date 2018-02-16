@@ -15,9 +15,10 @@
  */
 package org.opencypher.caps.cosc.impl
 
+import org.opencypher.caps.api.table.CypherRecords
 import org.opencypher.caps.api.types.CypherType
 import org.opencypher.caps.api.value.CypherValue.{CypherMap, CypherValue}
-import org.opencypher.caps.impl.record.{CypherRecords, CypherRecordsCompanion, RecordHeader, RecordsPrinter}
+import org.opencypher.caps.impl.table.{CypherRecordsCompanion, RecordHeader, RecordsPrinter}
 import org.opencypher.caps.impl.util.PrintOptions
 
 object COSCRecords extends CypherRecordsCompanion[COSCRecords, COSCSession] {
@@ -38,7 +39,7 @@ sealed abstract class COSCRecords(
     */
   override def rows: Iterator[String => CypherValue] = data.rows.map(_.value)
 
-  override def columns: Set[String] = ???
+  override def columns: Seq[String] = ???
 
   override def columnType: Map[String, CypherType] = ???
 
@@ -55,6 +56,13 @@ sealed abstract class COSCRecords(
   override def size: Long = rows.size
 
   override def print(implicit options: PrintOptions): Unit = RecordsPrinter.print(this)
+
+  /**
+    * Registers these records as a table under the given name.
+    *
+    * @param name the name under which this table may be referenced.
+    */
+  override def register(name: String): Unit = ???
 }
 
 

@@ -19,12 +19,12 @@ import java.net.URI
 
 import org.apache.spark.sql.DataFrame
 import org.opencypher.caps.api.CAPSSession
-import org.opencypher.caps.api.exception.IllegalArgumentException
 import org.opencypher.caps.api.physical.PhysicalOperator
 import org.opencypher.caps.api.types._
-import org.opencypher.caps.impl.record.{ColumnName, RecordHeader, RecordSlot, SlotContent}
+import org.opencypher.caps.impl.exception.IllegalArgumentException
+import org.opencypher.caps.impl.table.{ColumnName, RecordHeader, RecordSlot, SlotContent}
 import org.opencypher.caps.impl.spark.CAPSConverters._
-import org.opencypher.caps.impl.spark.physical.DataFrameOps._
+import org.opencypher.caps.impl.spark.DataFrameOps._
 import org.opencypher.caps.impl.spark.physical.{CAPSPhysicalResult, CAPSRuntimeContext}
 import org.opencypher.caps.impl.spark.{CAPSGraph, CAPSRecords}
 import org.opencypher.caps.trees.AbstractTreeNode
@@ -74,7 +74,7 @@ object CAPSPhysicalOperator {
 
     val returnData = if (deduplicate) {
       val colsToDrop = joinCols.map(col => col._2)
-      colsToDrop.foldLeft(joinedData)((acc, col) => acc.drop(col))
+      joinedData.safeDropColumns(colsToDrop: _*)
     } else joinedData
 
     CAPSRecords.verifyAndCreate(header, returnData)

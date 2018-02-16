@@ -18,8 +18,8 @@ package org.opencypher.caps.api.graph
 import java.net.URI
 
 import org.opencypher.caps.api.io.{CreateOrFail, PersistMode, PropertyGraphDataSource}
+import org.opencypher.caps.api.table.CypherRecords
 import org.opencypher.caps.api.value.CypherValue._
-import org.opencypher.caps.impl.record.CypherRecords
 
 // TODO: extend doc with explanation for writing graphs
 /**
@@ -74,6 +74,15 @@ trait CypherSession {
     * @param path   path at which this graph can be accessed via {{{session://$path}}}
     */
   def mount(source: PropertyGraphDataSource, path: String): Unit
+
+  /**
+    * Mounts the given property graph to session-local storage under the given path. The specified graph will be
+    * accessible under the session-local URI scheme, e.g. {{{session://$path}}}.
+    *
+    * @param graph property graph to register
+    * @param path   path at which this graph can be accessed via {{{session://$path}}}
+    */
+  def mount(graph: PropertyGraph, path: String): Unit
 
   // TODO: reintroduce "mount(source: String, path: String): Unit" with source lookup via URI scheme
   /**

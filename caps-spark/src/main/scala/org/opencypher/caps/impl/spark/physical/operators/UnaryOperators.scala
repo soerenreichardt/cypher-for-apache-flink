@@ -21,17 +21,17 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.functions.{asc, desc, monotonically_increasing_id}
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.opencypher.caps.api.CAPSSession
-import org.opencypher.caps.api.exception.{IllegalArgumentException, IllegalStateException, NotImplementedException}
 import org.opencypher.caps.api.schema.Schema
 import org.opencypher.caps.api.types._
 import org.opencypher.caps.api.value.CypherValue._
-import org.opencypher.caps.impl.record._
+import org.opencypher.caps.impl.exception.{IllegalArgumentException, IllegalStateException, NotImplementedException}
+import org.opencypher.caps.impl.spark.DataFrameOps._
 import org.opencypher.caps.impl.spark.SparkSQLExprMapper._
-import org.opencypher.caps.impl.spark.convert.SparkUtils._
 import org.opencypher.caps.impl.spark.physical.operators.CAPSPhysicalOperator.{assertIsNode, columnName}
 import org.opencypher.caps.impl.spark.physical.{CAPSPhysicalResult, CAPSRuntimeContext}
 import org.opencypher.caps.impl.spark.{CAPSGraph, CAPSRecords}
 import org.opencypher.caps.impl.syntax.RecordHeaderSyntax._
+import org.opencypher.caps.impl.table._
 import org.opencypher.caps.ir.api.block.{Asc, Desc, SortItem}
 import org.opencypher.caps.ir.api.expr._
 import org.opencypher.caps.ir.impl.syntax.ExprSyntax._
@@ -109,7 +109,7 @@ final case class Unwind(in: CAPSPhysicalOperator, list: Expr, item: Var, header:
         case expr =>
           val listColumn = expr.asSparkSQLExpr(records.header, records.data, context)
 
-          records.data.withColumn(itemColumn, functions.explode(listColumn))
+          records.data.safeAddColumn(itemColumn, functions.explode(listColumn))
       }
 
       CAPSRecords.verifyAndCreate(header, newData)(records.caps)
@@ -130,7 +130,7 @@ final case class Alias(in: CAPSPhysicalOperator, expr: Expr, alias: Var, header:
       val newColumnName = columnName(newSlot)
 
       val newData = if (records.data.columns.contains(oldColumnName)) {
-        records.data.withColumnRenamed(oldColumnName, newColumnName)
+        records.data.safeRenameColumn(oldColumnName, newColumnName)
       } else {
         throw IllegalArgumentException(s"a column with name $oldColumnName")
       }
@@ -224,7 +224,7 @@ final case class ProjectPatternGraph(
   private def addEntitiesToRecords(columnsToAdd: Set[(SlotContent, Column)], records: CAPSRecords): CAPSRecords = {
     val newData = columnsToAdd.foldLeft(records.data) {
       case (acc, (expr, col)) =>
-        acc.withColumn(columnName(expr), col)
+        acc.safeAddColumn(columnName(expr), col)
     }
 
     // TODO: Move header construction to FlatPlanner
@@ -295,7 +295,7 @@ final case class RemoveAliases(
     prev.mapRecordsWithDetails { records =>
       val renamed = dependentFields.foldLeft(records.data) {
         case (df, (v, expr)) =>
-          df.withColumnRenamed(ColumnName.of(v), ColumnName.of(expr))
+          df.safeRenameColumn(ColumnName.of(v), ColumnName.of(expr))
       }
 
       CAPSRecords.verifyAndCreate(header, renamed)(records.caps)
@@ -390,7 +390,7 @@ final case class Aggregate(
 
       val sparkAggFunctions = aggregations.map {
         case (to, inner) =>
-          val columnName = ColumnName.from(Some(to.name))
+          val columnName = ColumnName.from(to.name)
           inner match {
             case Avg(expr) =>
               withInnerExpr(expr)(
@@ -403,8 +403,14 @@ final case class Aggregate(
               functions.count(functions.lit(0)).as(columnName)
 
             // TODO: Consider not implicitly projecting the inner expr here, but rewriting it into a variable in logical planning or IR construction
-            case Count(expr) =>
-              withInnerExpr(expr)(functions.count(_).as(columnName))
+            case Count(expr, distinct) => withInnerExpr(expr) { column =>
+              val count = {
+                if (distinct) functions.countDistinct(column)
+                else functions.count(column)
+              }
+
+              count.as(columnName)
+            }
 
             case Max(expr) =>
               withInnerExpr(expr)(functions.max(_).as(columnName))
@@ -415,8 +421,14 @@ final case class Aggregate(
             case Sum(expr) =>
               withInnerExpr(expr)(functions.sum(_).as(columnName))
 
-            case Collect(expr) =>
-              withInnerExpr(expr)(functions.collect_list(_).as(columnName))
+            case Collect(expr, distinct) => withInnerExpr(expr) { column =>
+              val list = {
+                if (distinct) functions.collect_set(column)
+                else functions.collect_list(column)
+              }
+
+              list.as(columnName)
+            }
 
             case x =>
               throw NotImplementedException(s"Aggregation function $x")
@@ -517,7 +529,7 @@ final case class InitVarExpand(in: CAPSPhysicalOperator, source: Var, edgeList: 
 
       val edgeListColName = columnName(edgeListSlot)
       val edgeListColumn = functions.typedLit(Array[Long]())
-      val withEmptyList = inputData.withColumn(edgeListColName, edgeListColumn)
+      val withEmptyList = inputData.safeAddColumn(edgeListColName, edgeListColumn)
 
       val cols = keep ++ Seq(
         withEmptyList.col(edgeListColName),

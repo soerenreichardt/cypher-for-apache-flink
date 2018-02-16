@@ -15,7 +15,7 @@
  */
 package org.opencypher.caps.api.graph
 
-import org.opencypher.caps.impl.record.{CypherPrintable, CypherRecords}
+import org.opencypher.caps.api.table.{CypherPrintable, CypherRecords}
 import org.opencypher.caps.impl.util.PrintOptions
 import org.opencypher.caps.trees.TreeNode
 
@@ -48,18 +48,14 @@ trait CypherResult extends CypherPrintable {
     */
   def records: CypherRecords
 
-  type LogicalPlan <: TreeNode[LogicalPlan]
-  type FlatPlan <: TreeNode[FlatPlan]
-  type PhysicalPlan <: TreeNode[PhysicalPlan]
-
-  def explain: Plan[LogicalPlan, FlatPlan, PhysicalPlan]
+  /**
+    * API for printable plans. This is used for explaining the execution plan of a Cypher query.
+    */
+  def plans: CypherQueryPlans
 
 }
 
-case class Plan[L <: TreeNode[L], F <: TreeNode[F], P <: TreeNode[P]](
-    logical: CypherResultPlan[L],
-    private[caps] val flat: CypherResultPlan[F],
-    private[caps] val physical: CypherResultPlan[P])
-    extends CypherPrintable {
-  override def print(implicit options: PrintOptions): Unit = logical.print
+trait CypherQueryPlans {
+  def logical: CypherPrintable
+  def physical: CypherPrintable
 }

@@ -15,10 +15,12 @@
  */
 package org.opencypher.caps.cosc.impl.planning
 
-import org.opencypher.caps.api.exception.IllegalArgumentException
 import org.opencypher.caps.api.types.{CTNode, CTRelationship}
+import org.opencypher.caps.cosc.impl
+import org.opencypher.caps.cosc.impl.{COSCPhysicalResult, COSCRecords, COSCRuntimeContext}
+import org.opencypher.caps.impl.exception.IllegalArgumentException
 import org.opencypher.caps.cosc.impl.{COSCPhysicalResult, COSCRuntimeContext}
-import org.opencypher.caps.impl.record.RecordHeader
+import org.opencypher.caps.impl.table.RecordHeader
 import org.opencypher.caps.ir.api.expr.{Expr, Var}
 import org.opencypher.caps.logical.impl.{LogicalExternalGraph, LogicalGraph}
 

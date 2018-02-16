@@ -15,9 +15,10 @@
  */
 package org.opencypher.caps.test.support
 
+import org.opencypher.caps.api.table.CypherRecords
 import org.opencypher.caps.api.value.CypherValue._
-import org.opencypher.caps.impl.record.CAPSRecordHeader._
-import org.opencypher.caps.impl.record._
+import org.opencypher.caps.impl.table.CAPSRecordHeader._
+import org.opencypher.caps.impl.table._
 import org.opencypher.caps.impl.spark.CAPSConverters._
 import org.opencypher.caps.impl.spark.CAPSRecords
 import org.opencypher.caps.ir.api.expr.Var
@@ -63,7 +64,7 @@ trait RecordMatchingTestSupport {
 
   implicit class RichRecords(records: CypherRecords) {
     val capsRecords = records.asCaps
-    import org.opencypher.caps.impl.spark.DfUtils._
+    import org.opencypher.caps.impl.spark.DataFrameOps._
 
     // TODO: Remove this and replace usages with toMapsWithCollectedEntities below
     // probably use this name though, and have not collecting be the special case

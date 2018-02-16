@@ -17,20 +17,22 @@ package org.opencypher.caps.ir.impl
 
 import org.neo4j.cypher.internal.v3_4.expressions.FunctionInvocation
 import org.neo4j.cypher.internal.v3_4.functions
-import org.opencypher.caps.api.exception.NotImplementedException
 import org.opencypher.caps.api.types.CypherType
+import org.opencypher.caps.impl.exception.NotImplementedException
 import org.opencypher.caps.ir.api.expr._
 
 object FunctionUtils {
 
   implicit class RichFunctionInvocation(functionInvocation: FunctionInvocation) {
     def toCAPSFunction(expr: IndexedSeq[Expr], cypherType: CypherType): Expr = {
+      val distinct = functionInvocation.distinct
+
       functionInvocation.function match {
         case functions.Id        => Id(expr.head)(cypherType)
         case functions.Labels    => Labels(expr.head)(cypherType)
         case functions.Type      => Type(expr.head)(cypherType)
         case functions.Avg       => Avg(expr.head)(cypherType)
-        case functions.Count     => Count(expr.head)(cypherType)
+        case functions.Count     => Count(expr.head, distinct)(cypherType)
         case functions.Max       => Max(expr.head)(cypherType)
         case functions.Min       => Min(expr.head)(cypherType)
         case functions.Sum       => Sum(expr.head)(cypherType)
@@ -40,7 +42,7 @@ object FunctionUtils {
         case functions.StartNode => StartNodeFunction(expr.head)(cypherType)
         case functions.EndNode   => EndNodeFunction(expr.head)(cypherType)
         case functions.ToFloat   => ToFloat(expr.head)(cypherType)
-        case functions.Collect   => Collect(expr.head)(cypherType)
+        case functions.Collect   => Collect(expr.head, distinct)(cypherType)
         case functions.Coalesce  => Coalesce(expr)(cypherType)
         case a: functions.Function =>
           throw NotImplementedException(s"Support for converting ${a.name} function not yet implemented")

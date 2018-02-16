@@ -21,16 +21,17 @@ import java.util.UUID
 import org.apache.spark.sql.SparkSession
 import org.opencypher.caps.api.CAPSSession
 import org.opencypher.caps.api.configuration.CoraConfiguration.{PrintPhysicalPlan, PrintQueryExecutionStages}
-import org.opencypher.caps.api.exception.UnsupportedOperationException
 import org.opencypher.caps.api.graph.{CypherResult, PropertyGraph}
 import org.opencypher.caps.api.io.{CreateOrFail, PersistMode, PropertyGraphDataSource}
 import org.opencypher.caps.api.schema.Schema
+import org.opencypher.caps.api.table.CypherRecords
 import org.opencypher.caps.api.value.CypherValue._
 import org.opencypher.caps.api.value._
+import org.opencypher.caps.impl.exception.UnsupportedOperationException
 import org.opencypher.caps.impl.flat.{FlatPlanner, FlatPlannerContext}
 import org.opencypher.caps.impl.physical.PhysicalPlanner
-import org.opencypher.caps.impl.record.CypherRecords
 import org.opencypher.caps.impl.spark.CAPSConverters._
+import org.opencypher.caps.impl.spark.io.session.SessionPropertyGraphDataSource
 import org.opencypher.caps.impl.spark.io.{CAPSGraphSourceHandler, CAPSPropertyGraphDataSource}
 import org.opencypher.caps.impl.spark.physical._
 import org.opencypher.caps.impl.util.parsePathOrURI
@@ -48,6 +49,7 @@ sealed class CAPSSessionImpl(val sparkSession: SparkSession, private val graphSo
 
   self =>
 
+  private implicit def capsSession = this
   private val producer = new LogicalOperatorProducer
   private val logicalPlanner = new LogicalPlanner(producer)
   private val logicalOptimizer = LogicalOptimizer
@@ -57,23 +59,29 @@ sealed class CAPSSessionImpl(val sparkSession: SparkSession, private val graphSo
   private val parser = CypherParser
 
   def sourceAt(uri: URI): PropertyGraphDataSource =
-    graphSourceHandler.sourceAt(uri)(this)
+    graphSourceHandler.sourceAt(uri)
 
   override def readFrom(path: String): PropertyGraph =
     readFrom(parsePathOrURI(path))
 
   // TODO: why not Option[CAPSGraph] in general?
   override def readFrom(uri: URI): PropertyGraph =
-    graphSourceHandler.sourceAt(uri)(this).graph
+    graphSourceHandler.sourceAt(uri).graph
 
   def optGraphAt(uri: URI): Option[CAPSGraph] =
-    graphSourceHandler.optSourceAt(uri)(this).map(_.graph) match {
+    graphSourceHandler.optSourceAt(uri).map(_.graph) match {
       case Some(graph) => Some(graph.asCaps)
       case None => None
     }
 
   override def write(graph: PropertyGraph, pathOrUri: String, mode: PersistMode = CreateOrFail): Unit =
-    graphSourceHandler.sourceAt(parsePathOrURI(pathOrUri))(this).store(graph, mode)
+    graphSourceHandler.sourceAt(parsePathOrURI(pathOrUri)).store(graph, mode)
+
+  override def mount(graph: PropertyGraph, path: String): Unit = {
+    val source = SessionPropertyGraphDataSource(path)
+    source.store(graph, CreateOrFail)
+    mount(source, path)
+  }
 
   override def mount(source: PropertyGraphDataSource, path: String): Unit = source match {
     case c: CAPSPropertyGraphDataSource => mountSourceAt(c, parsePathOrURI(path))
@@ -81,16 +89,16 @@ sealed class CAPSSessionImpl(val sparkSession: SparkSession, private val graphSo
   }
 
   def mountSourceAt(source: CAPSPropertyGraphDataSource, uri: URI): Unit =
-    graphSourceHandler.mountSourceAt(source, uri)(this)
+    graphSourceHandler.mountSourceAt(source, uri)
 
   def unmountAll(): Unit =
-    graphSourceHandler.unmountAll(this)
+    graphSourceHandler.unmountAll
 
   override def sql(query: String): CAPSRecords =
-    CAPSRecords.wrap(sparkSession.sql(query))(this)
+    CAPSRecords.wrap(sparkSession.sql(query))
 
   override def cypher(query: String, parameters: CypherMap, drivingTable: Option[CypherRecords]): CypherResult =
-    cypherOnGraph(CAPSGraph.empty(this), query, parameters, drivingTable)
+    cypherOnGraph(CAPSGraph.empty, query, parameters, drivingTable)
 
   override def cypherOnGraph(graph: PropertyGraph, query: String, queryParameters: CypherMap, maybeDrivingTable: Option[CypherRecords]): CypherResult = {
     val ambientGraph = mountAmbientGraph(graph)
@@ -114,18 +122,18 @@ sealed class CAPSSessionImpl(val sparkSession: SparkSession, private val graphSo
     val optimizedLogicalPlan = logicalOptimizer(logicalPlan)(logicalPlannerContext)
     logStageProgress("Done!")
 
-    if (PrintLogicalPlan.get()) {
+    if (PrintLogicalPlan.isSet) {
       println("Logical plan:")
       println(logicalPlan.pretty())
       println("Optimized logical plan:")
       println(optimizedLogicalPlan.pretty())
     }
 
-    plan(graph, CAPSRecords.unit()(this), allParameters, optimizedLogicalPlan)
+    plan(graph, CAPSRecords.unit(), allParameters, optimizedLogicalPlan)
   }
 
   private def logStageProgress(s: String, newLine: Boolean = true): Unit = {
-    if (PrintQueryExecutionStages.get()) {
+    if (PrintQueryExecutionStages.isSet) {
       if (newLine) {
         println(s)
       } else {
@@ -174,7 +182,7 @@ sealed class CAPSSessionImpl(val sparkSession: SparkSession, private val graphSo
     in: CypherRecords,
     expr: Expr,
     queryParameters: CypherMap): CAPSRecords = {
-    val scan = planStart(graph, in.header.asCaps.internalHeader.fields)
+    val scan = planStart(graph, in.asCaps.header.internalHeader.fields)
     val filter = producer.planFilter(expr, scan)
     plan(graph, in, queryParameters, filter).records
   }
@@ -184,7 +192,7 @@ sealed class CAPSSessionImpl(val sparkSession: SparkSession, private val graphSo
     in: CypherRecords,
     fields: IndexedSeq[Var],
     queryParameters: CypherMap): CAPSRecords = {
-    val scan = planStart(graph, in.header.asCaps.internalHeader.fields)
+    val scan = planStart(graph, in.asCaps.header.internalHeader.fields)
     val select = producer.planSelect(fields, Set.empty, scan)
     plan(graph, in, queryParameters, select).records
   }
@@ -194,7 +202,7 @@ sealed class CAPSSessionImpl(val sparkSession: SparkSession, private val graphSo
     in: CypherRecords,
     expr: Expr,
     queryParameters: CypherMap): CAPSRecords = {
-    val scan = planStart(graph, in.header.asCaps.internalHeader.fields)
+    val scan = planStart(graph, in.asCaps.header.internalHeader.fields)
     val project = producer.projectExpr(expr, scan)
     plan(graph, in, queryParameters, project).records
   }
@@ -205,7 +213,7 @@ sealed class CAPSSessionImpl(val sparkSession: SparkSession, private val graphSo
     alias: (Expr, Var),
     queryParameters: CypherMap): CAPSRecords = {
     val (expr, v) = alias
-    val scan = planStart(graph, in.header.asCaps.internalHeader.fields)
+    val scan = planStart(graph, in.asCaps.header.internalHeader.fields)
     val select = producer.projectField(IRField(v.name)(v.cypherType), expr, scan)
     plan(graph, in, queryParameters, select).records
   }
@@ -224,7 +232,7 @@ sealed class CAPSSessionImpl(val sparkSession: SparkSession, private val graphSo
     val physicalPlan = physicalPlanner(flatPlan)(physicalPlannerContext)
     logStageProgress("Done!")
 
-    if (PrintPhysicalPlan.get()) {
+    if (PrintPhysicalPlan.isSet) {
       println("Physical plan:")
       println(physicalPlan.pretty())
     }
@@ -233,7 +241,7 @@ sealed class CAPSSessionImpl(val sparkSession: SparkSession, private val graphSo
     val optimizedPhysicalPlan = physicalOptimizer(physicalPlan)(PhysicalOptimizerContext())
     logStageProgress("Done!")
 
-    if (PrintPhysicalPlan.get()) {
+    if (PrintPhysicalPlan.isSet) {
       println("Optimized physical plan:")
       println(optimizedPhysicalPlan.pretty())
     }
@@ -252,4 +260,5 @@ sealed class CAPSSessionImpl(val sparkSession: SparkSession, private val graphSo
 
     s"${this.getClass.getSimpleName}($mountPointsString)"
   }
+
 }
