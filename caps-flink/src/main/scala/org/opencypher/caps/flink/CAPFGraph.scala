@@ -37,7 +37,7 @@ object CAPFGraph {
 
     }
 
-  def create(nodes: Table, rels: Table)(implicit capf: CAPFSession) = {
+  def create(nodes: Table, rels: Table)(implicit capf: CAPFSession): CAPFGraph = {
     nodes.printSchema()
   }
 
