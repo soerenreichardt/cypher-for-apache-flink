@@ -1,14 +1,15 @@
 package org.opencypher.caps.flink
 
 import org.apache.flink.api.scala.DataSet
-import org.opencypher.caps.api.exception.IllegalArgumentException
+import org.apache.flink.table.api.Table
 import org.opencypher.caps.api.graph.PropertyGraph
 import org.opencypher.caps.api.schema.Schema
+import org.opencypher.caps.api.table.CypherRecords
 import org.opencypher.caps.api.types.{CTNode, CTRelationship}
-import org.opencypher.caps.flink.value.{CAPFNode, CAPFRelationship}
 import org.opencypher.caps.flink.CAPFConverters._
-import org.opencypher.caps.flink.schema.{EntityTable, NodeTable}
-import org.opencypher.caps.impl.record.{CypherRecords, OpaqueField, RecordHeader}
+import org.opencypher.caps.flink.value.{CAPFNode, CAPFRelationship}
+import org.opencypher.caps.impl.exception.IllegalArgumentException
+import org.opencypher.caps.impl.table.{OpaqueField, RecordHeader}
 import org.opencypher.caps.ir.api.expr.Var
 
 trait CAPFGraph extends PropertyGraph with Serializable {
@@ -36,17 +37,9 @@ object CAPFGraph {
 
     }
 
-//  def create(nodeTable: NodeTable, entityTables: EntityTable*)(implicit capf: CAPFSession): CAPFGraph = {
-//    val allTables = nodeTable +: entityTables
-//    val schema = allTables.map(_.schema).reduce(_ ++ _)
-//    new CAPFScanGraph(allTables, schema)
-//  }
-
-  def create(records: CypherRecords, schema: Schema)(implicit capf: CAPFSession): CAPFGraph = ???
-
-  def create(nodes: Seq[CAPFNode], rels: Seq[CAPFRelationship])(implicit capf: CAPFSession) = ???
-
-  def create(nodes: DataSet[_], rels: DataSet[_])(implicit capf: CAPFSession) = ???
+  def create(nodes: Table, rels: Table)(implicit capf: CAPFSession) = {
+    nodes.printSchema()
+  }
 
   def createLazy(theSchema: Schema, loadGraph: => CAPFGraph)(implicit CAPF: CAPFSession): CAPFGraph =
     new LazyGraph(theSchema, loadGraph) {}
