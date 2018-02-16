@@ -1,5 +1,6 @@
 package org.opencypher.caps.flink
 
+import org.apache.flink.api.scala.DataSet
 import org.opencypher.caps.api.exception.IllegalArgumentException
 import org.opencypher.caps.api.graph.PropertyGraph
 import org.opencypher.caps.api.schema.Schema
@@ -35,15 +36,17 @@ object CAPFGraph {
 
     }
 
-  def create(nodeTable: NodeTable, entityTables: EntityTable*)(implicit capf: CAPFSession): CAPFGraph = {
-    val allTables = nodeTable +: entityTables
-    val schema = allTables.map(_.schema).reduce(_ ++ _)
-    new CAPFScanGraph(allTables, schema)
-  }
+//  def create(nodeTable: NodeTable, entityTables: EntityTable*)(implicit capf: CAPFSession): CAPFGraph = {
+//    val allTables = nodeTable +: entityTables
+//    val schema = allTables.map(_.schema).reduce(_ ++ _)
+//    new CAPFScanGraph(allTables, schema)
+//  }
 
   def create(records: CypherRecords, schema: Schema)(implicit capf: CAPFSession): CAPFGraph = ???
 
   def create(nodes: Seq[CAPFNode], rels: Seq[CAPFRelationship])(implicit capf: CAPFSession) = ???
+
+  def create(nodes: DataSet[_], rels: DataSet[_])(implicit capf: CAPFSession) = ???
 
   def createLazy(theSchema: Schema, loadGraph: => CAPFGraph)(implicit CAPF: CAPFSession): CAPFGraph =
     new LazyGraph(theSchema, loadGraph) {}
