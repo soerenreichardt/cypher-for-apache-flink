@@ -3,7 +3,7 @@ package org.opencypher.caps.flink
 
 import java.util.UUID
 
-import org.opencypher.caps.impl.record.{FieldSlotContent, ProjectedExpr, RecordSlot, SlotContent}
+import org.opencypher.caps.impl.table.{FieldSlotContent, ProjectedExpr, RecordSlot, SlotContent}
 import org.opencypher.caps.ir.api.expr.{Expr, Property, Var}
 
 import scala.collection.mutable

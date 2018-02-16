@@ -2,8 +2,8 @@ package org.opencypher.caps.flink
 
 import org.apache.flink.api.common.typeinfo.TypeInformation
 import org.apache.flink.table.api.{Table, Types}
-import org.opencypher.caps.api.exception.{IllegalArgumentException, NotImplementedException}
 import org.opencypher.caps.api.types._
+import org.opencypher.caps.impl.exception.{IllegalArgumentException, NotImplementedException}
 
 object FlinkUtils {
 

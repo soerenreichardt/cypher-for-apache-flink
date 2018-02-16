@@ -1,6 +1,6 @@
 package org.opencypher.caps.flink
 
-import org.opencypher.caps.impl.record.RecordHeader
+import org.opencypher.caps.impl.table.RecordHeader
 
 object CAPFRecordHeaderConversions {
 

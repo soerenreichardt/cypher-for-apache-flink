@@ -1,24 +1,16 @@
 package org.opencypher.caps.flink.schema
 
-import org.apache.flink.api.common.typeinfo.TypeInformation
+import org.apache.flink.table.api.Table
 import org.apache.flink.api.scala._
-import org.apache.flink.table.api.{Table, Types}
-import org.apache.flink.types.Row
-import org.opencypher.caps.api.types._
+import org.apache.flink.table.api.scala._
 import org.opencypher.caps.api.io.conversion.{EntityMapping, NodeMapping, RelationshipMapping}
 import org.opencypher.caps.api.schema.Schema
-import org.opencypher.caps.api.types.{CypherType, DefiniteCypherType}
+import org.opencypher.caps.api.types.{CypherType, _}
 import org.opencypher.caps.api.value.CypherValue
-import org.opencypher.caps.flink.FlinkUtils._
-import org.opencypher.caps.flink.{Annotation, _}
-import org.opencypher.caps.impl.record.CypherTable
-import org.apache.flink.table.api.scala._
-import org.opencypher.caps.api.exception.IllegalArgumentException
+import org.opencypher.caps.flink._
+import org.opencypher.caps.impl.table.CypherTable
 
-import scala.reflect.ClassTag
-import scala.reflect.runtime.universe._
-
-sealed trait EntityTable[T <: CypherTable] {
+sealed trait EntityTable[T <: CypherTable[String]] {
 
   def schema: Schema
 
@@ -27,18 +19,16 @@ sealed trait EntityTable[T <: CypherTable] {
   def table: T
 
   protected def verify(): Unit = {
-    val sourceIdKeyType = table.columnType(mapping.sourceIdKey)
-    if (sourceIdKeyType != CTInteger) throw IllegalArgumentException(
-      s"id key type in column `${mapping.sourceIdKey}` that is compatible with CTInteger", sourceIdKeyType)
+    table.verifyColumnType(mapping.sourceIdKey, CTInteger, "id key")
   }
 
 }
 
 object EntityTable {
 
-  implicit class FlinkTable(val table: Table)(implicit capf: CAPFSession) extends CypherTable {
+  implicit class FlinkTable(val table: Table)(implicit capf: CAPFSession) extends CypherTable[String] {
 
-    override def columns: Set[String] = table.getSchema.getColumnNames.toSet
+    override def columns: Seq[String] = table.getSchema.getColumnNames.toSeq
 
     override def columnType: Map[String, CypherType] = columns.map(c => c -> FlinkUtils.cypherTypeForColumn(table, c)).toMap
 
@@ -50,12 +40,12 @@ object EntityTable {
     /**
       * @return number of rows in this Table.
       */
-    override def size: Long = ???
+    override def size: Long = table.count()
   }
 
 }
 
-abstract class NodeTable[T <: CypherTable](mapping: NodeMapping, table: T) extends EntityTable[T] {
+abstract class NodeTable[T <: CypherTable[String]](mapping: NodeMapping, table: T) extends EntityTable[T] {
 
   override lazy val schema: Schema = {
     val propertyKeys = mapping.propertyMapping.toSeq.map {
@@ -70,17 +60,13 @@ abstract class NodeTable[T <: CypherTable](mapping: NodeMapping, table: T) exten
 
   override protected def verify(): Unit = {
     super.verify()
-    mapping.optionalLabelMapping.values.foreach { optionalLabelKey =>
-      val columnType = table.columnType(optionalLabelKey)
-      if (columnType != CTBoolean) {
-        throw IllegalArgumentException(
-          s"optional label key type in column `$optionalLabelKey`that is compatible with CTBoolean", columnType)
-      }
-    }
+    mapping.optionalLabelMapping.values.foreach( { optionalLabelKey =>
+      table.verifyColumnType(optionalLabelKey, CTBoolean, "optional label")
+    })
   }
 }
 
-abstract class RelationshipTable[T <: CypherTable](mapping: RelationshipMapping, table: T) extends EntityTable[T] {
+abstract class RelationshipTable[T <: CypherTable[String]](mapping: RelationshipMapping, table: T) extends EntityTable[T] {
 
   override lazy val schema: Schema = {
     val relTypes = mapping.relTypeOrSourceRelTypeKey match {
@@ -99,20 +85,10 @@ abstract class RelationshipTable[T <: CypherTable](mapping: RelationshipMapping,
 
   override protected def verify(): Unit = {
     super.verify()
-
-    val sourceStartNodeKeyType = table.columnType(mapping.sourceStartNodeKey)
-    if (sourceStartNodeKeyType != CTInteger) throw IllegalArgumentException(
-      s"start node key type in column `${mapping.sourceStartNodeKey}` that is compatible with CTInteger", sourceStartNodeKeyType)
-
-    val sourceEndNodeKeyType = table.columnType(mapping.sourceEndNodeKey)
-    if (sourceEndNodeKeyType != CTInteger) throw IllegalArgumentException(
-      s"end node key type in column `${mapping.sourceEndNodeKey}` that is compatible with CTInteger", sourceEndNodeKeyType)
-
-    mapping.relTypeOrSourceRelTypeKey.right.foreach { k =>
-      val relTypeKey = k._1
-      val relType = table.columnType(relTypeKey)
-      if (relType != CTString) throw IllegalArgumentException(
-        s"relationship type in column `${relTypeKey}` that is compatible with CTString", relType)
+    table.verifyColumnType(mapping.sourceStartNodeKey, CTInteger, "start node")
+    table.verifyColumnType(mapping.sourceEndNodeKey, CTInteger, "end node")
+    mapping.relTypeOrSourceRelTypeKey.right.foreach { key =>
+      table.verifyColumnType(key._1, CTString, "relationship type")
     }
   }
 }

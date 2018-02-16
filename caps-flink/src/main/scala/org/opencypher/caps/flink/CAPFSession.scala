@@ -2,34 +2,22 @@ package org.opencypher.caps.flink
 
 import java.net.URI
 
-import org.apache.flink.api.common.typeinfo.TypeInformation
 import org.apache.flink.api.scala.{DataSet, ExecutionEnvironment}
-import org.apache.flink.table.api.TableEnvironment
+import org.apache.flink.table.api.{Table, TableEnvironment}
 import org.opencypher.caps.api.graph.{CypherResult, CypherSession, PropertyGraph}
 import org.opencypher.caps.api.io.{PersistMode, PropertyGraphDataSource}
+import org.opencypher.caps.api.table.CypherRecords
 import org.opencypher.caps.api.value.CypherValue.CypherMap
-import org.opencypher.caps.flink.schema.{Node, NodeTable, Relationship, RelationshipTable}
 import org.opencypher.caps.impl.flat.FlatPlanner
-import org.opencypher.caps.impl.record.CypherRecords
 import org.opencypher.caps.ir.impl.parse.CypherParser
 import org.opencypher.caps.logical.impl.{LogicalOperatorProducer, LogicalOptimizer, LogicalPlanner}
-
-import scala.reflect.ClassTag
-import scala.reflect.runtime.universe._
 
 trait CAPFSession extends CypherSession {
 
   def env = ExecutionEnvironment.getExecutionEnvironment
   def tableEnv = TableEnvironment.getTableEnvironment(env)
 
-//  def readFrom[N <: Node : TypeTag : ClassTag, R <: Relationship : TypeTag : ClassTag](
-//    nodes: Seq[N],
-//    relationships: Seq[R] = Seq.empty): PropertyGraph = {
-//    implicit val session: CAPFSession = this
-//    CAPFGraph.create(NodeTable(nodes), RelationshipTable(relationships))
-//  }
-
-  def readFrom(nodes: DataSet[_], rels: DataSet[_]): PropertyGraph = {
+  def readFrom(nodes: Table, rels: Table): Unit = {
     implicit val session: CAPFSession = this
     CAPFGraph.create(nodes, rels)
   }
@@ -42,8 +30,11 @@ object CAPFSession {
 
 }
 
-sealed class CAPFSessionImpl extends CAPFSession {
+sealed class CAPFSessionImpl extends CAPFSession with Serializable {
 
+  self =>
+
+  private implicit def capfSession = this
   private val producer = new LogicalOperatorProducer
   private val logicalPlanner = new LogicalPlanner(producer)
   private val logicalOptimizer = LogicalOptimizer
@@ -59,9 +50,9 @@ sealed class CAPFSessionImpl extends CAPFSession {
     * @return result of the query
     */
   override def cypher(query: String, parameters: CypherMap, drivingTable: Option[CypherRecords]): CypherResult =
-    cypherOnGraph(CAPFGraph.empty(this), query, parameters)
+    cypherOnGraph(CAPFGraph.empty(this), query, parameters, drivingTable)
 
-  def cypherOnGraph(graph: PropertyGraph, query: String, parameters: CypherMap): CypherResult = ???
+  override def cypherOnGraph(graph: PropertyGraph, query: String, queryParameters: CypherMap, maybeDrivingTable: Option[CypherRecords]): CypherResult = ???
 
   /**
     * Reads a graph from the argument URI.
@@ -88,4 +79,13 @@ sealed class CAPFSessionImpl extends CAPFSession {
     * @param mode  persist mode which determines what happens if the location is occupied
     */
   override def write(graph: PropertyGraph, uri: String, mode: PersistMode): Unit = ???
+
+  /**
+    * Mounts the given property graph to session-local storage under the given path. The specified graph will be
+    * accessible under the session-local URI scheme, e.g. {{{session://$path}}}.
+    *
+    * @param graph property graph to register
+    * @param path  path at which this graph can be accessed via {{{session://$path}}}
+    */
+  override def mount(graph: PropertyGraph, path: String): Unit = ???
 }

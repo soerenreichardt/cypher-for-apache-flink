@@ -2,6 +2,7 @@ package org.opencypher.caps.flink
 
 import org.apache.flink.streaming.api.scala._
 import org.opencypher.caps.api.value.CypherValue.{CypherInteger, CypherMap, CypherString}
+import org.opencypher.caps.flink.value.{CAPFNode, CAPFRelationship}
 
 object Demo extends App {
 
@@ -10,15 +11,19 @@ object Demo extends App {
   val nodesDataSet = session.env.fromCollection(DemoData.nodes)
   val relsDataSet = session.env.fromCollection(DemoData.rels)
 
-  session.readFrom(nodesDataSet, relsDataSet)
+  val nodes = session.tableEnv.fromDataSet(nodesDataSet)
+  val rels = session.tableEnv.fromDataSet(relsDataSet)
+
+  session.readFrom(nodes, rels)
 
 }
 
 object DemoData {
 
   val nodes = Seq(
-    Seq(0L, Set("Person"), CypherMap("name" -> CypherString("Alice"), "age" -> CypherInteger(42))),
-    Seq(1L, Set("Person"), CypherMap("name" -> CypherString("Bob"), "age" -> CypherInteger(23))))
-  val rels = Seq(2L, 0L, 1L, "KNOWS", CypherMap("since" -> CypherString("2018")))
+    CAPFNode(0L, Set("Person"), CypherMap("name" -> CypherString("Alice"), "age" -> CypherInteger(42))),
+    CAPFNode(1L, Set("Person"), CypherMap("name" -> CypherString("Bob"), "age" -> CypherInteger(23)))
+  )
+  val rels = Seq(CAPFRelationship(2L, 0L, 1L, "KNOWS", CypherMap("since" -> CypherString("2018"))))
 
 }
