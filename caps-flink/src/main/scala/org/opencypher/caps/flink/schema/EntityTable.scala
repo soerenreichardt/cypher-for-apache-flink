@@ -1,8 +1,10 @@
 package org.opencypher.caps.flink.schema
 
+import org.apache.flink.api.common.typeinfo.TypeInformation
 import org.apache.flink.api.scala._
-import org.apache.flink.table.api.Table
+import org.apache.flink.table.api.{Table, Types}
 import org.apache.flink.types.Row
+import org.opencypher.caps.api.types._
 import org.opencypher.caps.api.io.conversion.{EntityMapping, NodeMapping, RelationshipMapping}
 import org.opencypher.caps.api.schema.Schema
 import org.opencypher.caps.api.types.{CypherType, DefiniteCypherType}
@@ -10,27 +12,31 @@ import org.opencypher.caps.api.value.CypherValue
 import org.opencypher.caps.flink.FlinkUtils._
 import org.opencypher.caps.flink.{Annotation, _}
 import org.opencypher.caps.impl.record.CypherTable
+import org.apache.flink.table.api.scala._
+import org.opencypher.caps.api.exception.IllegalArgumentException
 
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe._
 
-sealed trait EntityTable {
+sealed trait EntityTable[T <: CypherTable] {
 
   def schema: Schema
 
   def mapping: EntityMapping
 
-  def table: Table
+  def table: T
 
-  private[caps] def entityType: CypherType with DefiniteCypherType = mapping.cypherType
-
-  private[caps] def records(implicit capf: CAPFSession): CAPFRecords = CAPFRecords.create(this)
+  protected def verify(): Unit = {
+    val sourceIdKeyType = table.columnType(mapping.sourceIdKey)
+    if (sourceIdKeyType != CTInteger) throw IllegalArgumentException(
+      s"id key type in column `${mapping.sourceIdKey}` that is compatible with CTInteger", sourceIdKeyType)
+  }
 
 }
 
 object EntityTable {
 
-  implicit class FlinkTable(val table: Table) extends CypherTable {
+  implicit class FlinkTable(val table: Table)(implicit capf: CAPFSession) extends CypherTable {
 
     override def columns: Set[String] = table.getSchema.getColumnNames.toSet
 
@@ -49,37 +55,33 @@ object EntityTable {
 
 }
 
-case class NodeTable(mapping: NodeMapping, table: Table)(implicit capf: CAPFSession) extends EntityTable {
+abstract class NodeTable[T <: CypherTable](mapping: NodeMapping, table: T) extends EntityTable[T] {
+
   override lazy val schema: Schema = {
-    val nodeDS = capf.tableEnv.toDataSet[Row](table)
     val propertyKeys = mapping.propertyMapping.toSeq.map {
-      case (propertyKey, sourceKey) => propertyKey -> cypherTypeForColumn(table, sourceKey)
+      case (propertyKey, sourceKey) => propertyKey -> table.columnType(sourceKey)
     }
 
-    mapping.optionalLabelMapping.keys.toSet.subsets
-        .map(_.union(mapping.impliedLabels))
-        .map(combo => Schema.empty.withNodePropertyKeys(combo.toSeq: _*)(propertyKeys: _*))
-        .reduce(_ ++ _)
+    mapping.optionalLabelMapping.keys.toSet.subsets()
+      .map(_.union(mapping.impliedLabels))
+      .map(combo => Schema.empty.withNodePropertyKeys(combo.toSeq: _*)(propertyKeys: _*))
+      .reduce(_ ++ _)
+  }
+
+  override protected def verify(): Unit = {
+    super.verify()
+    mapping.optionalLabelMapping.values.foreach { optionalLabelKey =>
+      val columnType = table.columnType(optionalLabelKey)
+      if (columnType != CTBoolean) {
+        throw IllegalArgumentException(
+          s"optional label key type in column `$optionalLabelKey`that is compatible with CTBoolean", columnType)
+      }
+    }
   }
 }
 
-object NodeTable {
+abstract class RelationshipTable[T <: CypherTable](mapping: RelationshipMapping, table: T) extends EntityTable[T] {
 
-  def apply[E <: Node : TypeTag](nodes: Seq[E])(implicit capf: CAPFSession): NodeTable = {
-    val nodeLabels = Annotation.labels[E]
-    val nodeDS = capf.env.fromCollection(nodes)
-    val nodeTable = capf.tableEnv.fromDataSet(nodeDS)
-    val nodeProperties = properties(nodeTable.getSchema.getColumnNames)
-    val nodeMapping = NodeMapping.create(nodeIdKey = Entity.sourceIdKey, impliedLabels = nodeLabels, propertyKeys = nodeProperties)
-    NodeTable(nodeMapping, nodeTable)
-  }
-
-  private def properties(nodeColumnNames: Seq[String]): Set[String] = {
-    nodeColumnNames.filter(_ != Entity.sourceIdKey).toSet
-  }
-}
-
-case class RelationshipTable(mapping: RelationshipMapping, table: Table) extends EntityTable {
   override lazy val schema: Schema = {
     val relTypes = mapping.relTypeOrSourceRelTypeKey match {
       case Left(name) => Set(name)
@@ -87,33 +89,30 @@ case class RelationshipTable(mapping: RelationshipMapping, table: Table) extends
     }
 
     val propertyKeys = mapping.propertyMapping.toSeq.map {
-      case (propertyKey, sourceKey) => propertyKey -> cypherTypeForColumn(table, sourceKey)
+      case (propertyKey, sourceKey) => propertyKey -> table.columnType(sourceKey)
     }
 
     relTypes.foldLeft(Schema.empty) {
       case (partialSchema, relType) => partialSchema.withRelationshipPropertyKeys(relType)(propertyKeys: _*)
     }
   }
-}
 
-object RelationshipTable {
+  override protected def verify(): Unit = {
+    super.verify()
 
-  def apply[E <: Relationship : TypeTag](relationships: Seq[E])(implicit capf: CAPFSession): RelationshipTable = {
-    val relationshipType: String = Annotation.relType[E]
-    val relationshipDS = capf.env.fromCollection(relationships)
-    val relationshipTable = capf.tableEnv.fromDataSet(relationshipDS)
-    val relationshipProperties = properties(relationshipTable.getSchema.getColumnNames.toSet)
+    val sourceStartNodeKeyType = table.columnType(mapping.sourceStartNodeKey)
+    if (sourceStartNodeKeyType != CTInteger) throw IllegalArgumentException(
+      s"start node key type in column `${mapping.sourceStartNodeKey}` that is compatible with CTInteger", sourceStartNodeKeyType)
 
-    val relationshipMapping = RelationshipMapping.create(Entity.sourceIdKey,
-      Relationship.sourceStartNodeKey,
-      Relationship.sourceEndNodeKey,
-      relationshipType,
-      relationshipProperties)
+    val sourceEndNodeKeyType = table.columnType(mapping.sourceEndNodeKey)
+    if (sourceEndNodeKeyType != CTInteger) throw IllegalArgumentException(
+      s"end node key type in column `${mapping.sourceEndNodeKey}` that is compatible with CTInteger", sourceEndNodeKeyType)
 
-    RelationshipTable(relationshipMapping, relationshipTable)
-  }
-
-  private def properties(relColumnNames: Set[String]): Set[String] = {
-    relColumnNames.filter(!Relationship.nonPropertyAttributes.contains(_))
+    mapping.relTypeOrSourceRelTypeKey.right.foreach { k =>
+      val relTypeKey = k._1
+      val relType = table.columnType(relTypeKey)
+      if (relType != CTString) throw IllegalArgumentException(
+        s"relationship type in column `${relTypeKey}` that is compatible with CTString", relType)
+    }
   }
 }

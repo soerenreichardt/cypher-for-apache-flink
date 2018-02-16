@@ -2,41 +2,53 @@ package org.opencypher.caps.flink
 
 import java.net.URI
 
-import scala.reflect.runtime.universe._
-import org.apache.flink.api.scala.ExecutionEnvironment
+import org.apache.flink.api.common.typeinfo.TypeInformation
+import org.apache.flink.api.scala.{DataSet, ExecutionEnvironment}
 import org.apache.flink.table.api.TableEnvironment
 import org.opencypher.caps.api.graph.{CypherResult, CypherSession, PropertyGraph}
 import org.opencypher.caps.api.io.{PersistMode, PropertyGraphDataSource}
-import org.opencypher.caps.api.value.CypherValue
 import org.opencypher.caps.api.value.CypherValue.CypherMap
 import org.opencypher.caps.flink.schema.{Node, NodeTable, Relationship, RelationshipTable}
 import org.opencypher.caps.impl.flat.FlatPlanner
+import org.opencypher.caps.impl.record.CypherRecords
 import org.opencypher.caps.ir.impl.parse.CypherParser
 import org.opencypher.caps.logical.impl.{LogicalOperatorProducer, LogicalOptimizer, LogicalPlanner}
 
 import scala.reflect.ClassTag
+import scala.reflect.runtime.universe._
 
 trait CAPFSession extends CypherSession {
 
   def env = ExecutionEnvironment.getExecutionEnvironment
   def tableEnv = TableEnvironment.getTableEnvironment(env)
 
-  def readFrom[N <: Node : TypeTag, R <: Relationship : TypeTag](
-    nodes: Seq[N],
-    relationships: Seq[R] = Seq.empty): PropertyGraph = {
+//  def readFrom[N <: Node : TypeTag : ClassTag, R <: Relationship : TypeTag : ClassTag](
+//    nodes: Seq[N],
+//    relationships: Seq[R] = Seq.empty): PropertyGraph = {
+//    implicit val session: CAPFSession = this
+//    CAPFGraph.create(NodeTable(nodes), RelationshipTable(relationships))
+//  }
+
+  def readFrom(nodes: DataSet[_], rels: DataSet[_]): PropertyGraph = {
     implicit val session: CAPFSession = this
-    CAPFGraph.create(NodeTable(nodes), RelationshipTable(relationships))
+    CAPFGraph.create(nodes, rels)
   }
+
 }
 
-object CAPFSession extends CAPFSession {
+object CAPFSession {
 
+  def create: CAPFSession = new CAPFSessionImpl
+
+}
+
+sealed class CAPFSessionImpl extends CAPFSession {
 
   private val producer = new LogicalOperatorProducer
   private val logicalPlanner = new LogicalPlanner(producer)
   private val logicalOptimizer = LogicalOptimizer
   private val flatPlanner = new FlatPlanner
-//  private val capfPlanner = new CAPFPlanner()
+  //  private val capfPlanner = new CAPFPlanner()
   private val parser = CypherParser
 
   /**
@@ -46,11 +58,10 @@ object CAPFSession extends CAPFSession {
     * @param parameters parameters used by the Cypher query
     * @return result of the query
     */
-  override def cypher(query: String, parameters: CypherValue.CypherMap): CypherResult =
+  override def cypher(query: String, parameters: CypherMap, drivingTable: Option[CypherRecords]): CypherResult =
     cypherOnGraph(CAPFGraph.empty(this), query, parameters)
 
-
-  override def cypherOnGraph(graph: PropertyGraph, query: String, parameters: CypherMap): CypherResult = ???
+  def cypherOnGraph(graph: PropertyGraph, query: String, parameters: CypherMap): CypherResult = ???
 
   /**
     * Reads a graph from the argument URI.
