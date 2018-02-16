@@ -1,23 +1,33 @@
 package org.opencypher.caps.flink
 
 import java.net.URI
+import java.util.UUID
 
 import org.apache.flink.api.scala.{DataSet, ExecutionEnvironment}
 import org.apache.flink.table.api.{Table, TableEnvironment}
+import org.opencypher.caps.api.configuration.CoraConfiguration.PrintFlatPlan
 import org.opencypher.caps.api.graph.{CypherResult, CypherSession, PropertyGraph}
 import org.opencypher.caps.api.io.{PersistMode, PropertyGraphDataSource}
 import org.opencypher.caps.api.table.CypherRecords
+import org.opencypher.caps.api.value.CypherValue
 import org.opencypher.caps.api.value.CypherValue.CypherMap
-import org.opencypher.caps.impl.flat.FlatPlanner
+import org.opencypher.caps.flink.datasource.{CAPFGraphSourceHandler, CAPFPropertyGraphDataSource, CAPFSessionPropertyGraphDataSourceFactory}
+import org.opencypher.caps.impl.exception.UnsupportedOperationException
+import org.opencypher.caps.impl.flat.{FlatPlanner, FlatPlannerContext}
+import org.opencypher.caps.impl.util.Measurement.time
+import org.opencypher.caps.ir.api.IRExternalGraph
 import org.opencypher.caps.ir.impl.parse.CypherParser
-import org.opencypher.caps.logical.impl.{LogicalOperatorProducer, LogicalOptimizer, LogicalPlanner}
+import org.opencypher.caps.logical.impl.{LogicalOperatorProducer, LogicalOptimizer, LogicalPlanner, LogicalPlannerContext}
+import org.opencypher.caps.flink.CAPFConverters._
+import org.opencypher.caps.ir.impl.{IRBuilder, IRBuilderContext}
+import org.opencypher.caps.logical.api.configuration.LogicalConfiguration.PrintLogicalPlan
 
 trait CAPFSession extends CypherSession {
 
   def env = ExecutionEnvironment.getExecutionEnvironment
   def tableEnv = TableEnvironment.getTableEnvironment(env)
 
-  def readFrom(nodes: Table, rels: Table): Unit = {
+  def readFrom(nodes: Table, rels: Table): PropertyGraph = {
     implicit val session: CAPFSession = this
     CAPFGraph.create(nodes, rels)
   }
@@ -26,11 +36,11 @@ trait CAPFSession extends CypherSession {
 
 object CAPFSession {
 
-  def create: CAPFSession = new CAPFSessionImpl
+  def create: CAPFSession = new CAPFSessionImpl(CAPFGraphSourceHandler(CAPFSessionPropertyGraphDataSourceFactory(), Set.empty))
 
 }
 
-sealed class CAPFSessionImpl extends CAPFSession with Serializable {
+sealed class CAPFSessionImpl(private val graphSourceHandler: CAPFGraphSourceHandler) extends CAPFSession with Serializable {
 
   self =>
 
@@ -42,6 +52,15 @@ sealed class CAPFSessionImpl extends CAPFSession with Serializable {
   //  private val capfPlanner = new CAPFPlanner()
   private val parser = CypherParser
 
+  def sourceAt(uri: URI): PropertyGraphDataSource =
+    graphSourceHandler.sourceAt(uri)(this)
+
+  def optGraphAt(uri: URI): Option[CAPFGraph] =
+    graphSourceHandler.optSourceAt(uri)(this).map(_.graph) match {
+      case Some(graph) => Some(graph.asCapf)
+      case None => None
+    }
+
   /**
     * Executes a Cypher query in this session on the current ambient graph.
     *
@@ -49,10 +68,32 @@ sealed class CAPFSessionImpl extends CAPFSession with Serializable {
     * @param parameters parameters used by the Cypher query
     * @return result of the query
     */
-  override def cypher(query: String, parameters: CypherMap, drivingTable: Option[CypherRecords]): CypherResult =
+  override def cypher(query: String, parameters: CypherMap, drivingTable: Option[CypherRecords]): Unit =
     cypherOnGraph(CAPFGraph.empty(this), query, parameters, drivingTable)
 
-  override def cypherOnGraph(graph: PropertyGraph, query: String, queryParameters: CypherMap, maybeDrivingTable: Option[CypherRecords]): CypherResult = ???
+  override def cypherOnGraph(graph: PropertyGraph, query: String, parameters: CypherMap, drivingTable: Option[CypherRecords]): Unit = {
+    val ambientGraph = getAmbientGraph(graph)
+
+    val (stmt, extractedLiterals, semState) = time("AST construction")(parser.process(query)(CypherParser.defaultContext))
+
+    val extractedParameters: CypherMap = extractedLiterals.mapValues(v => CypherValue(v))
+    val allParameters = parameters ++ extractedParameters
+
+    val ir = time("IR translation")(IRBuilder(stmt)(IRBuilderContext.initial(query, allParameters, semState, ambientGraph, sourceAt)))
+
+    val logicalPlannerContext = LogicalPlannerContext(graph.schema, Set.empty, ir.model.graphs.andThen(sourceAt), ambientGraph)
+    val logicalPlan = time("Logical planning")(logicalPlanner(ir)(logicalPlannerContext))
+    val optimizedLogicalPlan = time("Logical optimization")(logicalOptimizer(logicalPlan)(logicalPlannerContext))
+    if (PrintLogicalPlan.isSet) {
+      println(logicalPlan.pretty)
+      println(optimizedLogicalPlan.pretty)
+    }
+
+    val flatPlan = time("Flat planning")(flatPlanner(optimizedLogicalPlan)(FlatPlannerContext(parameters)))
+    if (PrintFlatPlan.isSet) println(flatPlan.pretty)
+
+//    TODO: physical planning
+  }
 
   /**
     * Reads a graph from the argument URI.
@@ -60,7 +101,8 @@ sealed class CAPFSessionImpl extends CAPFSession with Serializable {
     * @param uri URI locating a graph
     * @return graph located at the URI
     */
-  override def readFrom(uri: URI): PropertyGraph = ???
+  override def readFrom(uri: URI): PropertyGraph =
+    graphSourceHandler.sourceAt(uri)(this).graph
 
   /**
     * Mounts the given graph source to session-local storage under the given path. The specified graph will be
@@ -88,4 +130,31 @@ sealed class CAPFSessionImpl extends CAPFSession with Serializable {
     * @param path  path at which this graph can be accessed via {{{session://$path}}}
     */
   override def mount(graph: PropertyGraph, path: String): Unit = ???
+
+  private def getAmbientGraph(ambient: PropertyGraph): IRExternalGraph = {
+    val name = UUID.randomUUID().toString
+    val uri = URI.create(s"session:///graphs/ambient/$name")
+
+    val graphSource = new CAPFPropertyGraphDataSource {
+
+      override val session: CypherSession = _
+
+      override def sourceForGraphAt(uri: URI): Boolean = uri == canonicalURI
+
+      override def canonicalURI: URI = uri
+
+      override def create: PropertyGraph = throw UnsupportedOperationException("Creation of an ambient graph")
+
+      override def graph: PropertyGraph = ambient
+
+      override def store(graph: PropertyGraph, mode: PersistMode): PropertyGraph =
+        throw UnsupportedOperationException("Persisting an ambient graph")
+
+      override def delete(): Unit = throw UnsupportedOperationException("Deletion of an ambient graph")
+    }
+
+    graphSourceHandler.mountSourceAt(graphSource, uri)(self)
+
+    IRExternalGraph(name, ambient.schema, uri)
+  }
 }

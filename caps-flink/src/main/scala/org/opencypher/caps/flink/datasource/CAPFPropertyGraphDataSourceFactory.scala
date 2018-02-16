@@ -1,0 +1,5 @@
+package org.opencypher.caps.flink.datasource
+
+import org.opencypher.caps.api.io.PropertyGraphDataSourceFactory
+
+trait CAPFPropertyGraphDataSourceFactory extends PropertyGraphDataSourceFactory
