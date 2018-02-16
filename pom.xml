@@ -17,6 +17,7 @@
     <module>caps-logical</module>
     <module>caps-cora</module>
     <module>caps-spark</module>
+    <module>caps-flink</module>
     <module>caps-cosc</module>
     <module>caps-tck</module>
     <module>caps-examples</module>
@@ -63,6 +64,7 @@
     <dep.scalatest.version>3.0.4</dep.scalatest.version>
     <dep.sourcecode.version>0.1.2</dep.sourcecode.version>
     <dep.spark.version>2.2.0</dep.spark.version>
+    <dep.flink.version>1.4.0</dep.flink.version>
   </properties>
 
   <repositories>
