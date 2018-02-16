@@ -45,6 +45,7 @@
     <module>okapi-relational</module>
     <module>okapi-tck</module>
     <module>okapi-trees</module>
+    <module>caps-flink</module>
     <module>spark-cypher</module>
     <module>spark-cypher-examples</module>
     <module>caps-flink</module>
