@@ -1,14 +1,67 @@
 package org.opencypher.caps.flink.schema
 
-import org.apache.flink.table.api.Table
 import org.apache.flink.api.scala._
+import org.apache.flink.table.api.Table
 import org.apache.flink.table.api.scala._
+import org.apache.flink.types.Row
 import org.opencypher.caps.api.io.conversion.{EntityMapping, NodeMapping, RelationshipMapping}
 import org.opencypher.caps.api.schema.Schema
 import org.opencypher.caps.api.types.{CypherType, _}
 import org.opencypher.caps.api.value.CypherValue
 import org.opencypher.caps.flink._
+import org.opencypher.caps.flink.schema.Entity.sourceIdKey
+import org.opencypher.caps.flink.schema.EntityTable.FlinkTable
 import org.opencypher.caps.impl.table.CypherTable
+
+
+trait CAPFEntityTable extends EntityTable[FlinkTable] {
+  private[caps] def entityType: CypherType with DefiniteCypherType = mapping.cypherType
+
+  private[caps] def records(implicit capf: CAPFSession): CAPFRecords = CAPFRecords.empty()
+}
+
+case class CAPFNodeTable(mapping: NodeMapping, table: FlinkTable) extends NodeTable(mapping, table) with CAPFEntityTable
+
+object CAPFNodeTable {
+
+  def apply(nodes: Table)(implicit capf: CAPFSession): CAPFNodeTable = {
+
+    val labelsIndex = nodes.getSchema.columnNameToIndex("labels")
+    val labels = nodes.toDataSet[Row]
+      .map { _.getField(labelsIndex).asInstanceOf[Set[String]] }
+        .collect().flatten.toSet
+
+
+    val nodeMapping = NodeMapping.create(nodeIdKey = sourceIdKey, impliedLabels = labels, propertyKeys = Set("Properties"))
+    print(nodeMapping)
+    CAPFNodeTable(nodeMapping, nodes)
+  }
+
+}
+
+case class CAPFRelationshipTable(mapping: RelationshipMapping, table: FlinkTable) extends RelationshipTable(mapping, table) with CAPFEntityTable
+
+object CAPFRelationshipTable {
+
+  def apply(rels: Table)(implicit capf: CAPFSession): CAPFRelationshipTable = {
+    val relTypeIndex = rels.getSchema.columnNameToIndex("relType")
+    val relType = rels.toDataSet[Row]
+      .first(1)
+      .map( _.getField(relTypeIndex).asInstanceOf[String])
+      .collect().toSeq(0)
+    val properties = rels.columns.filter(!Relationship.nonPropertyAttributes.contains(_)).toSet
+
+    val relationshipMapping = RelationshipMapping.create(
+      sourceIdKey,
+      Relationship.sourceStartNodeKey,
+      Relationship.sourceEndNodeKey,
+      relType,
+      properties)
+
+    print(relationshipMapping)
+    CAPFRelationshipTable(relationshipMapping, rels)
+  }
+}
 
 sealed trait EntityTable[T <: CypherTable[String]] {
 
@@ -26,7 +79,7 @@ sealed trait EntityTable[T <: CypherTable[String]] {
 
 object EntityTable {
 
-  implicit class FlinkTable(val table: Table)(implicit capf: CAPFSession) extends CypherTable[String] {
+  implicit class FlinkTable(val table: Table) extends CypherTable[String] {
 
     override def columns: Seq[String] = table.getSchema.getColumnNames.toSeq
 
@@ -35,7 +88,9 @@ object EntityTable {
     /**
       * Iterator over the rows in this table.
       */
-    override def rows: Iterator[String => CypherValue.CypherValue] = ???
+    override def rows: Iterator[String => CypherValue.CypherValue] = table.collect().iterator.map { row =>
+      columns.map(c => c -> CypherValue(row.getField(table.getSchema.columnNameToIndex(c)))).toMap
+    }
 
     /**
       * @return number of rows in this Table.

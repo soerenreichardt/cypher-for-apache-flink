@@ -3,35 +3,34 @@ package org.opencypher.caps.flink
 import java.net.URI
 import java.util.UUID
 
-import org.apache.flink.api.scala.{DataSet, ExecutionEnvironment}
+import org.apache.flink.api.scala.ExecutionEnvironment
 import org.apache.flink.table.api.{Table, TableEnvironment}
-import org.opencypher.caps.api.configuration.CoraConfiguration.PrintFlatPlan
 import org.opencypher.caps.api.graph.{CypherResult, CypherSession, PropertyGraph}
 import org.opencypher.caps.api.io.{PersistMode, PropertyGraphDataSource}
 import org.opencypher.caps.api.table.CypherRecords
-import org.opencypher.caps.api.value.CypherValue
 import org.opencypher.caps.api.value.CypherValue.CypherMap
+import org.opencypher.caps.flink.CAPFConverters._
 import org.opencypher.caps.flink.datasource.{CAPFGraphSourceHandler, CAPFPropertyGraphDataSource, CAPFSessionPropertyGraphDataSourceFactory}
-import org.opencypher.caps.impl.exception.UnsupportedOperationException
-import org.opencypher.caps.impl.flat.{FlatPlanner, FlatPlannerContext}
-import org.opencypher.caps.impl.util.Measurement.time
+import org.opencypher.caps.flink.schema.{CAPFEntityTable, CAPFNodeTable}
+import org.opencypher.caps.impl.exception.{IllegalArgumentException, UnsupportedOperationException}
+import org.opencypher.caps.impl.flat.FlatPlanner
 import org.opencypher.caps.ir.api.IRExternalGraph
 import org.opencypher.caps.ir.impl.parse.CypherParser
-import org.opencypher.caps.logical.impl.{LogicalOperatorProducer, LogicalOptimizer, LogicalPlanner, LogicalPlannerContext}
-import org.opencypher.caps.flink.CAPFConverters._
-import org.opencypher.caps.ir.impl.{IRBuilder, IRBuilderContext}
-import org.opencypher.caps.logical.api.configuration.LogicalConfiguration.PrintLogicalPlan
+import org.opencypher.caps.logical.impl.{LogicalOperatorProducer, LogicalOptimizer, LogicalPlanner}
 
 trait CAPFSession extends CypherSession {
 
   def env = ExecutionEnvironment.getExecutionEnvironment
   def tableEnv = TableEnvironment.getTableEnvironment(env)
 
-  def readFrom(nodes: Table, rels: Table): PropertyGraph = {
-    implicit val session: CAPFSession = this
-    CAPFGraph.create(nodes, rels)
+  def readFrom(entityTables: CAPFEntityTable*): Unit = entityTables.head match {
+    case h: CAPFNodeTable => readFrom(h, entityTables.tail: _*)
+    case _ => throw IllegalArgumentException("first argument of type NodeTable", "RelationshipTable")
   }
 
+  def readFrom(nodeTable: CAPFNodeTable, entityTables: CAPFEntityTable*): Unit = {
+    CAPFGraph.create(nodeTable, entityTables: _*)(this)
+  }
 }
 
 object CAPFSession {
@@ -68,32 +67,33 @@ sealed class CAPFSessionImpl(private val graphSourceHandler: CAPFGraphSourceHand
     * @param parameters parameters used by the Cypher query
     * @return result of the query
     */
-  override def cypher(query: String, parameters: CypherMap, drivingTable: Option[CypherRecords]): Unit =
-    cypherOnGraph(CAPFGraph.empty(this), query, parameters, drivingTable)
+  override def cypher(query: String, parameters: CypherMap, drivingTable: Option[CypherRecords]): CypherResult = ???
+//    cypherOnGraph(CAPFGraph.empty(this), query, parameters, drivingTable)
 
-  override def cypherOnGraph(graph: PropertyGraph, query: String, parameters: CypherMap, drivingTable: Option[CypherRecords]): Unit = {
-    val ambientGraph = getAmbientGraph(graph)
-
-    val (stmt, extractedLiterals, semState) = time("AST construction")(parser.process(query)(CypherParser.defaultContext))
-
-    val extractedParameters: CypherMap = extractedLiterals.mapValues(v => CypherValue(v))
-    val allParameters = parameters ++ extractedParameters
-
-    val ir = time("IR translation")(IRBuilder(stmt)(IRBuilderContext.initial(query, allParameters, semState, ambientGraph, sourceAt)))
-
-    val logicalPlannerContext = LogicalPlannerContext(graph.schema, Set.empty, ir.model.graphs.andThen(sourceAt), ambientGraph)
-    val logicalPlan = time("Logical planning")(logicalPlanner(ir)(logicalPlannerContext))
-    val optimizedLogicalPlan = time("Logical optimization")(logicalOptimizer(logicalPlan)(logicalPlannerContext))
-    if (PrintLogicalPlan.isSet) {
-      println(logicalPlan.pretty)
-      println(optimizedLogicalPlan.pretty)
-    }
-
-    val flatPlan = time("Flat planning")(flatPlanner(optimizedLogicalPlan)(FlatPlannerContext(parameters)))
-    if (PrintFlatPlan.isSet) println(flatPlan.pretty)
-
-//    TODO: physical planning
-  }
+  override def cypherOnGraph(graph: PropertyGraph, query: String, parameters: CypherMap, drivingTable: Option[CypherRecords]): CypherResult = ???
+//  {
+//    val ambientGraph = getAmbientGraph(graph)
+//
+//    val (stmt, extractedLiterals, semState) = time("AST construction")(parser.process(query)(CypherParser.defaultContext))
+//
+//    val extractedParameters: CypherMap = extractedLiterals.mapValues(v => CypherValue(v))
+//    val allParameters = parameters ++ extractedParameters
+//
+//    val ir = time("IR translation")(IRBuilder(stmt)(IRBuilderContext.initial(query, allParameters, semState, ambientGraph, sourceAt)))
+//
+//    val logicalPlannerContext = LogicalPlannerContext(graph.schema, Set.empty, ir.model.graphs.andThen(sourceAt), ambientGraph)
+//    val logicalPlan = time("Logical planning")(logicalPlanner(ir)(logicalPlannerContext))
+//    val optimizedLogicalPlan = time("Logical optimization")(logicalOptimizer(logicalPlan)(logicalPlannerContext))
+//    if (PrintLogicalPlan.isSet) {
+//      println(logicalPlan.pretty)
+//      println(optimizedLogicalPlan.pretty)
+//    }
+//
+//    val flatPlan = time("Flat planning")(flatPlanner(optimizedLogicalPlan)(FlatPlannerContext(parameters)))
+//    if (PrintFlatPlan.isSet) println(flatPlan.pretty)
+//
+////    TODO: physical planning
+//  }
 
   /**
     * Reads a graph from the argument URI.
@@ -137,7 +137,7 @@ sealed class CAPFSessionImpl(private val graphSourceHandler: CAPFGraphSourceHand
 
     val graphSource = new CAPFPropertyGraphDataSource {
 
-      override val session: CypherSession = _
+      override val session: CypherSession = ???
 
       override def sourceForGraphAt(uri: URI): Boolean = uri == canonicalURI
 
