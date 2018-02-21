@@ -1,29 +1,48 @@
 package org.opencypher.caps.flink
 
-import org.apache.flink.streaming.api.scala._
-import org.opencypher.caps.api.value.CypherValue.{CypherInteger, CypherMap, CypherString}
-import org.opencypher.caps.flink.value.{CAPFNode, CAPFRelationship}
+import org.apache.flink.api.scala._
+import org.apache.flink.table.api.scala._
+import org.opencypher.caps.api.io.conversion.{NodeMapping, RelationshipMapping}
+import org.opencypher.caps.flink.schema._
+
 
 object Demo extends App {
 
   val session = CAPFSession.create
 
-  val nodesDataSet = session.env.fromCollection(DemoData.nodes)
+  private val nodeDataSet = session.env.fromCollection(DemoData.nodes)
   val relsDataSet = session.env.fromCollection(DemoData.rels)
 
-  val nodes = session.tableEnv.fromDataSet(nodesDataSet)
-  val rels = session.tableEnv.fromDataSet(relsDataSet)
+  val nodes = session.tableEnv.fromDataSet(nodeDataSet, 'id, 'person, 'name, 'age)
+  val rels = session.tableEnv.fromDataSet(relsDataSet, 'id, 'source, 'target, 'type, 'since)
 
-  session.readFrom(nodes, rels)
+  val nodeMapping = NodeMapping
+    .withSourceIdKey("id")
+    .withImpliedLabel("Person")
+    .withPropertyKey("name")
+    .withPropertyKey("age")
 
+  val relMapping = RelationshipMapping
+    .withSourceIdKey("id")
+    .withSourceStartNodeKey("source")
+    .withSourceEndNodeKey("target")
+    .withRelType("KNOWS")
+    .withPropertyKey("since")
+
+  val nodeTable = CAPFNodeTable(nodeMapping, nodes)
+  val relTable = CAPFRelationshipTable(relMapping, rels)
+
+  session.readFrom(nodeTable, relTable)
 }
 
 object DemoData {
-
   val nodes = Seq(
-    CAPFNode(0L, Set("Person"), CypherMap("name" -> CypherString("Alice"), "age" -> CypherInteger(42))),
-    CAPFNode(1L, Set("Person"), CypherMap("name" -> CypherString("Bob"), "age" -> CypherInteger(23)))
+    (0L, "Person", "Alice", 26),
+    (1L, "Person", "Bob", 23)
   )
-  val rels = Seq(CAPFRelationship(2L, 0L, 1L, "KNOWS", CypherMap("since" -> CypherString("2018"))))
+
+  val rels = Seq(
+    (2L, 0L, 1L, "KNOWS", "2018")
+  )
 
 }

@@ -1,12 +1,13 @@
 package org.opencypher.caps.flink
 
-import org.apache.flink.api.scala.DataSet
+import scala.collection.immutable.Set
 import org.apache.flink.table.api.Table
 import org.opencypher.caps.api.graph.PropertyGraph
+import org.opencypher.caps.api.io.conversion.NodeMapping
 import org.opencypher.caps.api.schema.Schema
-import org.opencypher.caps.api.table.CypherRecords
 import org.opencypher.caps.api.types.{CTNode, CTRelationship}
 import org.opencypher.caps.flink.CAPFConverters._
+import org.opencypher.caps.flink.schema.{CAPFEntityTable, CAPFNodeTable, CAPFRelationshipTable, Entity}
 import org.opencypher.caps.flink.value.{CAPFNode, CAPFRelationship}
 import org.opencypher.caps.impl.exception.IllegalArgumentException
 import org.opencypher.caps.impl.table.{OpaqueField, RecordHeader}
@@ -37,8 +38,10 @@ object CAPFGraph {
 
     }
 
-  def create(nodes: Table, rels: Table)(implicit capf: CAPFSession): CAPFGraph = {
-    nodes.printSchema()
+  def create(nodeTable: CAPFNodeTable, entityTables: CAPFEntityTable*)(implicit capf: CAPFSession): Unit = {
+    val allTables = nodeTable +: entityTables
+    val schema = allTables.map(_.schema).reduce(_ ++ _)
+//  TODO: create scan graph
   }
 
   def createLazy(theSchema: Schema, loadGraph: => CAPFGraph)(implicit CAPF: CAPFSession): CAPFGraph =
