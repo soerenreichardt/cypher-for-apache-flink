@@ -32,7 +32,8 @@ object Demo extends App {
   val nodeTable = CAPFNodeTable(nodeMapping, nodes)
   val relTable = CAPFRelationshipTable(relMapping, rels)
 
-  session.readFrom(nodeTable, relTable)
+  val graph: CAPFGraph = session.readFrom(nodeTable, relTable)
+  println(graph.nodes("PersonResult"))
 }
 
 object DemoData {
