@@ -28,7 +28,7 @@ trait CAPFSession extends CypherSession {
     case _ => throw IllegalArgumentException("first argument of type NodeTable", "RelationshipTable")
   }
 
-  def readFrom(nodeTable: CAPFNodeTable, entityTables: CAPFEntityTable*): Unit = {
+  def readFrom(nodeTable: CAPFNodeTable, entityTables: CAPFEntityTable*): CAPFGraph = {
     CAPFGraph.create(nodeTable, entityTables: _*)(this)
   }
 }
