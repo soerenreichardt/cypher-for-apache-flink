@@ -17,7 +17,7 @@ import org.opencypher.caps.impl.table.CypherTable
 trait CAPFEntityTable extends EntityTable[FlinkTable] {
   private[caps] def entityType: CypherType with DefiniteCypherType = mapping.cypherType
 
-  private[caps] def records(implicit capf: CAPFSession): CAPFRecords = CAPFRecords.empty()
+  private[caps] def records(implicit capf: CAPFSession): CAPFRecords = CAPFRecords.create(this)
 }
 
 case class CAPFNodeTable(mapping: NodeMapping, table: FlinkTable) extends NodeTable(mapping, table) with CAPFEntityTable
