@@ -10,6 +10,7 @@ object FlinkUtils {
   def fromFlinkType(flinkType: TypeInformation[_]): Option[CypherType] = {
     val cypherType = flinkType match {
       case Types.STRING => Some(CTString)
+      case Types.INT => Some(CTInteger)
       case Types.LONG => Some(CTInteger)
       case Types.BOOLEAN => Some(CTBoolean)
       case Types.DOUBLE => Some(CTFloat)

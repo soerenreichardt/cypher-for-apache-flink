@@ -1,8 +1,11 @@
 package org.opencypher.caps.flink
 
+import org.apache.flink.api.common.typeinfo.TypeInformation
+import org.apache.flink.api.java.typeutils.RowTypeInfo
 import org.apache.flink.api.scala._
 import org.apache.flink.table.api.Table
 import org.apache.flink.table.api.scala._
+import org.apache.flink.table.expressions.{Alias, Expression, UnresolvedFieldReference}
 import org.apache.flink.types.Row
 import org.opencypher.caps.api.io.conversion.{NodeMapping, RelationshipMapping}
 import org.opencypher.caps.api.table.CypherRecords
@@ -44,46 +47,55 @@ sealed abstract class CAPFRecords(val header: RecordHeader, val data: Table)(imp
 
   override lazy val columnType: Map[String, CypherType] = data.columnType
 
-  def alignWith(v: Var, targetHeader: RecordHeader): Unit = {
+  def alignWith(v: Var, targetHeader: RecordHeader): CAPFRecords = {
     val oldEntity = this.header.internalHeader.fields.headOption
         .getOrElse(throw IllegalStateException("GraphScan table did not contain any fields"))
+
     val entityLabels: Set[String] = oldEntity.cypherType match {
       case CTNode(labels) => labels
       case CTRelationship(typ) => typ
       case _ => throw IllegalArgumentException("CTNode or CTRelationship", oldEntity.cypherType)
     }
 
+
     val slots = this.header.slots
-    val renamedSlots = slots.map(_.withOwner(v))
-
-    val dataColumnNameToIndex: Map[String, Int] = renamedSlots.map { dataSlot =>
-      val dataColumnName = ColumnName.of(dataSlot)
-      val dataColumnIndex = dataSlot.index
-      dataColumnName -> dataColumnIndex
-    }.toMap
-
-    val slotDataSelector: Seq[Row => Any] = targetHeader.slots.map { targetSlot =>
-      val columnName = ColumnName.of(targetSlot)
-      val defaultValue = targetSlot.content.key match {
-        case HasLabel(_, l: Label) => entityLabels(l.name)
-        case _: Type if entityLabels.size == 1 => entityLabels.head
-        case _ => null
-      }
-      val maybeDataIndex = dataColumnNameToIndex.get(columnName)
-      val slotDataSelector: Row => Any = maybeDataIndex match {
-        case None =>
-          (_) =>
-            defaultValue
-        case Some(index) => _.getField(index)
-      }
-      slotDataSelector
+    val renamedSlotMapping = slots.map { slot =>
+      slot -> slot.withOwner(v)
     }
-    val wrappedHeader = new CAPFRecordHeader(targetHeader)
-    println("Wrapped Header: " + wrappedHeader)
 
+    val renames = renamedSlotMapping.map { mapping =>
+      ColumnName.of(mapping._1) -> ColumnName.of(mapping._2)
+    }.map { mapping =>
+      Symbol(mapping._1) as Symbol(mapping._2)
+    }
+
+    val renamedTable = this.data.select(renames:_ *)
+
+    val renamedSlots = renamedSlotMapping.map(_._2)
+
+    val withMissingColumns: Seq[Expression] = targetHeader.slots.map { targetSlot =>
+
+      renamedSlots.find(_ == targetSlot).headOption match {
+        case Some(_) =>
+          Symbol(ColumnName.of(targetSlot)) as Symbol(ColumnName.of(targetSlot))
+        case None => targetSlot.content.key match {
+          case HasLabel(_, label) if entityLabels.contains(label.name) => true as Symbol(ColumnName.of(targetSlot))
+          case _: HasLabel => false as Symbol(ColumnName.of(targetSlot))
+          case _ => "Null" as Symbol(ColumnName.of(targetSlot))
+        }
+      }
+    }
+
+    val renamedTableWithMissingColumns = renamedTable.select(withMissingColumns: _*)
+    CAPFRecords.verifyAndCreate(targetHeader, renamedTableWithMissingColumns)
   }
 
   def toTable(): Table = data
+
+  def unionAll(header: RecordHeader, other: CAPFRecords): CAPFRecords = {
+    val unionData = data.union(other.data)
+    CAPFRecords.verifyAndCreate(header, unionData)
+  }
 }
 
 object CAPFRecords extends CypherRecordsCompanion[CAPFRecords, CAPFSession] {
@@ -168,7 +180,8 @@ object CAPFRecords extends CypherRecordsCompanion[CAPFRecords, CAPFSession] {
         slot.content
     }
     val newHeader = RecordHeader.from(slotContents: _*)
-    val renamed = sourceTable.as(newHeader.internalHeader.columns.mkString(","))
+    val expressions: Vector[Expression] = newHeader.internalHeader.columns.map(f => UnresolvedFieldReference(f))
+    val renamed = sourceTable.as(expressions:_*)
 
     CAPFRecords.createInternal(newHeader, renamed)
   }
@@ -194,8 +207,51 @@ object CAPFRecords extends CypherRecordsCompanion[CAPFRecords, CAPFSession] {
     createInternal(RecordHeader.empty, initialTable)
   }
 
+  def verifyAndCreate(initialHeader: RecordHeader, initialData: Table)(implicit capf: CAPFSession): CAPFRecords = {
+    val initialDataColumns = initialData.columns.toSeq
+
+    val duplicateColumns = initialDataColumns.groupBy(identity).collect {
+      case (key, values) if values.size > 1 => key
+    }
+
+    if (duplicateColumns.nonEmpty)
+      throw IllegalArgumentException(
+        "a Table with destinct columns",
+        s"a Table with duplicate columns: $duplicateColumns")
+
+    val headerColumnNames = initialHeader.internalHeader.columns.toSet
+    val dataColumnNames = initialData.columns.toSet
+    val missingColumnNames = headerColumnNames -- dataColumnNames
+    if (missingColumnNames.nonEmpty) {
+      throw IllegalArgumentException(
+        s"data with columns ${initialHeader.internalHeader.columns.sorted.mkString("\n", ", ", "\n")}",
+        s"data with missing columns ${missingColumnNames.toSeq.sorted.mkString("\n", ", ", "\n")}"
+      )
+    }
+
+    initialHeader.slots.foreach { slot =>
+      val tableSchema = initialData.getSchema
+      val fieldName = tableSchema.getColumnName(slot.index).get
+      val fieldType = tableSchema.getType(fieldName).get
+      val cypherType = fromFlinkType(fieldType)
+        .getOrElse(throw IllegalArgumentException("a supported Flink type", fieldType))
+      val headerType = slot.content.cypherType
+
+      if (toFlinkType(headerType) != toFlinkType(cypherType) && !containsEntity(headerType))
+        throw IllegalArgumentException(s"a valid data type for column ${fieldName} of type $headerType", cypherType)
+    }
+    createInternal(initialHeader, initialData)
+  }
+
   private def createInternal(header: RecordHeader, data: Table)(implicit capf: CAPFSession) =
     new CAPFRecords(header, data) {}
+
+  private def containsEntity(t: CypherType): Boolean = t match {
+    case _: CTNode => true
+    case _: CTRelationship => true
+    case l: CTList => containsEntity(l.elementType)
+    case _ => false
+  }
 
   private case class EmptyRow()
 }
