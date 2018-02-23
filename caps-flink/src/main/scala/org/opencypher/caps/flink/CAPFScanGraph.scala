@@ -5,7 +5,7 @@ import org.opencypher.caps.api.graph.PropertyGraph
 import org.opencypher.caps.api.schema.Schema
 import org.opencypher.caps.api.types.{CTNode, CTRelationship, CypherType, DefiniteCypherType}
 import org.opencypher.caps.flink.schema.{CAPFEntityTable, CAPFNodeTable, CAPFRelationshipTable}
-import org.opencypher.caps.impl.table.RecordHeader
+import org.opencypher.caps.impl.table.{RecordHeader, RecordsPrinter}
 import org.opencypher.caps.ir.api.expr.Var
 
 class CAPFScanGraph(val scans: Seq[CAPFEntityTable], val schema: Schema)(implicit val session: CAPFSession)
@@ -23,11 +23,9 @@ class CAPFScanGraph(val scans: Seq[CAPFEntityTable], val schema: Schema)(implici
     val targetNodeHeader = RecordHeader.nodeFromSchema(node, schema)
 
     val scanRecords: Seq[CAPFRecords] = selectedTables.map(_.records)
-    println(scanRecords.map(_.print))
-    println(targetNodeHeader.slots.map( _.content))
+    println(scanRecords.map(RecordsPrinter.print(_)))
     val alignedRecords = scanRecords.map(_.alignWith(node, targetNodeHeader))
-//    alignedRecords.reduceOption(_ unionAll(targetNodeHeader, _)).getOrElse(CAPFRecords.empty(targetNodeHeader))
-    CAPFRecords.empty()
+    alignedRecords.reduceOption(_.unionAll(targetNodeHeader, _)).getOrElse(CAPFRecords.empty(targetNodeHeader))
   }
 
   override def relationships(name: String, relCypherType: CTRelationship): CAPFRecords = {
