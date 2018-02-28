@@ -23,7 +23,6 @@ class CAPFScanGraph(val scans: Seq[CAPFEntityTable], val schema: Schema)(implici
     val targetNodeHeader = RecordHeader.nodeFromSchema(node, schema)
 
     val scanRecords: Seq[CAPFRecords] = selectedTables.map(_.records)
-    println(scanRecords.map(RecordsPrinter.print(_)))
     val alignedRecords = scanRecords.map(_.alignWith(node, targetNodeHeader))
     alignedRecords.reduceOption(_.unionAll(targetNodeHeader, _)).getOrElse(CAPFRecords.empty(targetNodeHeader))
   }
@@ -36,8 +35,7 @@ class CAPFScanGraph(val scans: Seq[CAPFEntityTable], val schema: Schema)(implici
 
     val scanRecords = selectedScans.map(_.records)
     val alignedRecords = scanRecords.map(_.alignWith(rel, targetRelHeader))
-
-    CAPFRecords.empty()
+    alignedRecords.reduceOption(_ unionAll(targetRelHeader, _)).getOrElse(CAPFRecords.empty(targetRelHeader))
   }
 
 

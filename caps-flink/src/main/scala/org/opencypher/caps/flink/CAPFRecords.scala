@@ -75,12 +75,13 @@ sealed abstract class CAPFRecords(val header: RecordHeader, val data: Table)(imp
 
     val withMissingColumns: Seq[Expression] = targetHeader.slots.map { targetSlot =>
 
-      renamedSlots.find(_ == targetSlot).headOption match {
+      renamedSlots.find(_.content == targetSlot.content).headOption match {
         case Some(_) =>
           Symbol(ColumnName.of(targetSlot)) as Symbol(ColumnName.of(targetSlot))
         case None => targetSlot.content.key match {
           case HasLabel(_, label) if entityLabels.contains(label.name) => true as Symbol(ColumnName.of(targetSlot))
           case _: HasLabel => false as Symbol(ColumnName.of(targetSlot))
+          case _: Type if entityLabels.size == 1 => entityLabels.head as Symbol(ColumnName.of(targetSlot))
           case _ => "Null" as Symbol(ColumnName.of(targetSlot))
         }
       }

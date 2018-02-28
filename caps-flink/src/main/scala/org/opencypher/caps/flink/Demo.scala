@@ -15,7 +15,7 @@ object Demo extends App {
   val relsDataSet = session.env.fromCollection(DemoData.rels)
 
   val nodes = session.tableEnv.fromDataSet(nodeDataSet, 'ID, 'EMPLOYEE, 'NAME, 'AGE)
-  val rels = session.tableEnv.fromDataSet(relsDataSet, 'id, 'source, 'target, 'type, 'since)
+  val rels = session.tableEnv.fromDataSet(relsDataSet, 'ID, 'SOURCE, 'TARGET, 'TYPE, 'SINCE)
 
   val nodeMapping = NodeMapping
     .withSourceIdKey("ID")
@@ -25,17 +25,18 @@ object Demo extends App {
     .withPropertyKey("age", "AGE")
 
   val relMapping = RelationshipMapping
-    .withSourceIdKey("id")
-    .withSourceStartNodeKey("source")
-    .withSourceEndNodeKey("target")
-    .withRelType("KNOWS")
-    .withPropertyKey("since")
+    .withSourceIdKey("ID")
+    .withSourceStartNodeKey("SOURCE")
+    .withSourceEndNodeKey("TARGET")
+    .withSourceRelTypeKey("TYPE", Set("KNOWS"))
+    .withPropertyKey("since", "SINCE")
 
   val nodeTable = CAPFNodeTable(nodeMapping, nodes)
   val relTable = CAPFRelationshipTable(relMapping, rels)
 
   val graph: CAPFGraph = session.readFrom(nodeTable, relTable)
-  graph.nodes("PersonResult").data.toDataSet[Row].print()
+  graph.nodes("p").data.toDataSet[Row].print()
+  graph.relationships("r").data.toDataSet[Row].print()
 }
 
 object DemoData {
