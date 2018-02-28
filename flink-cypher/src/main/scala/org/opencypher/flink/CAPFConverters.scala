@@ -1,7 +1,7 @@
-package org.opencypher.caps.flink
+package org.opencypher.flink
 
-import org.opencypher.caps.api.graph.{CypherSession, PropertyGraph}
-import org.opencypher.caps.impl.exception.UnsupportedOperationException
+import org.opencypher.okapi.api.graph.{CypherSession, PropertyGraph}
+import org.opencypher.okapi.impl.exception.UnsupportedOperationException
 
 object CAPFConverters {
 

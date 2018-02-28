@@ -3,15 +3,15 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <parent>
-        <artifactId>cypher-for-apache-spark</artifactId>
         <groupId>org.opencypher</groupId>
+        <artifactId>okapi</artifactId>
         <version>1.0-SNAPSHOT</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>caps-flink</artifactId>
+    <artifactId>flink-cypher</artifactId>
 
-    <name>Cypher for Apache Spark - Flink</name>
+    <name>Cypher for Apache Flink - CAPF</name>
 
     <properties>
         <project.rootdir>${project.parent.basedir}</project.rootdir>
@@ -20,7 +20,7 @@
     <dependencies>
         <dependency>
             <groupId>org.opencypher</groupId>
-            <artifactId>caps-cora</artifactId>
+            <artifactId>okapi-relational</artifactId>
             <version>${project.parent.version}</version>
         </dependency>
 
@@ -53,7 +53,7 @@
 
         <dependency>
             <groupId>org.opencypher</groupId>
-            <artifactId>caps-api</artifactId>
+            <artifactId>okapi-api</artifactId>
             <version>${project.parent.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
@@ -61,15 +61,7 @@
 
         <dependency>
             <groupId>org.opencypher</groupId>
-            <artifactId>caps-ir</artifactId>
-            <version>${project.parent.version}</version>
-            <type>test-jar</type>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.opencypher</groupId>
-            <artifactId>caps-cora</artifactId>
+            <artifactId>okapi-ir</artifactId>
             <version>${project.parent.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
@@ -78,7 +70,15 @@
         <!-- Workaround for https://youtrack.jetbrains.com/issue/SCL-13184 -->
         <dependency>
             <groupId>org.opencypher</groupId>
-            <artifactId>caps-trees</artifactId>
+            <artifactId>okapi-trees</artifactId>
+            <version>${project.parent.version}</version>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.opencypher</groupId>
+            <artifactId>okapi-relational</artifactId>
             <version>${project.parent.version}</version>
             <type>test-jar</type>
             <scope>test</scope>
@@ -87,7 +87,7 @@
         <!-- Workaround for https://youtrack.jetbrains.com/issue/SCL-13184 -->
         <dependency>
             <groupId>org.opencypher</groupId>
-            <artifactId>caps-logical</artifactId>
+            <artifactId>okapi-logical</artifactId>
             <version>${project.parent.version}</version>
             <type>test-jar</type>
             <scope>test</scope>

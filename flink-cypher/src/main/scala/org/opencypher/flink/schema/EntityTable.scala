@@ -1,23 +1,23 @@
-package org.opencypher.caps.flink.schema
+package org.opencypher.flink.schema
 
 import org.apache.flink.api.scala._
 import org.apache.flink.table.api.Table
 import org.apache.flink.table.api.scala._
 import org.apache.flink.types.Row
-import org.opencypher.caps.api.io.conversion.{EntityMapping, NodeMapping, RelationshipMapping}
-import org.opencypher.caps.api.schema.Schema
-import org.opencypher.caps.api.types.{CypherType, _}
-import org.opencypher.caps.api.value.CypherValue
-import org.opencypher.caps.flink._
-import org.opencypher.caps.flink.schema.Entity.sourceIdKey
-import org.opencypher.caps.flink.schema.EntityTable.FlinkTable
-import org.opencypher.caps.impl.table.CypherTable
+import org.opencypher.flink.schema.EntityTable.FlinkTable
+import org.opencypher.flink.{CAPFRecords, CAPFSession, FlinkUtils}
+import org.opencypher.flink.schema.Entity.sourceIdKey
+import org.opencypher.okapi.api.io.conversion.{EntityMapping, NodeMapping, RelationshipMapping}
+import org.opencypher.okapi.api.schema.Schema
+import org.opencypher.okapi.api.table.CypherTable
+import org.opencypher.okapi.api.types._
+import org.opencypher.okapi.api.value.CypherValue
 
 
 trait CAPFEntityTable extends EntityTable[FlinkTable] {
-  private[caps] def entityType: CypherType with DefiniteCypherType = mapping.cypherType
+  private[flink] def entityType: CypherType with DefiniteCypherType = mapping.cypherType
 
-  private[caps] def records(implicit capf: CAPFSession): CAPFRecords = CAPFRecords.create(this)
+  private[flink] def records(implicit capf: CAPFSession): CAPFRecords = CAPFRecords.create(this)
 }
 
 case class CAPFNodeTable(mapping: NodeMapping, table: FlinkTable) extends NodeTable(mapping, table) with CAPFEntityTable

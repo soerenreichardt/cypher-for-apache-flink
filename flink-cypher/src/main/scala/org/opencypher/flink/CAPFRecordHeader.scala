@@ -1,12 +1,10 @@
-package org.opencypher.caps.flink
+package org.opencypher.flink
 
-import org.apache.flink.api.common.typeinfo.TypeInformation
-import org.apache.flink.api.common.typeutils.CompositeType
 import org.apache.flink.table.api.TableSchema
-import org.opencypher.caps.impl.table.{InternalHeader, OpaqueField, RecordHeader, RecordSlot}
-import org.opencypher.caps.ir.api.expr.Var
-import org.opencypher.caps.flink.FlinkUtils._
-import org.opencypher.caps.impl.exception.IllegalArgumentException
+import org.opencypher.flink.FlinkUtils._
+import org.opencypher.okapi.impl.exception.IllegalArgumentException
+import org.opencypher.okapi.ir.api.expr.Var
+import org.opencypher.okapi.relational.impl.table.{InternalHeader, OpaqueField, RecordHeader, RecordSlot}
 
 object CAPFRecordHeader {
 

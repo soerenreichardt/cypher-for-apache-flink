@@ -1,13 +1,13 @@
-package org.opencypher.caps.flink
+package org.opencypher.flink
 
 import org.apache.flink.types.Row
-import org.opencypher.caps.api.types.{CTNode, CTRelationship}
-import org.opencypher.caps.api.value.CypherValue
-import org.opencypher.caps.api.value.CypherValue.{CypherMap, CypherNull, CypherValue}
-import org.opencypher.caps.flink.value.{CAPFNode, CAPFRelationship}
-import org.opencypher.caps.impl.exception.UnsupportedOperationException
-import org.opencypher.caps.impl.table.RecordHeader
-import org.opencypher.caps.ir.api.expr.Var
+import org.opencypher.flink.value.{CAPFNode, CAPFRelationship}
+import org.opencypher.okapi.api.types.{CTNode, CTRelationship}
+import org.opencypher.okapi.api.value.CypherValue
+import org.opencypher.okapi.api.value.CypherValue.{CypherMap, CypherNull, CypherValue}
+import org.opencypher.okapi.impl.exception.UnsupportedOperationException
+import org.opencypher.okapi.ir.api.expr.Var
+import org.opencypher.okapi.relational.impl.table.RecordHeader
 
 final case class rowToCypherMap(header: RecordHeader) extends (Row => CypherMap) {
 

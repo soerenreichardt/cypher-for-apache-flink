@@ -1,10 +1,9 @@
-package org.opencypher.caps.flink
-
+package org.opencypher.flink
 
 import java.util.UUID
 
-import org.opencypher.caps.impl.table.{FieldSlotContent, ProjectedExpr, RecordSlot, SlotContent}
-import org.opencypher.caps.ir.api.expr.{Expr, Property, Var}
+import org.opencypher.okapi.ir.api.expr.{Expr, Property, Var}
+import org.opencypher.okapi.relational.impl.table.{FieldSlotContent, ProjectedExpr, RecordSlot, SlotContent}
 
 import scala.collection.mutable
 

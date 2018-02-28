@@ -1,6 +1,6 @@
-package org.opencypher.caps.flink.value
+package org.opencypher.flink.value
 
-import org.opencypher.caps.api.value.CypherValue.{CypherMap, CypherNode, CypherRelationship}
+import org.opencypher.okapi.api.value.CypherValue.{CypherMap, CypherNode, CypherRelationship}
 
 case class CAPFNode(
    override val id: Long,

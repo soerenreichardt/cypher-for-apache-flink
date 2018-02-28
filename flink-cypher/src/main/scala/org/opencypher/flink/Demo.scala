@@ -1,15 +1,15 @@
-package org.opencypher.caps.flink
+package org.opencypher.flink
 
 import org.apache.flink.api.scala._
 import org.apache.flink.table.api.scala._
 import org.apache.flink.types.Row
-import org.opencypher.caps.api.io.conversion.{NodeMapping, RelationshipMapping}
-import org.opencypher.caps.flink.schema._
+import org.opencypher.flink.schema.{CAPFNodeTable, CAPFRelationshipTable}
+import org.opencypher.okapi.api.io.conversion.{NodeMapping, RelationshipMapping}
 
 
 object Demo extends App {
 
-  val session = CAPFSession.create
+  val session = CAPFSession.create()
 
   private val nodeDataSet = session.env.fromCollection(DemoData.nodes)
   val relsDataSet = session.env.fromCollection(DemoData.rels)

@@ -1,30 +1,30 @@
-package org.opencypher.caps.flink
+package org.opencypher.flink
 
-import org.apache.flink.api.common.typeinfo.TypeInformation
-import org.apache.flink.api.java.typeutils.RowTypeInfo
 import org.apache.flink.api.scala._
 import org.apache.flink.table.api.Table
 import org.apache.flink.table.api.scala._
-import org.apache.flink.table.expressions.{Alias, Expression, UnresolvedFieldReference}
+import org.apache.flink.table.expressions.{Expression, UnresolvedFieldReference}
 import org.apache.flink.types.Row
-import org.opencypher.caps.api.io.conversion.{NodeMapping, RelationshipMapping}
-import org.opencypher.caps.api.table.CypherRecords
-import org.opencypher.caps.api.types._
-import org.opencypher.caps.api.value.CypherValue.{CypherMap, CypherValue}
-import org.opencypher.caps.flink.CAPFRecordHeader._
-import org.opencypher.caps.flink.FlinkUtils._
-import org.opencypher.caps.flink.schema.{CAPFEntityTable, CAPFNodeTable, CAPFRelationshipTable}
-import org.opencypher.caps.flink.schema.EntityTable._
-import org.opencypher.caps.impl.exception.{DuplicateSourceColumnException, IllegalArgumentException, IllegalStateException}
-import org.opencypher.caps.impl.table._
-import org.opencypher.caps.impl.util.PrintOptions
-import org.opencypher.caps.ir.api.{Label, PropertyKey}
-import org.opencypher.caps.ir.api.expr._
+import org.opencypher.flink.CAPFRecordHeader._
+import org.opencypher.flink.FlinkUtils._
+import org.opencypher.flink.schema.{CAPFEntityTable, CAPFNodeTable, CAPFRelationshipTable}
+import org.opencypher.flink.schema.EntityTable._
+import org.opencypher.okapi.api.io.conversion.{NodeMapping, RelationshipMapping}
+import org.opencypher.okapi.api.table.{CypherRecords, CypherRecordsCompanion}
+import org.opencypher.okapi.api.types._
+import org.opencypher.okapi.api.value.CypherValue.{CypherMap, CypherValue}
+import org.opencypher.okapi.impl.exception.{IllegalArgumentException, IllegalStateException}
+import org.opencypher.okapi.impl.table.RecordsPrinter
+import org.opencypher.okapi.impl.util.PrintOptions
+import org.opencypher.okapi.ir.api.expr._
+import org.opencypher.okapi.ir.api.{Label, PropertyKey}
+import org.opencypher.okapi.relational.impl.exception.DuplicateSourceColumnException
+import org.opencypher.okapi.relational.impl.table._
 
 sealed abstract class CAPFRecords(val header: RecordHeader, val data: Table)(implicit capf: CAPFSession)
   extends CypherRecords with Serializable {
 
-  override def print(implicit options: PrintOptions): Unit =
+  override def show(implicit options: PrintOptions): Unit =
     RecordsPrinter.print(this)
 
   override def register(name: String): Unit =
@@ -46,6 +46,9 @@ sealed abstract class CAPFRecords(val header: RecordHeader, val data: Table)(imp
     toCypherMaps.collect().iterator
 
   override lazy val columnType: Map[String, CypherType] = data.columnType
+
+  override def collect: Array[CypherMap] =
+    toCypherMaps.collect().toArray
 
   def alignWith(v: Var, targetHeader: RecordHeader): CAPFRecords = {
     val oldEntity = this.header.internalHeader.fields.headOption

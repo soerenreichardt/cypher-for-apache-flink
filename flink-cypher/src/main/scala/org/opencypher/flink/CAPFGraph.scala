@@ -1,23 +1,19 @@
-package org.opencypher.caps.flink
+package org.opencypher.flink
 
-import org.opencypher.caps.api.graph.PropertyGraph
-import org.opencypher.caps.api.schema.Schema
-import org.opencypher.caps.api.types.{CTNode, CTRelationship}
-import org.opencypher.caps.flink.CAPFConverters._
-import org.opencypher.caps.flink.schema.{CAPFEntityTable, CAPFNodeTable}
-import org.opencypher.caps.impl.exception.IllegalArgumentException
-import org.opencypher.caps.impl.table.{OpaqueField, RecordHeader}
-import org.opencypher.caps.ir.api.expr.Var
+import org.opencypher.flink.schema.{CAPFEntityTable, CAPFNodeTable}
+import org.opencypher.flink.CAPFConverters._
+import org.opencypher.okapi.api.graph.PropertyGraph
+import org.opencypher.okapi.api.schema.Schema
+import org.opencypher.okapi.api.types.{CTNode, CTRelationship}
+import org.opencypher.okapi.impl.exception.IllegalArgumentException
+import org.opencypher.okapi.ir.api.expr.Var
+import org.opencypher.okapi.relational.impl.table.{OpaqueField, RecordHeader}
 
 trait CAPFGraph extends PropertyGraph with Serializable {
 
   override def nodes(name: String, nodeCypherType: CTNode): CAPFRecords
 
-  override def nodes(name: String): CAPFRecords = nodes(name, CTNode)
-
   override def relationships(name: String, relCypherType: CTRelationship): CAPFRecords
-
-  override def relationships(name: String): CAPFRecords = relationships(name, CTRelationship)
 
   override def session: CAPFSession
 

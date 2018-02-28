@@ -1,12 +1,12 @@
-package org.opencypher.caps.flink
+package org.opencypher.flink
 
 import cats.data.NonEmptyVector
-import org.opencypher.caps.api.graph.PropertyGraph
-import org.opencypher.caps.api.schema.Schema
-import org.opencypher.caps.api.types.{CTNode, CTRelationship, CypherType, DefiniteCypherType}
-import org.opencypher.caps.flink.schema.{CAPFEntityTable, CAPFNodeTable, CAPFRelationshipTable}
-import org.opencypher.caps.impl.table.{RecordHeader, RecordsPrinter}
-import org.opencypher.caps.ir.api.expr.Var
+import org.opencypher.flink.schema.{CAPFEntityTable, CAPFNodeTable, CAPFRelationshipTable}
+import org.opencypher.okapi.api.graph.PropertyGraph
+import org.opencypher.okapi.api.schema.Schema
+import org.opencypher.okapi.api.types.{CTNode, CTRelationship, CypherType, DefiniteCypherType}
+import org.opencypher.okapi.ir.api.expr.Var
+import org.opencypher.okapi.relational.impl.table.RecordHeader
 
 class CAPFScanGraph(val scans: Seq[CAPFEntityTable], val schema: Schema)(implicit val session: CAPFSession)
   extends CAPFGraph {
