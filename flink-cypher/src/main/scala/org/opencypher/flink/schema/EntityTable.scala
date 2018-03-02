@@ -107,7 +107,7 @@ abstract class NodeTable[T <: CypherTable[String]](mapping: NodeMapping, table: 
       case (propertyKey, sourceKey) => propertyKey -> table.columnType(sourceKey)
     }
 
-    mapping.optionalLabelMapping.keys.toSet.subsets()
+    mapping.optionalLabelMapping.keys.toSet.subsets
       .map(_.union(mapping.impliedLabels))
       .map(combo => Schema.empty.withNodePropertyKeys(combo.toSeq: _*)(propertyKeys: _*))
       .reduce(_ ++ _)

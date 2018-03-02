@@ -35,8 +35,9 @@ object Demo extends App {
   val relTable = CAPFRelationshipTable(relMapping, rels)
 
   val graph: CAPFGraph = session.readFrom(nodeTable, relTable)
-  graph.nodes("p").data.toDataSet[Row].print()
-  graph.relationships("r").data.toDataSet[Row].print()
+  graph.cypher("MATCH (n:Employee) RETURN n.name").getRecords.show
+//  graph.nodes("p").data.toDataSet[Row].print()
+//  graph.relationships("r").data.toDataSet[Row].print()
 }
 
 object DemoData {

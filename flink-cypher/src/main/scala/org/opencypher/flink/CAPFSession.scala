@@ -5,6 +5,8 @@ import java.util.UUID
 import org.apache.flink.api.scala.ExecutionEnvironment
 import org.apache.flink.table.api.TableEnvironment
 import org.opencypher.flink.schema.{CAPFEntityTable, CAPFNodeTable}
+import org.opencypher.flink.CAPFConverters._
+import org.opencypher.flink.physical.{CAPFPhysicalOperatorProducer, CAPFPhysicalPlannerContext, CAPFResultBuilder, CAPFRuntimeContext}
 import org.opencypher.okapi.api.graph._
 import org.opencypher.okapi.api.table.CypherRecords
 import org.opencypher.okapi.api.value.CypherValue._
@@ -17,8 +19,9 @@ import org.opencypher.okapi.ir.impl.parse.CypherParser
 import org.opencypher.okapi.ir.impl.{IRBuilder, IRBuilderContext}
 import org.opencypher.okapi.logical.api.configuration.LogicalConfiguration.PrintLogicalPlan
 import org.opencypher.okapi.logical.impl._
-import org.opencypher.okapi.relational.api.configuration.CoraConfiguration.PrintFlatPlan
+import org.opencypher.okapi.relational.api.configuration.CoraConfiguration.{PrintFlatPlan, PrintPhysicalPlan}
 import org.opencypher.okapi.relational.impl.flat.{FlatPlanner, FlatPlannerContext}
+import org.opencypher.okapi.relational.impl.physical.PhysicalPlanner
 
 trait CAPFSession extends CypherSession {
 
@@ -53,7 +56,8 @@ sealed class CAPFSessionImpl(val sessionNamespace: Namespace) extends CAPFSessio
   private val logicalPlanner = new LogicalPlanner(producer)
   private val logicalOptimizer = LogicalOptimizer
   private val flatPlanner = new FlatPlanner
-  //  private val capfPlanner = new CAPFPlanner()
+  private val physicalPlanner = new PhysicalPlanner(new CAPFPhysicalOperatorProducer()(self))
+  private val physicalOptimizer = new PhysicalOptimizer()
   private val parser = CypherParser
 
   /**
@@ -75,21 +79,55 @@ sealed class CAPFSessionImpl(val sessionNamespace: Namespace) extends CAPFSessio
     val extractedParameters: CypherMap = extractedLiterals.mapValues(v => CypherValue(v))
     val allParameters = parameters ++ extractedParameters
 
-    val ir = time("IR translation")(IRBuilder(stmt)(IRBuilderContext.initial(query, allParameters, semState, ambientGraph, dataSource)))
+    val irBuilderContext = IRBuilderContext.initial(query, allParameters, semState, ambientGraph, dataSource)
+    val ir = time("IR translation")(IRBuilder(stmt)(irBuilderContext))
 
     val logicalPlannerContext = LogicalPlannerContext(graph.schema, Set.empty, ir.model.graphs.mapValues(_.namespace).andThen(dataSource), ambientGraph)
     val logicalPlan = time("Logical planning")(logicalPlanner(ir)(logicalPlannerContext))
-    val optimizedLogicalPlan = time("Logical optimization")(logicalOptimizer(logicalPlan)(logicalPlannerContext))
     if (PrintLogicalPlan.isSet) {
+      println("Logical plan:")
       println(logicalPlan.pretty)
-      println(optimizedLogicalPlan.pretty)
     }
 
-    val flatPlan = time("Flat planning")(flatPlanner(optimizedLogicalPlan)(FlatPlannerContext(parameters)))
-    if (PrintFlatPlan.isSet) println(flatPlan.pretty)
+    val optimizedLogicalPlan = time("Logical optimization")(logicalOptimizer(logicalPlan)(logicalPlannerContext))
+    if (PrintLogicalPlan.isSet) {
+      println("Optimized logical plan:")
+      println(optimizedLogicalPlan.pretty())
+    }
 
-    ???
-//    TODO: physical planning
+    plan(CAPFRecords.unit(), allParameters, optimizedLogicalPlan)
+  }
+
+  private def graphAt(qualifiedGraphName: QualifiedGraphName): Option[CAPFGraph] =
+    Some(dataSource(qualifiedGraphName.namespace).graph(qualifiedGraphName.graphName).asCapf)
+
+  private def plan(
+    records: CypherRecords,
+    parameters: CypherMap,
+    logicalPlan: LogicalOperator): CAPFResult = {
+    val flatPlannerContext = FlatPlannerContext(parameters)
+    val flatPlan = time("Flat planning")(flatPlanner(logicalPlan)(flatPlannerContext))
+    if (PrintFlatPlan.isSet) {
+      println("Flat plan:")
+      println(flatPlan.pretty)
+    }
+
+    val physicalPlannerContext = CAPFPhysicalPlannerContext.from(this.graph, records.asCapf, parameters)(self)
+    val physicalPlan = time("Physical planning")(physicalPlanner(flatPlan)(physicalPlannerContext))
+    if (PrintPhysicalPlan.isSet) {
+      println("Physical plan:")
+      println(physicalPlan.pretty)
+    }
+
+    val optimizedPhysicalPlan = time("Physical optimization")(physicalOptimizer(physicalPlan)(PhysicalOptimizerContext()))
+    if (PrintPhysicalPlan.isSet) {
+      println("Optimized physical plan:")
+      println(optimizedPhysicalPlan.pretty)
+    }
+
+    CAPFResultBuilder.from(logicalPlan, flatPlan, optimizedPhysicalPlan)(
+      CAPFRuntimeContext(physicalPlannerContext.parameters, graphAt, collection.mutable.Map.empty)
+    )
   }
 
   private def mountAmbientGraph(ambient: PropertyGraph): IRExternalGraph = {

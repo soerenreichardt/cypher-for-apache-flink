@@ -38,7 +38,6 @@ class CAPFScanGraph(val scans: Seq[CAPFEntityTable], val schema: Schema)(implici
     alignedRecords.reduceOption(_ unionAll(targetRelHeader, _)).getOrElse(CAPFRecords.empty(targetRelHeader))
   }
 
-
   override def union(other: PropertyGraph): CAPFGraph = ???
 
   case class EntityTables(entityTables: Vector[CAPFEntityTable]) {

@@ -21,7 +21,7 @@ import org.opencypher.okapi.ir.api.{Label, PropertyKey}
 import org.opencypher.okapi.relational.impl.exception.DuplicateSourceColumnException
 import org.opencypher.okapi.relational.impl.table._
 
-sealed abstract class CAPFRecords(val header: RecordHeader, val data: Table)(implicit capf: CAPFSession)
+sealed abstract class CAPFRecords(val header: RecordHeader, val data: Table)(implicit val capf: CAPFSession)
   extends CypherRecords with Serializable {
 
   override def show(implicit options: PrintOptions): Unit =
@@ -46,6 +46,11 @@ sealed abstract class CAPFRecords(val header: RecordHeader, val data: Table)(imp
     toCypherMaps.collect().iterator
 
   override lazy val columnType: Map[String, CypherType] = data.columnType
+
+  def cache(): CAPFRecords = {
+    // TODO: cache
+    this
+  }
 
   override def collect: Array[CypherMap] =
     toCypherMaps.collect().toArray
