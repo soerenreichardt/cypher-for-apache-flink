@@ -1,5 +1,8 @@
 package org.opencypher.flink
 
+import org.apache.flink.api.scala._
+import org.apache.flink.table.api.scala._
+import org.opencypher.flink.schema.EntityTable._
 import org.opencypher.flink.schema.{CAPFEntityTable, CAPFNodeTable}
 import org.opencypher.flink.CAPFConverters._
 import org.opencypher.okapi.api.graph.PropertyGraph
@@ -31,7 +34,7 @@ object CAPFGraph {
     }
 
   def create(nodeTable: CAPFNodeTable, entityTables: CAPFEntityTable*)(implicit capf: CAPFSession): CAPFGraph = {
-    println(nodeTable.table.rows.foreach( s => s.toString()))
+//    println(nodeTable.table.rows.foreach( s => s.toString()))
     val allTables = nodeTable +: entityTables
     val schema = allTables.map(_.schema).reduce(_ ++ _)
     new CAPFScanGraph(allTables, schema)

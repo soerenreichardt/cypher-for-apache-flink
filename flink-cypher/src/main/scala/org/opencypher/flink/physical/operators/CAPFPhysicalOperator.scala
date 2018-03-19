@@ -6,6 +6,7 @@ import org.opencypher.flink.TableOps._
 import org.opencypher.flink._
 import org.opencypher.flink.physical.{CAPFPhysicalResult, CAPFRuntimeContext}
 import org.opencypher.okapi.api.graph.QualifiedGraphName
+import org.opencypher.okapi.api.types.CTNode
 import org.opencypher.okapi.impl.exception.IllegalArgumentException
 import org.opencypher.okapi.relational.api.physical.PhysicalOperator
 import org.opencypher.okapi.relational.impl.table.{RecordHeader, RecordSlot, SlotContent}
@@ -60,5 +61,13 @@ object CAPFPhysicalOperator {
     } else joinedData
 
     CAPFRecords.verifyAndCreate(header, returnData)
+  }
+
+  def assertIsNode(slot: RecordSlot): Unit = {
+    slot.content.cypherType match {
+      case CTNode(_) =>
+      case x =>
+        throw IllegalArgumentException(s"Expected $slot to contain a node, but was $x")
+    }
   }
 }

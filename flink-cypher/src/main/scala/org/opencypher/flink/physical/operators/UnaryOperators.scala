@@ -1,5 +1,6 @@
 package org.opencypher.flink.physical.operators
 
+import org.apache.flink.table.api.scala._
 import org.apache.flink.table.expressions.UnresolvedFieldReference
 import org.opencypher.flink.{CAPFRecords, ColumnName}
 import org.opencypher.flink.physical.{CAPFPhysicalResult, CAPFRuntimeContext}
@@ -36,6 +37,7 @@ final case class Scan(in: CAPFPhysicalOperator, inGraph: LogicalGraph, v: Var, h
   extends UnaryPhysicalOperator {
 
   override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
+//    print(prev.records.data.collect())
     val graphs = prev.graphs
     val graph = graphs(inGraph.name)
     val records = v.cypherType match {

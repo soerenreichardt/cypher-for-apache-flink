@@ -11,6 +11,9 @@ object TableOps {
 
   implicit class RichTable(val table: Table) extends AnyVal {
 
+    def col(colName: String): Table =
+      table.select(colName)
+
     def safeRenameColumn(oldName: String, newName: String): Table = {
       require(!table.columns.contains(newName),
         s"Cannot rename column `$oldName` to `$newName`. A column with name `$newName` exists already.")

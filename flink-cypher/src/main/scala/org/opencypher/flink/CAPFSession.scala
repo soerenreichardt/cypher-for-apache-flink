@@ -4,6 +4,7 @@ import java.util.UUID
 
 import org.apache.flink.api.scala.ExecutionEnvironment
 import org.apache.flink.table.api.TableEnvironment
+import org.apache.flink.table.api.scala.BatchTableEnvironment
 import org.opencypher.flink.schema.{CAPFEntityTable, CAPFNodeTable}
 import org.opencypher.flink.CAPFConverters._
 import org.opencypher.flink.physical.{CAPFPhysicalOperatorProducer, CAPFPhysicalPlannerContext, CAPFResultBuilder, CAPFRuntimeContext}
@@ -25,8 +26,8 @@ import org.opencypher.okapi.relational.impl.physical.PhysicalPlanner
 
 trait CAPFSession extends CypherSession {
 
-  def env = ExecutionEnvironment.getExecutionEnvironment
-  def tableEnv = TableEnvironment.getTableEnvironment(env)
+  val env: ExecutionEnvironment
+  val tableEnv: BatchTableEnvironment
 
   def readFrom(entityTables: CAPFEntityTable*): Unit = entityTables.head match {
     case h: CAPFNodeTable => readFrom(h, entityTables.tail: _*)
@@ -40,14 +41,18 @@ trait CAPFSession extends CypherSession {
 
 object CAPFSession {
 
-//  def create: CAPFSession = new CAPFSessionImpl(CAPFGraphSourceHandler(CAPFSessionPropertyGraphDataSourceFactory(), Set.empty))
+  val env = ExecutionEnvironment.getExecutionEnvironment
+  val tableEnv = TableEnvironment.getTableEnvironment(env)
 
   def create(sessionNamespace: Namespace = SessionPropertyGraphDataSource.Namespace): CAPFSession =
-    new CAPFSessionImpl(sessionNamespace)
+    new CAPFSessionImpl(env, tableEnv, sessionNamespace)
 
 }
 
-sealed class CAPFSessionImpl(val sessionNamespace: Namespace) extends CAPFSession with Serializable {
+sealed class CAPFSessionImpl(
+  override val env: ExecutionEnvironment,
+  override val tableEnv: BatchTableEnvironment,
+  val sessionNamespace: Namespace) extends CAPFSession with Serializable {
 
   self =>
 

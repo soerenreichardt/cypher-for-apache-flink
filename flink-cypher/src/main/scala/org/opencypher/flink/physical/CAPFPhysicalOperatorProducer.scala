@@ -47,7 +47,8 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
     * @param graph external (URI) reference to the input graph (e.g. the session graph)
     * @return start from unit operator
     */
-  override def planStartFromUnit(graph: LogicalExternalGraph): CAPFPhysicalOperator = ???
+  override def planStartFromUnit(graph: LogicalExternalGraph): CAPFPhysicalOperator =
+    operators.StartFromUnit(graph)
 
   /**
     * Sets the source graph for the next query operation.
@@ -81,7 +82,8 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
     * @param header  resulting record header
     * @return relationship scan operator
     */
-  override def planRelationshipScan(in: CAPFPhysicalOperator, inGraph: LogicalGraph, v: Var, header: RecordHeader): CAPFPhysicalOperator = ???
+  override def planRelationshipScan(in: CAPFPhysicalOperator, inGraph: LogicalGraph, v: Var, header: RecordHeader): CAPFPhysicalOperator =
+    operators.Scan(in, inGraph, v, header)
 
   /**
     * Creates an empty record set thereby disregarding the input. The records are described by the given record header.
@@ -333,7 +335,8 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
     * @param removeSelfRelationships set true, iff loops shall be removed from the output
     * @return expand source operator
     */
-  override def planExpandSource(first: CAPFPhysicalOperator, second: CAPFPhysicalOperator, third: CAPFPhysicalOperator, source: Var, rel: Var, target: Var, header: RecordHeader, removeSelfRelationships: Boolean): CAPFPhysicalOperator = ???
+  override def planExpandSource(first: CAPFPhysicalOperator, second: CAPFPhysicalOperator, third: CAPFPhysicalOperator, source: Var, rel: Var, target: Var, header: RecordHeader, removeSelfRelationships: Boolean): CAPFPhysicalOperator =
+    operators.ExpandSource(first, second, third, source, rel, target, header, removeSelfRelationships)
 
   /**
     * Performs a bounded variable length path expression.

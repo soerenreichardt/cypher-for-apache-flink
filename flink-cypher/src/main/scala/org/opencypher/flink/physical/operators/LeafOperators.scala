@@ -1,5 +1,7 @@
 package org.opencypher.flink.physical.operators
 
+import org.apache.flink.api.scala._
+import org.apache.flink.table.api.scala._
 import org.opencypher.flink.{CAPFRecords, CAPFSession}
 import org.opencypher.flink.physical.{CAPFPhysicalResult, CAPFRuntimeContext}
 import org.opencypher.okapi.logical.impl.LogicalExternalGraph

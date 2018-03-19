@@ -33,7 +33,8 @@ sealed abstract class CAPFRecords(val header: RecordHeader, val data: Table)(imp
   override def size: Long = data.count()
 
   def toCypherMaps: DataSet[CypherMap] = {
-    data.toDataSet[Row].map(rowToCypherMap(header))
+    data.toDataSet[Row]
+      .map(rowToCypherMap(header, data.getSchema.columnNameToIndex))
   }
 
   override def columns: Seq[String] =
@@ -240,7 +241,7 @@ object CAPFRecords extends CypherRecordsCompanion[CAPFRecords, CAPFSession] {
 
     initialHeader.slots.foreach { slot =>
       val tableSchema = initialData.getSchema
-      val fieldName = tableSchema.getColumnName(slot.index).get
+      val fieldName = ColumnName.of(slot)
       val fieldType = tableSchema.getType(fieldName).get
       val cypherType = fromFlinkType(fieldType)
         .getOrElse(throw IllegalArgumentException("a supported Flink type", fieldType))
