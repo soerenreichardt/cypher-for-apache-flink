@@ -29,7 +29,7 @@ trait CAPFSession extends CypherSession {
   val env: ExecutionEnvironment
   val tableEnv: BatchTableEnvironment
 
-  def readFrom(entityTables: CAPFEntityTable*): Unit = entityTables.head match {
+  def readFrom(entityTables: CAPFEntityTable*): PropertyGraph = entityTables.head match {
     case h: CAPFNodeTable => readFrom(h, entityTables.tail: _*)
     case _ => throw IllegalArgumentException("first argument of type NodeTable", "RelationshipTable")
   }

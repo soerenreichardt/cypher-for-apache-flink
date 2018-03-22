@@ -96,7 +96,7 @@ final case class NodeMapping private[okapi](
   // on construction
   validate()
 
-  def cypherType: CTNode = CTNode(impliedLabels)
+  def cypherType: CTNode = CTNode(impliedLabels ++ optionalLabelMapping.keySet)
 
   def withImpliedLabels(labels: String*): NodeMapping =
     labels.foldLeft(this)((mapping, label) => mapping.withImpliedLabel(label))

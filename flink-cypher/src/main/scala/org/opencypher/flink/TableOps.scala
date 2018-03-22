@@ -50,6 +50,15 @@ object TableOps {
       table.join(other, joinExpr)
     }
 
+    def safeAddColumn(name: String, col: Table): Table = {
+      require(!table.columns.contains(name),
+        s"Cannot add column `$name`. A column with that name exists already. " +
+      s"Use `safeReplaceColumn` if you intend to replace that column.")
+      require(table.getSchema.getColumnNames.length == 1,
+        s"The table should consist of a single column.")
+      table.select("*", col.columns.head as Symbol(name))
+    }
+
   }
 
 }

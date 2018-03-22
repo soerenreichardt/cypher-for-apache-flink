@@ -92,7 +92,8 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
     * @param header record header describing the created records
     * @return empty records operator
     */
-  override def planEmptyRecords(in: CAPFPhysicalOperator, header: RecordHeader): CAPFPhysicalOperator = ???
+  override def planEmptyRecords(in: CAPFPhysicalOperator, header: RecordHeader): CAPFPhysicalOperator =
+    operators.EmptyRecords(in, header)
 
   /**
     * Renames the column identified by the given expression to the specified alias.
@@ -115,7 +116,8 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
     * @param header  resulting record header
     * @return remove aliases operator
     */
-  override def planRemoveAliases(in: CAPFPhysicalOperator, aliases: Set[(ProjectedField, ProjectedExpr)], header: RecordHeader): CAPFPhysicalOperator = ???
+  override def planRemoveAliases(in: CAPFPhysicalOperator, aliases: Set[(ProjectedField, ProjectedExpr)], header: RecordHeader): CAPFPhysicalOperator =
+    operators.RemoveAliases(in, aliases, header)
 
   /**
     * Filters the incoming rows according to the specified expression.
@@ -125,7 +127,8 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
     * @param header resulting record header
     * @return filter operator
     */
-  override def planFilter(in: CAPFPhysicalOperator, expr: Expr, header: RecordHeader): CAPFPhysicalOperator = ???
+  override def planFilter(in: CAPFPhysicalOperator, expr: Expr, header: RecordHeader): CAPFPhysicalOperator =
+    operators.Filter(in, expr, header)
 
   /**
     * Selects the specified fields from the given records.
@@ -156,7 +159,8 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
     * @param header resulting record header
     * @return project operator
     */
-  override def planProject(in: CAPFPhysicalOperator, expr: Expr, header: RecordHeader): CAPFPhysicalOperator = ???
+  override def planProject(in: CAPFPhysicalOperator, expr: Expr, header: RecordHeader): CAPFPhysicalOperator =
+    operators.Project(in, expr, header)
 
   /**
     * Stores the graph identified by the given URI by the given name.
@@ -166,7 +170,8 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
     * @param qualifiedName reference to a graph (e.g. an external graph)
     * @return project external graph operator
     */
-  override def planProjectExternalGraph(in: CAPFPhysicalOperator, name: String, qualifiedName: QualifiedGraphName): CAPFPhysicalOperator = ???
+  override def planProjectExternalGraph(in: CAPFPhysicalOperator, name: String, qualifiedName: QualifiedGraphName): CAPFPhysicalOperator =
+    operators.ProjectExternalGraph(in, name, qualifiedName)
 
   /**
     * Creates a new record containing the specified entities (i.e. as defined in a construction pattern).
@@ -189,7 +194,8 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
     * @param header       resulting record header
     * @return aggregate operator
     */
-  override def planAggregate(in: CAPFPhysicalOperator, group: Set[Var], aggregations: Set[(Var, Aggregator)], header: RecordHeader): CAPFPhysicalOperator = ???
+  override def planAggregate(in: CAPFPhysicalOperator, group: Set[Var], aggregations: Set[(Var, Aggregator)], header: RecordHeader): CAPFPhysicalOperator =
+    operators.Aggregate(in, aggregations, group, header)
 
   /**
     * Performs a distinct operation on the specified fields.

@@ -54,6 +54,7 @@ class CAPFScanGraph(val scans: Seq[CAPFEntityTable], val schema: Schema)(implici
 
       def isSubType(tableType: EntityType) = tableType.subTypeOf(entityType).isTrue
 
+      // TODO: scan for optional label
       val candidateTypes = entityTableTypes.filter(isSubType)
       val selectedScans = candidateTypes.flatMap(typ => entityTablesByType.get(typ).map(_.head))
       selectedScans

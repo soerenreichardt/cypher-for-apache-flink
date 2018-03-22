@@ -3,7 +3,9 @@ package org.opencypher.flink
 import org.apache.flink.api.scala._
 import org.apache.flink.table.api.scala._
 import org.apache.flink.types.Row
+import org.opencypher.flink.io.FileCsvPropertyGraphDataSource
 import org.opencypher.flink.schema.{CAPFNodeTable, CAPFRelationshipTable}
+import org.opencypher.okapi.api.graph.GraphName
 import org.opencypher.okapi.api.io.conversion.{NodeMapping, RelationshipMapping}
 
 
@@ -35,7 +37,7 @@ object Demo extends App {
   val relTable = CAPFRelationshipTable(relMapping, rels)
 
   val graph: CAPFGraph = session.readFrom(nodeTable, relTable)
-  graph.cypher("MATCH (n:Person)-[r:KNOWS]->(n2:Person) RETURN n, r, n2").getRecords.show
+  graph.cypher("MATCH (n:Person)-[r:KNOWS]->(n2:Person) RETURN sum(n.age) AS ageSum").getRecords.show
 //  graph.cypher("MATCH (n:Employee) RETURN n").getRecords.show
 
 }
@@ -48,7 +50,18 @@ object DemoData {
   )
 
   val rels = Seq(
-    (2L, 0L, 1L, "KNOWS", "2018")
+    (2L, 0L, 1L, "KNOWS", "2018"),
+    (4L, 3L, 1L, "KNOWS", "2010")
   )
+
+}
+
+object CsvDemo extends App {
+
+  private val resourcesPath = getClass.getResource("/csv").getPath.substring(1)
+  implicit val session = CAPFSession.create()
+
+  val dataSource = new FileCsvPropertyGraphDataSource(rootPath = resourcesPath)
+  val graph = dataSource.graph(GraphName("sn"))
 
 }
