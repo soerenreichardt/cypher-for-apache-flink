@@ -322,22 +322,7 @@ final case class Unwind(in: CAPFPhysicalOperator, list: Expr, item: Var, header:
               val tableSchema = UnresolvedFieldReference(itemColumn)
               val table = records.capf.tableEnv.fromDataSet(rowDataSet, tableSchema)
               val tableWithCorrectType = table.select(tableSchema)
-              val combinedDataSet = records.data.toDataSet[Row].cross(tableWithCorrectType).map { rowTuple =>
-                rowTuple match {
-                  case (r1: Row, r2: Row) =>
-                    val r1Values = Range(0, r1.getArity).map(r1.getField)
-                    val r2Values = Range(0, r2.getArity).map(r2.getField)
-                    Row.of((r1Values ++ r2Values).toSeq: _*)
-                }
-              }
-              val combinedTableNames = records.data.columns.map(UnresolvedFieldReference(_)) ++
-              tableWithCorrectType.columns.map(UnresolvedFieldReference(_))
-              val combinedTableTypes = records.data.getSchema.getTypes.toSeq ++
-                tableWithCorrectType.getSchema.getTypes.toSeq
-              val dsWithTypeInformation = combinedDataSet
-                .map(e => e)(Types.ROW(combinedTableTypes: _*), null)
-
-              dsWithTypeInformation.toTable(records.capf.tableEnv, combinedTableNames: _*)
+              records.data.cross(tableWithCorrectType)(records.capf)
 
             case None =>
               throw IllegalArgumentException("a list", list)

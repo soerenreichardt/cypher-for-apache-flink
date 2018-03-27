@@ -1,10 +1,11 @@
 package org.opencypher.flink
 
 import org.apache.flink.api.common.typeinfo.BasicTypeInfo
-import org.apache.flink.table.api.Table
+import org.apache.flink.table.api.{Table, Types}
 import org.apache.flink.table.api.scala._
 import org.apache.flink.api.scala._
 import org.apache.flink.table.expressions._
+import org.apache.flink.types.Row
 import org.opencypher.flink.schema.EntityTable._
 
 object TableOps {
@@ -13,6 +14,25 @@ object TableOps {
 
     def col(colName: String): Table =
       table.select(colName)
+
+    def cross(other: Table)(implicit capf: CAPFSession): Table = {
+
+      val crossedTableNames = table.columns.map(UnresolvedFieldReference) ++
+        other.columns.map(UnresolvedFieldReference)
+      val crossedTableTypes = table.getSchema.getTypes.toSeq ++
+        other.getSchema.getTypes.toSeq
+
+      val crossedDataSet = table.toDataSet[Row].cross(other).map { rowTuple =>
+        rowTuple match {
+          case (r1: Row, r2: Row) =>
+            val r1Fields = Range(0, r1.getArity).map(r1.getField)
+            val r2Fields = Range(0, r2.getArity).map(r2.getField)
+            Row.of((r1Fields ++ r2Fields): _*)
+        }
+      }(Types.ROW(crossedTableTypes: _*), null)
+
+      crossedDataSet.toTable(capf.tableEnv, crossedTableNames: _*)
+    }
 
     def safeRenameColumn(oldName: String, newName: String): Table = {
       require(!table.columns.contains(newName),
