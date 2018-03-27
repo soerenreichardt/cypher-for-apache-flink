@@ -3,6 +3,7 @@ package org.opencypher.flink.physical.operators
 import org.apache.flink.table.api.scala._
 import org.apache.flink.api.scala._
 import org.apache.flink.table.expressions.{Expression, UnresolvedFieldReference}
+import org.apache.flink.types.Row
 import org.opencypher.flink.CAPFRecords
 import org.opencypher.flink.physical.{CAPFPhysicalResult, CAPFRuntimeContext}
 import org.opencypher.okapi.ir.api.expr.Var
@@ -37,10 +38,6 @@ final case class ExpandSource(
   override def executeTernary(first: CAPFPhysicalResult, second: CAPFPhysicalResult, third: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
     val relationships = getRelationshipData(second.records)
 
-    print(first.records.data.collect())
-    print(second.records.data.collect())
-    print(third.records.data.collect())
-
     val sourceSlot = first.records.header.slotFor(source)
     val sourceSlotInRel = second.records.header.sourceNodeSlot(rel)
     CAPFPhysicalOperator.assertIsNode(sourceSlot)
@@ -55,6 +52,7 @@ final case class ExpandSource(
     CAPFPhysicalOperator.assertIsNode(targetSlotInRel)
 
     val joinedRecords = CAPFPhysicalOperator.joinRecords(header, Seq(targetSlotInRel -> targetSlot))(sourceAndRel, third.records)
+    val dataset = joinedRecords.data.toDataSet[Row]
     CAPFPhysicalResult(joinedRecords, first.graphs ++ second.graphs ++ third.graphs)
   }
 

@@ -7,6 +7,8 @@ import org.opencypher.flink.io.FileCsvPropertyGraphDataSource
 import org.opencypher.flink.schema.{CAPFNodeTable, CAPFRelationshipTable}
 import org.opencypher.okapi.api.graph.GraphName
 import org.opencypher.okapi.api.io.conversion.{NodeMapping, RelationshipMapping}
+import org.opencypher.okapi.logical.api.configuration.LogicalConfiguration.PrintLogicalPlan
+import org.opencypher.okapi.relational.api.configuration.CoraConfiguration.PrintPhysicalPlan
 
 
 object Demo extends App {
@@ -37,7 +39,11 @@ object Demo extends App {
   val relTable = CAPFRelationshipTable(relMapping, rels)
 
   val graph: CAPFGraph = session.readFrom(nodeTable, relTable)
-  graph.cypher("MATCH (n:Person)-[r:KNOWS]->(n2:Person) RETURN sum(n.age) AS ageSum").getRecords.show
+//  graph.cypher("MATCH (n:Person)-[r:KNOWS]->(n2:Person) RETURN n, sum(n2.age) AS ageSum").getRecords.show
+//  graph.cypher("MATCH (n) RETURN n.name, n.age ORDER BY n.age").getRecords.show
+  PrintLogicalPlan.set()
+  PrintPhysicalPlan.set()
+  graph.cypher("UNWIND ['1', '2', '3'] AS x RETURN x").getRecords.show
 //  graph.cypher("MATCH (n:Employee) RETURN n").getRecords.show
 
 }
@@ -51,7 +57,8 @@ object DemoData {
 
   val rels = Seq(
     (2L, 0L, 1L, "KNOWS", "2018"),
-    (4L, 3L, 1L, "KNOWS", "2010")
+    (4L, 3L, 1L, "KNOWS", "2010"),
+    (5L, 1L, 3L, "KNOWS", "2010")
   )
 
 }

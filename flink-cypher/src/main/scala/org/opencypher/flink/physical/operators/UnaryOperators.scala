@@ -1,16 +1,22 @@
 package org.opencypher.flink.physical.operators
 
+import org.apache.flink.api.common.typeinfo.{BasicTypeInfo, TypeInformation, Types}
+import org.apache.flink.api.scala._
 import org.apache.flink.table.api.scala._
 import org.apache.flink.table.expressions.{Expression, UnresolvedFieldReference}
+import org.apache.flink.types.Row
 import org.opencypher.flink.FlinkSQLExprMapper._
+import org.opencypher.flink.FlinkUtils._
 import org.opencypher.flink.TableOps._
 import org.opencypher.flink.physical.{CAPFPhysicalResult, CAPFRuntimeContext}
+import org.opencypher.flink.physical.operators.CAPFPhysicalOperator._
 import org.opencypher.flink.schema.EntityTable._
 import org.opencypher.flink.{CAPFRecords, CAPFSession, ColumnName}
-import org.opencypher.flink.FlinkUtils._
 import org.opencypher.okapi.api.graph.QualifiedGraphName
 import org.opencypher.okapi.api.types._
+import org.opencypher.okapi.api.value.CypherValue.CypherList
 import org.opencypher.okapi.impl.exception.{IllegalArgumentException, IllegalStateException, NotImplementedException}
+import org.opencypher.okapi.ir.api.block.{Asc, Desc, SortItem}
 import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.ir.impl.syntax.ExprSyntax._
 import org.opencypher.okapi.logical.impl._
@@ -205,14 +211,23 @@ final case class Aggregate(
       def withInnerExpr(expr: Expr)(f: Expression => Expression) =
         f(expr.asFlinkSQLExpr(records.header, inData, context))
 
-      val data =
+      val ds = inData.toDataSet[Row]
+
+      val columns =
         if (group.nonEmpty) {
-          val columns = group.flatMap { expr =>
-            val withChildren = records.header.selfWithChildren(expr).map(_.content.key)
-            withChildren.map(e => withInnerExpr(e)(identity))
+          group.flatMap { expr =>
+            val withChildren = records.header.selfWithChildren(expr).map(_.content)
+            withChildren.map(e => UnresolvedFieldReference(ColumnName.of(e)))
+//            withChildren.map(e => withInnerExpr(e)(identity))
           }
+        } else null
+
+      val data =
+        if (columns != null) {
           Left(inData.groupBy(columns.toSeq: _*))
         } else Right(inData)
+
+      val sum = data.left.get.select(s"n, sum(____n_dot_ageINTEGER)").toDataSet[Row]
 
       val flinkAggFunctions = aggregations.map {
         case (to, inner) =>
@@ -247,11 +262,103 @@ final case class Aggregate(
       }
 
       val aggregated = data.fold(
-        _.select(flinkAggFunctions.toSeq: _*),
+        _.select((columns ++ flinkAggFunctions).toSeq: _*),
         _.select(flinkAggFunctions.toSeq: _*)
       )
 
       CAPFRecords.verifyAndCreate(header, aggregated)(records.capf)
+    }
+  }
+}
+
+final case class Distinct(in: CAPFPhysicalOperator, fields: Set[Var])
+  extends UnaryPhysicalOperator with InheritedHeader {
+
+  override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
+    prev.mapRecordsWithDetails { records =>
+      CAPFRecords.verifyAndCreate(prev.records.header, records.data.distinct())(records.capf)
+    }
+  }
+
+}
+
+final case class OrderBy(in: CAPFPhysicalOperator, sortItems: Seq[SortItem[Expr]])
+  extends UnaryPhysicalOperator with InheritedHeader {
+
+  override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
+    val getColumnName = (expr: Var) => ColumnName.of(prev.records.header.slotFor(expr))
+
+    prev.mapRecordsWithDetails { records =>
+
+      val sortExpression = sortItems.map {
+        case Asc(expr: Var) => expr.asFlinkSQLExpr(records.header, records.data, context)
+        case Desc(expr: Var) => expr.asFlinkSQLExpr(records.header, records.data, context)
+        case other => throw IllegalArgumentException("ASC or DESC", other)
+      }
+
+      val sortedData = records.toTable().orderBy(sortExpression: _*)
+      CAPFRecords.verifyAndCreate(header, sortedData)(records.capf)
+    }
+  }
+}
+
+final case class Unwind(in: CAPFPhysicalOperator, list: Expr, item: Var, header: RecordHeader)
+  extends UnaryPhysicalOperator {
+
+  override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
+    prev.mapRecordsWithDetails { records =>
+      val itemColumn = ColumnName.of(header.slotFor(item))
+      val newData = list match {
+        case Param(name) =>
+          context.parameters(name).as[CypherList] match {
+            case Some(l) =>
+              val flinkType = toFlinkType(item.cypherType)
+              val nullable = item.cypherType.isNullable
+
+              val rowList = l.unwrap.map(java.lang.String.valueOf(_))
+              val rowDataSet = records.capf.env.fromCollection(rowList)
+              val tableSchema = UnresolvedFieldReference(itemColumn)
+              val table = records.capf.tableEnv.fromDataSet(rowDataSet, tableSchema)
+              val tableWithCorrectType = table.select(tableSchema)
+//              records.data.toDataSet[Row].cross(tableWithCorrectType).map {
+//                case (r1: Row, r2: Row) =>
+//                  r1.
+//              } .toTable(records.capf.tableEnv)
+              records.data.leftOuterJoin(tableWithCorrectType)
+//              TODO
+
+            case None =>
+              throw IllegalArgumentException("a list", list)
+          }
+
+        case expr =>
+          val listColumn = expr.asFlinkSQLExpr(records.header, records.data, context)
+
+          records.data.safeAddColumn(itemColumn, listColumn.flatten())
+      }
+
+      CAPFRecords.verifyAndCreate(header, newData)(records.capf)
+    }
+  }
+}
+
+final case class InitVarExpand(in: CAPFPhysicalOperator, source: Var, edgeList: Var, target: Var, header: RecordHeader)
+  extends UnaryPhysicalOperator {
+
+  override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
+    val sourceSlot = header.slotFor(source)
+    val edgeListSlot = header. slotFor(edgeList)
+    val targetSlot = header.slotFor(target)
+
+    assertIsNode(targetSlot)
+
+    prev.mapRecordsWithDetails { records =>
+      val inputData = records.data
+      val keep = inputData.columns.map(inputData.col)
+
+      val edgeListColName = columnName(edgeListSlot)
+
+      ???
     }
   }
 }

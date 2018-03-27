@@ -204,7 +204,8 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
     * @param fields fields to compute distinct on
     * @return distinct operator
     */
-  override def planDistinct(in: CAPFPhysicalOperator, fields: Set[Var]): CAPFPhysicalOperator = ???
+  override def planDistinct(in: CAPFPhysicalOperator, fields: Set[Var]): CAPFPhysicalOperator =
+    operators.Distinct(in, fields)
 
   /**
     * Orders the underlying records by the given expressions.
@@ -214,7 +215,8 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
     * @param header    resulting record header
     * @return order by operator
     */
-  override def planOrderBy(in: CAPFPhysicalOperator, sortItems: Seq[SortItem[Expr]], header: RecordHeader): CAPFPhysicalOperator = ???
+  override def planOrderBy(in: CAPFPhysicalOperator, sortItems: Seq[SortItem[Expr]], header: RecordHeader): CAPFPhysicalOperator =
+    operators.OrderBy(in, sortItems)
 
   /**
     * Unwinds the given list of items into the specified var for each row in the input records.
@@ -225,7 +227,8 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
     * @param header resulting record header
     * @return unwind operator
     */
-  override def planUnwind(in: CAPFPhysicalOperator, list: Expr, item: Var, header: RecordHeader): CAPFPhysicalOperator = ???
+  override def planUnwind(in: CAPFPhysicalOperator, list: Expr, item: Var, header: RecordHeader): CAPFPhysicalOperator =
+    operators.Unwind(in, list, item, header)
 
   /**
     * Initializes the underlying records for a variable expand computation (e.g., (a)-[:A*1..3]->(b)).

@@ -58,6 +58,7 @@ class CAPFScanGraph(val scans: Seq[CAPFEntityTable], val schema: Schema)(implici
       val candidateTypes = entityTableTypes.filter(isSubType)
       val selectedScans = candidateTypes.flatMap(typ => entityTablesByType.get(typ).map(_.head))
       selectedScans
+
     }
   }
 }

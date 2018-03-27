@@ -33,8 +33,8 @@ sealed abstract class CAPFRecords(val header: RecordHeader, val data: Table)(imp
   override def size: Long = data.count()
 
   def toCypherMaps: DataSet[CypherMap] = {
-    data.toDataSet[Row]
-      .map(rowToCypherMap(header, data.getSchema.columnNameToIndex))
+    val dataSet = data.toDataSet[Row]
+      dataSet.map(rowToCypherMap(header, data.getSchema.columnNameToIndex))
   }
 
   override def columns: Seq[String] =
@@ -66,7 +66,6 @@ sealed abstract class CAPFRecords(val header: RecordHeader, val data: Table)(imp
       case _ => throw IllegalArgumentException("CTNode or CTRelationship", oldEntity.cypherType)
     }
 
-
     val slots = this.header.slots
     val renamedSlotMapping = slots.map { slot =>
       slot -> slot.withOwner(v)
@@ -88,8 +87,7 @@ sealed abstract class CAPFRecords(val header: RecordHeader, val data: Table)(imp
         case Some(_) =>
           Symbol(ColumnName.of(targetSlot)) as Symbol(ColumnName.of(targetSlot)) // TODO: check for name equality
         case None => targetSlot.content.key match {
-          case HasLabel(_, label) if entityLabels.contains(label.name) => true as Symbol(ColumnName.of(targetSlot))
-          case _: HasLabel => false as Symbol(ColumnName.of(targetSlot))
+          case HasLabel(_, l: Label) => entityLabels(l.name) as Symbol(ColumnName.of(targetSlot))
           case _: Type if entityLabels.size == 1 => entityLabels.head as Symbol(ColumnName.of(targetSlot))
           case _ => "Null" as Symbol(ColumnName.of(targetSlot))
         }

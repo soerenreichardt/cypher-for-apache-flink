@@ -84,7 +84,7 @@
     <dep.netty.version>4.1.8.Final</dep.netty.version>
     <dep.neo4j.driver.version>1.4.2</dep.neo4j.driver.version>
     <dep.spark.version>2.2.0</dep.spark.version>
-    <dep.flink.version>1.4.0</dep.flink.version>
+    <dep.flink.version>1.4.2</dep.flink.version>
 
     <!-- Test scope dependencies -->
     <dep.bouncycastle.version>1.57</dep.bouncycastle.version>

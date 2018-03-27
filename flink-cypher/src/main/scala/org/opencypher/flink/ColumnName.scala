@@ -102,7 +102,7 @@ object ColumnName {
       case '$' => "_dollar_"
       case '?' => "_query_"
       case '!' => "_exclamation_"
-      case ':' => ":"
+      case ':' => "_colon_"
       case ';' => "_semicolon_"
       case '-' => "_dash_"
       case '+' => "_plus_"
