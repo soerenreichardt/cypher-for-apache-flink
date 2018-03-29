@@ -17,15 +17,16 @@ package org.opencypher.okapi.relational.impl.physical
 
 import org.opencypher.okapi.api.graph.{CypherSession, PropertyGraph}
 import org.opencypher.okapi.api.table.CypherRecords
-import org.opencypher.okapi.api.types.CTRelationship
+import org.opencypher.okapi.api.types.{CTNode, CTRelationship}
 import org.opencypher.okapi.impl.exception.{IllegalArgumentException, NotImplementedException}
 import org.opencypher.okapi.relational.impl.flat
 import org.opencypher.okapi.ir.api.block.SortItem
-import org.opencypher.okapi.ir.api.expr.{Expr, TrueLit, Var}
+import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.ir.api.util.DirectCompilationStage
 import org.opencypher.okapi.logical.impl._
 import org.opencypher.okapi.relational.api.physical.{PhysicalOperator, PhysicalOperatorProducer, PhysicalPlannerContext, RuntimeContext}
 import org.opencypher.okapi.relational.impl.flat.FlatOperator
+import org.opencypher.okapi.relational.impl.table.RecordHeader
 
 class PhysicalPlanner[P <: PhysicalOperator[R, G, C], R <: CypherRecords, G <: PropertyGraph, C <: RuntimeContext[R, G] ](producer: PhysicalOperatorProducer[P, R, G, C])
 
@@ -118,14 +119,43 @@ class PhysicalPlanner[P <: PhysicalOperator[R, G, C], R <: CypherRecords, G <: P
         val startFrom = producer.planStartFromUnit(externalGraph)
         val second = producer.planRelationshipScan(startFrom, op.sourceGraph, rel, relHeader)
 
+        def expandSource(_first: P, _second: P, _third: P, _source: Var, _rel: Var, _target: Var, _header: RecordHeader, removeSelfRelationships: Boolean = false): P = {
+          val relationships =
+            if (removeSelfRelationships) {
+              producer.planFilter(_second,
+                Not(Equals(_second.header.sourceNodeSlot(_rel).content.key, _second.header.targetNodeSlot(_rel).content.key)(CTNode))(CTNode),
+                _second.header)
+            } else _second
+          val sourceSlot = _first.header.slotFor(_source)
+          val sourceSlotInRel = _second.header.sourceNodeSlot(_rel)
+
+          val sourceToRelHeader = _first.header ++ _second.header
+          val sourceAndRel = producer.planValueJoin(_first, relationships, Set(Equals(sourceSlot.content.key, sourceSlotInRel.content.key)(CTNode)), sourceToRelHeader)
+
+          val targetSlot = _third.header.slotFor(_target)
+          val targetSlotInRel = sourceAndRel.header.targetNodeSlot(_rel)
+
+          producer.planValueJoin(sourceAndRel, _third, Set(Equals(targetSlotInRel.content.key, targetSlot.content.key)(CTNode)), _header)
+        }
+
         direction match {
           case Directed =>
-            producer.planExpandSource(first, second, third, source, rel, target, header)
+            expandSource(first, second, third, source, rel, target, header)
           case Undirected =>
-            val outgoing = producer.planExpandSource(first, second, third, source, rel, target, header)
-            val incoming = producer.planExpandSource(third, second, first, target, rel, source, header, removeSelfRelationships = true)
+            val outgoing = expandSource(first, second, third, source, rel, target, header)
+            val incoming = expandSource(third, second, first, target, rel, source, header, removeSelfRelationships = true)
             producer.planUnion(outgoing, incoming)
         }
+
+
+//        direction match {
+//          case Directed =>
+//            producer.planExpandSource(first, second, third, source, rel, target, header)
+//          case Undirected =>
+//            val outgoing = producer.planExpandSource(first, second, third, source, rel, target, header)
+//            val incoming = producer.planExpandSource(third, second, first, target, rel, source, header, removeSelfRelationships = true)
+//            producer.planUnion(outgoing, incoming)
+//        }
 
       case op@flat.ExpandInto(source, rel, target, direction, sourceOp, header, relHeader) =>
         val in = process(sourceOp)

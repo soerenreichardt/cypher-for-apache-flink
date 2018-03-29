@@ -240,7 +240,8 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
     * @param header   resulting record header
     * @return init var expand operator
     */
-  override def planInitVarExpand(in: CAPFPhysicalOperator, source: Var, edgeList: Var, target: Var, header: RecordHeader): CAPFPhysicalOperator = ???
+  override def planInitVarExpand(in: CAPFPhysicalOperator, source: Var, edgeList: Var, target: Var, header: RecordHeader): CAPFPhysicalOperator =
+    operators.InitVarExpand(in, source, edgeList, target, header)
 
   /**
     * Skips the given amount of rows in the input records. The number of rows is specified by an expression which can be
@@ -283,7 +284,8 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
     * @param header     resulting record header
     * @return value join operator
     */
-  override def planValueJoin(lhs: CAPFPhysicalOperator, rhs: CAPFPhysicalOperator, predicates: Set[expr.Equals], header: RecordHeader): CAPFPhysicalOperator = ???
+  override def planValueJoin(lhs: CAPFPhysicalOperator, rhs: CAPFPhysicalOperator, predicates: Set[expr.Equals], header: RecordHeader): CAPFPhysicalOperator =
+    operators.ValueJoin(lhs, rhs, predicates, header)
 
   /**
     * Unions the input records.
@@ -292,7 +294,8 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
     * @param rhs second previous operator
     * @return union operator
     */
-  override def planUnion(lhs: CAPFPhysicalOperator, rhs: CAPFPhysicalOperator): CAPFPhysicalOperator = ???
+  override def planUnion(lhs: CAPFPhysicalOperator, rhs: CAPFPhysicalOperator): CAPFPhysicalOperator =
+    operators.Union(lhs, rhs)
 
   /**
     * Joins the two input records on two columns, where `source` is solved in the first operator and `target` is solved
@@ -364,5 +367,6 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
     * @param isExpandInto   true, iff the target variable is solved and can be replaced by a filter
     * @return bounded var expand operator
     */
-  override def planBoundedVarExpand(first: CAPFPhysicalOperator, second: CAPFPhysicalOperator, third: CAPFPhysicalOperator, rel: Var, edgeList: Var, target: Var, initialEndNode: Var, lower: Int, upper: Int, direction: Direction, header: RecordHeader, isExpandInto: Boolean): CAPFPhysicalOperator = ???
+  override def planBoundedVarExpand(first: CAPFPhysicalOperator, second: CAPFPhysicalOperator, third: CAPFPhysicalOperator, rel: Var, edgeList: Var, target: Var, initialEndNode: Var, lower: Int, upper: Int, direction: Direction, header: RecordHeader, isExpandInto: Boolean): CAPFPhysicalOperator =
+    operators.BoundedVarExpand(first, second, third, rel, edgeList, target, initialEndNode, lower, upper, direction, header, isExpandInto)
 }

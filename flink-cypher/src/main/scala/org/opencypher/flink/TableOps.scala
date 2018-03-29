@@ -49,6 +49,13 @@ object TableOps {
       table.select(renamedColumns: _*)
     }
 
+    def safeDropColumn(name: String): Table = {
+      require(table.columns.contains(name),
+        s"Cannot drop column `$name`. No column with that name exists.")
+      val columnSelect = table.columns.filterNot(_ == (name))
+      table.select(columnSelect.map(UnresolvedFieldReference): _*)
+    }
+
     def safeDropColumns(names: String*): Table = {
       val nonExistentColumns = names.toSet -- table.columns
       require(nonExistentColumns.isEmpty,
@@ -74,18 +81,14 @@ object TableOps {
       require(!table.columns.contains(name),
         s"Cannot add column `$name`. A column with that name exists already. " +
       s"Use `safeReplaceColumn` if you intend to replace that column.")
-      require(table.getSchema.getColumnNames.length == 1,
-        s"The table should consist of a single column.")
-      table.select("*", col.columns.head as Symbol(name))
+      table.select('*, col.columns.head as Symbol(name))
     }
 
     def safeAddColumn(name: String, expr: Expression): Table = {
       require(!table.columns.contains(name),
         s"Cannot add column `$name`. A column with that name exists already. " +
           s"Use `safeReplaceColumn` if you intend to replace that column.")
-      require(table.getSchema.getColumnNames.length == 1,
-        s"The table should consist of a single column.")
-      table.select("*", expr)
+      table.select('*, expr as Symbol(name))
     }
 
   }

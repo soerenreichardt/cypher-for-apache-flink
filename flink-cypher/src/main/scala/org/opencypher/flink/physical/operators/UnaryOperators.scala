@@ -1,9 +1,10 @@
 package org.opencypher.flink.physical.operators
 
-import org.apache.flink.api.common.typeinfo.{BasicTypeInfo, TypeInformation, Types}
+import org.apache.flink.api.common.typeinfo.{BasicTypeInfo, TypeInformation}
 import org.apache.flink.api.scala._
 import org.apache.flink.table.api.scala._
-import org.apache.flink.table.expressions.{Expression, UnresolvedFieldReference}
+import org.apache.flink.table.api.Types
+import org.apache.flink.table.expressions.{Expression, Literal, UnresolvedFieldReference}
 import org.apache.flink.types.Row
 import org.opencypher.flink.FlinkSQLExprMapper._
 import org.opencypher.flink.FlinkUtils._
@@ -351,11 +352,22 @@ final case class InitVarExpand(in: CAPFPhysicalOperator, source: Var, edgeList: 
 
     prev.mapRecordsWithDetails { records =>
       val inputData = records.data
-      val keep = inputData.columns.map(inputData.col)
+      val keep = inputData.columns.map(UnresolvedFieldReference)
 
       val edgeListColName = columnName(edgeListSlot)
+      val emptyListLit = Literal(ListLit, Types.PRIMITIVE_ARRAY(TypeInformation.of(java.lang.Long.TYPE)))
+      val test = inputData.safeAddColumn("bar", "foo")
+      val test2 = inputData.select('*, emptyListLit as Symbol("bar"))
+      val withEmptyList = inputData.safeAddColumn(edgeListColName, emptyListLit)
 
-      ???
+      val cols = keep ++
+        Seq(UnresolvedFieldReference(edgeListColName)) ++
+        Seq(columnName(sourceSlot) as Symbol(columnName(targetSlot)))
+
+      val initializedData = withEmptyList.select(
+        cols: _*)
+
+      CAPFRecords.verifyAndCreate(header, initializedData)(records.capf)
     }
   }
 }

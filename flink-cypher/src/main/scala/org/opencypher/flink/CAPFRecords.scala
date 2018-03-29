@@ -241,12 +241,12 @@ object CAPFRecords extends CypherRecordsCompanion[CAPFRecords, CAPFSession] {
       val tableSchema = initialData.getSchema
       val fieldName = ColumnName.of(slot)
       val fieldType = tableSchema.getType(fieldName).get
-      val cypherType = fromFlinkType(fieldType)
-        .getOrElse(throw IllegalArgumentException("a supported Flink type", fieldType))
+//      val cypherType = fromFlinkType(fieldType)
+//        .getOrElse(throw IllegalArgumentException("a supported Flink type", fieldType))
       val headerType = slot.content.cypherType
 
-      if (toFlinkType(headerType) != toFlinkType(cypherType) && !containsEntity(headerType))
-        throw IllegalArgumentException(s"a valid data type for column ${fieldName} of type $headerType", cypherType)
+//      if (toFlinkType(headerType) != toFlinkType(cypherType) && !containsEntity(headerType))
+//        throw IllegalArgumentException(s"a valid data type for column ${fieldName} of type $headerType", cypherType)
     }
     createInternal(initialHeader, initialData)
   }
