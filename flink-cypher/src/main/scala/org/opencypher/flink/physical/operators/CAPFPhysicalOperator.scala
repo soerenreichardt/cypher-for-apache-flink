@@ -4,6 +4,7 @@ import org.apache.flink.table.api.Table
 import org.opencypher.flink.CAPFConverters._
 import org.opencypher.flink.TableOps._
 import org.opencypher.flink._
+import org.opencypher.flink.schema.EntityTable._
 import org.opencypher.flink.physical.{CAPFPhysicalResult, CAPFRuntimeContext}
 import org.opencypher.okapi.api.graph.QualifiedGraphName
 import org.opencypher.okapi.api.types.CTNode
@@ -46,12 +47,11 @@ object CAPFPhysicalOperator {
 
     val joinCols = joinSlots.map(pair => columnName(pair._1) -> columnName(pair._2))
 
-    joinTables(lhsData, rhsData,  header, joinCols)(joinType, deduplicate)(lhs.capf)
+    joinTables(lhsData, rhsData,  header, joinCols, joinType)(deduplicate)(lhs.capf)
   }
 
-  def joinTables(lhsData: Table, rhsData: Table, header: RecordHeader, joinCols: Seq[(String, String)])(
-    joinType: String,
-    deduplicate: Boolean)(implicit capf: CAPFSession): CAPFRecords = {
+  def joinTables(lhsData: Table, rhsData: Table, header: RecordHeader, joinCols: Seq[(String, String)], joinType: String)
+    (deduplicate: Boolean)(implicit capf: CAPFSession): CAPFRecords = {
 
     val joinedData = lhsData.safeJoin(rhsData, joinCols, joinType)
 

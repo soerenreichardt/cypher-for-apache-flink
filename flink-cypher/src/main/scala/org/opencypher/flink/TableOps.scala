@@ -5,8 +5,11 @@ import org.apache.flink.table.api.{Table, Types}
 import org.apache.flink.table.api.scala._
 import org.apache.flink.api.scala._
 import org.apache.flink.table.expressions._
+import org.apache.flink.table.shaded.org.apache.commons.lang.NotImplementedException
 import org.apache.flink.types.Row
 import org.opencypher.flink.schema.EntityTable._
+import org.opencypher.okapi.impl.exception
+import org.opencypher.okapi.impl.exception.NotImplementedException
 
 object TableOps {
 
@@ -49,6 +52,18 @@ object TableOps {
       table.select(renamedColumns: _*)
     }
 
+    def safeRenameColumns(oldNames: Seq[String], newNames: Seq[String]): Table = {
+      require(!newNames.forall(table.columns.contains),
+        s"Cannot rename columns `$oldNames` to `$newNames`. One or more columns of `$newNames` exist already.")
+
+      val namePairs = oldNames zip newNames
+      val renames = namePairs.map(_ match {
+        case (oldName: String, newName: String) => Symbol(oldName) as Symbol(newName)
+      })
+
+      table.select(renames: _*)
+    }
+
     def safeDropColumn(name: String): Table = {
       require(table.columns.contains(name),
         s"Cannot drop column `$name`. No column with that name exists.")
@@ -74,7 +89,13 @@ object TableOps {
         case (l, r) => UnresolvedFieldReference(l) === UnresolvedFieldReference(r)
       }.foldLeft(Literal(true, BasicTypeInfo.BOOLEAN_TYPE_INFO): Expression)((acc, expr) => And(acc, expr))
 
-      table.join(other, joinExpr)
+      joinType match {
+        case "inner" => table.join(other, joinExpr)
+        case "left" => table.leftOuterJoin(other, joinExpr)
+        case "right" => table.rightOuterJoin(other, joinExpr)
+        case "outer" | "full" => table.fullOuterJoin(other, joinExpr)
+        case x => throw exception.NotImplementedException(s"Join type $x")
+      }
     }
 
     def safeAddColumn(name: String, col: Table): Table = {

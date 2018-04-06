@@ -88,6 +88,41 @@ final case class Alias(in: CAPFPhysicalOperator, expr: Expr, alias: Var, header:
   }
 }
 
+final case class BulkAlias(in: CAPFPhysicalOperator, exprs: Seq[Expr], aliases: Seq[RecordSlot], header: RecordHeader)
+  extends UnaryPhysicalOperator {
+
+  override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
+    prev.mapRecordsWithDetails { records =>
+      val oldSlots = exprs.map(records.header.slotsFor(_).head)
+
+      val newSlots = aliases
+
+      val oldColumnNames = oldSlots.map(ColumnName.of)
+      val newColumnNames = newSlots.map(ColumnName.of)
+
+      val newData = if (oldColumnNames.forall(records.data.columns.contains)) {
+        records.data.safeRenameColumns(oldColumnNames, newColumnNames)
+      } else {
+        throw IllegalArgumentException(s"some columns with name $oldColumnNames")
+      }
+
+      CAPFRecords.verifyAndCreate(header, newData)(records.capf)
+    }
+  }
+}
+
+final case class Select(in: CAPFPhysicalOperator, exprs: Seq[Expr], header: RecordHeader)
+  extends UnaryPhysicalOperator {
+
+  override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
+    prev.mapRecordsWithDetails { records =>
+      val newData = records.data.select(exprs.map(_.asFlinkSQLExpr(header, records.data, context)): _*)
+
+      CAPFRecords.verifyAndCreate(header, newData)(records.capf)
+    }
+  }
+}
+
 final case class SelectFields(in: CAPFPhysicalOperator, field: IndexedSeq[Var], header: RecordHeader)
   extends UnaryPhysicalOperator {
 
@@ -161,13 +196,15 @@ final case class RemoveAliases(
 final case class Filter(in: CAPFPhysicalOperator, expr: Expr, header: RecordHeader) extends UnaryPhysicalOperator {
   override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
     prev.mapRecordsWithDetails { records =>
-      val filteredRows = records.data.where(expr.asFlinkSQLExpr(header, records.data, context))
+//      val filteredRows = records.data.where(expr.asFlinkSQLExpr(header, records.data, context))
 
-      val selectedColumns = header.slots.map { ColumnName.of(_) }.map( UnresolvedFieldReference(_) )
+//      val selectedColumns = header.slots.map { ColumnName.of(_) }.map( UnresolvedFieldReference(_) )
 
-      val newData = filteredRows.select(selectedColumns: _*)
+//      val newData = filteredRows.select(selectedColumns: _*)
 
-      CAPFRecords.verifyAndCreate(header, newData)(records.capf)
+      val filteredData = records.data.filter(expr.asFlinkSQLExpr(header, records.data, context))
+
+      CAPFRecords.verifyAndCreate(header, filteredData)(records.capf)
     }
   }
 }
@@ -345,7 +382,7 @@ final case class InitVarExpand(in: CAPFPhysicalOperator, source: Var, edgeList: 
 
   override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
     val sourceSlot = header.slotFor(source)
-    val edgeListSlot = header. slotFor(edgeList)
+    val edgeListSlot = header.slotFor(edgeList)
     val targetSlot = header.slotFor(target)
 
     assertIsNode(targetSlot)

@@ -22,7 +22,7 @@ import org.opencypher.okapi.ir.api.block.SortItem
 import org.opencypher.okapi.ir.api.expr.{Aggregator, Expr, Var}
 import org.opencypher.okapi.logical.impl.{ConstructedEntity, Direction, LogicalExternalGraph, LogicalGraph}
 import org.opencypher.okapi.relational.impl.physical.PhysicalPlanner
-import org.opencypher.okapi.relational.impl.table.{ProjectedExpr, ProjectedField, RecordHeader}
+import org.opencypher.okapi.relational.impl.table.{ProjectedExpr, ProjectedField, RecordHeader, RecordSlot}
 
 /**
   * Main interface to be implemented by custom (relational) back-ends to execute a Cypher query. Methods are being
@@ -106,6 +106,8 @@ trait PhysicalOperatorProducer[P <: PhysicalOperator[R, G, C], R <: CypherRecord
     */
   def planAlias(in: P, expr: Expr, alias: Var, header: RecordHeader): P
 
+  def planBulkAlias(in: P, exprs: Seq[Expr], aliases: Seq[RecordSlot], header: RecordHeader): P
+
   /**
     * The operator takes a set of (field, expression) aliases and renames the columns identified by a field to the
     * corresponding expression.
@@ -145,6 +147,16 @@ trait PhysicalOperatorProducer[P <: PhysicalOperator[R, G, C], R <: CypherRecord
     * @return select graphs operator
     */
   def planSelectGraphs(in: P, graphs: Set[String]): P
+
+  /**
+    * Performs a select on the given records based on the specified expressions
+    *
+    * @param in     previous operator
+    * @param exprs  expressions to perform in select statement
+    * @param header resulting record header
+    * @return select operator
+    */
+  def planSelect(in: P, exprs: Seq[Expr], header: RecordHeader): P
 
   /**
     * Evaluates the given expression and projects it to a new column in the input records.
@@ -273,13 +285,14 @@ trait PhysicalOperatorProducer[P <: PhysicalOperator[R, G, C], R <: CypherRecord
   /**
     * Joins the two input records on node attribute values.
     *
-    * @param lhs        first previous operator
-    * @param rhs        second previous operator
-    * @param predicates join predicates
-    * @param header     resulting record header
+    * @param lhs          first previous operator
+    * @param rhs          second previous operator
+    * @param joinColumns  sequence of left and right join columns
+    * @param header       resulting record header
+    * @param joinType     join type, defaults to inner join
     * @return value join operator
     */
-  def planValueJoin(lhs: P, rhs: P, predicates: Set[org.opencypher.okapi.ir.api.expr.Equals], header: RecordHeader): P
+  def planJoin(lhs: P, rhs: P, joinColumns: Seq[(Expr, Expr)], header: RecordHeader, joinType: String = "inner"): P
 
   /**
     * Unions the input records.

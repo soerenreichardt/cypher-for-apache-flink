@@ -18,7 +18,7 @@ package org.opencypher.okapi.relational.impl.flat
 import org.opencypher.okapi.ir.api.block.SortItem
 import org.opencypher.okapi.ir.api.expr.{Aggregator, Expr, Var}
 import org.opencypher.okapi.logical.impl.{Direction, LogicalGraph}
-import org.opencypher.okapi.relational.impl.table.{OpaqueField, ProjectedExpr, ProjectedField, RecordHeader}
+import org.opencypher.okapi.relational.impl.table._
 import org.opencypher.okapi.trees.AbstractTreeNode
 
 sealed abstract class FlatOperator extends AbstractTreeNode[FlatOperator] {
@@ -82,6 +82,8 @@ final case class Aggregate(
 
 final case class Alias(expr: Expr, alias: Var, in: FlatOperator, header: RecordHeader) extends StackingFlatOperator
 
+final case class BulkAlias(exprs: Seq[Expr], aliases: Seq[RecordSlot], in: FlatOperator, header: RecordHeader) extends StackingFlatOperator
+
 final case class CartesianProduct(lhs: FlatOperator, rhs: FlatOperator, header: RecordHeader) extends BinaryFlatOperator
 
 final case class Optional(lhs: FlatOperator, rhs: FlatOperator, header: RecordHeader) extends BinaryFlatOperator
@@ -128,13 +130,14 @@ final case class InitVarExpand(source: Var, edgeList: Var, endNode: Var, in: Fla
     extends StackingFlatOperator
 
 final case class BoundedVarExpand(
+    source: Var,
     rel: Var,
-    edgeList: Var,
+//    edgeList: Var,
     target: Var,
     direction: Direction,
     lower: Int,
     upper: Int,
-    sourceOp: InitVarExpand,
+    sourceOp: FlatOperator,
     relOp: FlatOperator,
     targetOp: FlatOperator,
     header: RecordHeader,

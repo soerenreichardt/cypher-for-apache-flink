@@ -10,7 +10,7 @@ import org.opencypher.okapi.ir.api.expr
 import org.opencypher.okapi.ir.api.expr.{Aggregator, Expr, Var}
 import org.opencypher.okapi.logical.impl.{ConstructedEntity, Direction, LogicalExternalGraph, LogicalGraph}
 import org.opencypher.okapi.relational.api.physical.{PhysicalOperatorProducer, PhysicalPlannerContext}
-import org.opencypher.okapi.relational.impl.table.{ProjectedExpr, ProjectedField, RecordHeader}
+import org.opencypher.okapi.relational.impl.table.{ProjectedExpr, ProjectedField, RecordHeader, RecordSlot}
 
 case class CAPFPhysicalPlannerContext(
   session: CAPFSession,
@@ -107,6 +107,9 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
   override def planAlias(in: CAPFPhysicalOperator, expr: Expr, alias: Var, header: RecordHeader): CAPFPhysicalOperator =
     operators.Alias(in, expr, alias, header)
 
+  override def planBulkAlias(in: CAPFPhysicalOperator, exprs: Seq[Expr], aliases: Seq[RecordSlot], header: RecordHeader): CAPFPhysicalOperator =
+    operators.BulkAlias(in, exprs, aliases, header)
+
   /**
     * The operator takes a set of (field, expression) aliases and renames the columns identified by a field to the
     * corresponding expression.
@@ -150,6 +153,9 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
     */
   override def planSelectGraphs(in: CAPFPhysicalOperator, graphs: Set[String]): CAPFPhysicalOperator =
     operators.SelectGraphs(in, graphs)
+
+  override def planSelect(in: CAPFPhysicalOperator, exprs: Seq[Expr], header: RecordHeader): CAPFPhysicalOperator =
+    operators.Select(in, exprs, header)
 
   /**
     * Evaluates the given expression and projects it to a new column in the input records.
@@ -273,19 +279,11 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
     * @param header resulting record header
     * @return cross operator
     */
-  override def planCartesianProduct(lhs: CAPFPhysicalOperator, rhs: CAPFPhysicalOperator, header: RecordHeader): CAPFPhysicalOperator = ???
+  override def planCartesianProduct(lhs: CAPFPhysicalOperator, rhs: CAPFPhysicalOperator, header: RecordHeader): CAPFPhysicalOperator =
+    operators.CartesianProduct(lhs, rhs, header)
 
-  /**
-    * Joins the two input records on node attribute values.
-    *
-    * @param lhs        first previous operator
-    * @param rhs        second previous operator
-    * @param predicates join predicates
-    * @param header     resulting record header
-    * @return value join operator
-    */
-  override def planValueJoin(lhs: CAPFPhysicalOperator, rhs: CAPFPhysicalOperator, predicates: Set[expr.Equals], header: RecordHeader): CAPFPhysicalOperator =
-    operators.ValueJoin(lhs, rhs, predicates, header)
+  override def planJoin(lhs: CAPFPhysicalOperator, rhs: CAPFPhysicalOperator, joinColumns: Seq[(Expr, Expr)], header: RecordHeader, joinType: String): CAPFPhysicalOperator =
+    operators.Join(lhs, rhs, joinColumns, header, joinType)
 
   /**
     * Unions the input records.

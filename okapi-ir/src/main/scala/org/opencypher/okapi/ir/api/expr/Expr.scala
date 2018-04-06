@@ -206,6 +206,10 @@ final case class In(lhs: Expr, rhs: Expr)(val cypherType: CypherType = CTWildcar
   override val op = "IN"
 }
 
+final case class As(lhs: Expr, rhs: Expr)(val cypherType: CypherType = CTWildcard) extends BinaryExpr {
+  override val op = "AS"
+}
+
 final case class Property(m: Expr, key: PropertyKey)(val cypherType: CypherType = CTWildcard) extends Expr {
   override def withoutType: String = s"${m.withoutType}.${key.name}"
 
@@ -363,6 +367,8 @@ sealed abstract class BoolLit(val v: Boolean)(val cypherType: CypherType = CTBoo
 final case class TrueLit() extends BoolLit(true)()
 
 final case class FalseLit() extends BoolLit(false)()
+
+final case class NullLit(v: Null = null)(val cypherType: CypherType = CTVoid) extends Lit[Null]
 
 // Pattern Predicate Expression
 

@@ -65,6 +65,9 @@ object FlinkSQLExprMapper {
           val flinkExpressions = exprs.map(_.asFlinkSQLExpr)
           array(flinkExpressions.head, flinkExpressions.tail: _*)
 
+        case NullLit(_) =>
+          "Null"
+
         case l: Lit[_] => Literal(l.v, TypeInformation.of(l.v.getClass))
 
         case Equals(e1, e2) => e1.asFlinkSQLExpr === e2.asFlinkSQLExpr
@@ -89,6 +92,14 @@ object FlinkSQLExprMapper {
           val element = lhs.asFlinkSQLExpr
           val array = rhs.asFlinkSQLExpr
           element in array
+
+        case As(lhs, rhs) =>
+          lhs match {
+            case e: Expr =>
+              e.asFlinkSQLExpr as Symbol(ColumnName.of(rhs))
+            case _ =>
+              Symbol(ColumnName.of(lhs)) as Symbol(ColumnName.of(rhs))
+          }
 
         case HasType(rel, relType) =>
           Type(rel)().asFlinkSQLExpr === relType.name
