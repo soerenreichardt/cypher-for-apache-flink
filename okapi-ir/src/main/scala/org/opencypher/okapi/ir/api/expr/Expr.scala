@@ -368,7 +368,7 @@ final case class TrueLit() extends BoolLit(true)()
 
 final case class FalseLit() extends BoolLit(false)()
 
-final case class NullLit(v: Null = null)(val cypherType: CypherType = CTVoid) extends Lit[Null]
+final case class NullLit(v: Null = null)(val cypherType: CypherType = CTWildcard) extends Lit[Any]
 
 // Pattern Predicate Expression
 

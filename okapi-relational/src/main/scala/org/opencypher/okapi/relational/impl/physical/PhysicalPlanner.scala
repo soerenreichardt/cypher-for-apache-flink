@@ -236,24 +236,18 @@ class PhysicalPlanner[P <: PhysicalOperator[R, G, C], R <: CypherRecords, G <: P
           val fieldsToSelect = renamedVars.map(slot => Var(slot.content.key.withoutType)(slot.content.cypherType)).toIndexedSeq
           val selectedData = producer.planSelectFields(withRelIsomorphism, fieldsToSelect, newHeader)
 
-          // TODO: select fields from joinedExpands also and process vars in select operator or expressionmapping correctly!
-          val withEmptyFields = producer.planSelect(joinedExpands, fieldsToSelect.map(As(NullLit()(CTVoid), _)(CTWildcard)).toSeq, joinedData.header)
+          val withEmptyFields = producer.planSelect(
+            joinedExpands,
+            joinedExpands.header.slots.map(slot => slot.content.key) ++
+              renamedVars.map(slot => As(NullLit()(slot.content.cypherType), slot.content.key)(CTWildcard)),
+            joinedData.header)
 
           val unionedData = producer.planUnion(withEmptyFields, withRelIsomorphism)
-
-//          val leftJoinedData = producer.planJoin(
-//            joinedExpands,
-//            selectedData,
-//            Seq((joinedExpands.header.slotFor(oldTargetVar).content.key, selectedData.header.sourceNodeSlot(newRelVar).content.key)),
-//            joinedExpands.header ++ newHeader,
-//            "left"
-//          )
 
           iterate(i+1, unionedData, newTargetVar, edgeVars + newRelVar)
         }
 
-        val it = iterate(1, expand, target, Set(rel))
-        it
+        iterate(1, expand, target, Set(rel))
 
       case flat.Optional(lhs, rhs, header) =>
         producer.planOptional(process(lhs), process(rhs), header)

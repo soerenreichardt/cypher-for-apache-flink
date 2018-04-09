@@ -40,7 +40,7 @@ object Demo extends App {
 
   PrintPhysicalPlan.set()
 //  graph.cypher("MATCH (n:Person)-[r:KNOWS]->(n2:Person) RETURN *").getRecords.show
-  graph.cypher("MATCH (n:Person)-[r:KNOWS*1..3]->(n2:Person) RETURN n.name, n2.name").getRecords.show
+  graph.cypher("MATCH (n:Person)-[r:KNOWS*1..3]->(n2:Person) RETURN *").getRecords.show
 //  graph.cypher(
 //    """
 //      |MATCH (a {name: 'Alice'}), (b {name: 'Bob'})

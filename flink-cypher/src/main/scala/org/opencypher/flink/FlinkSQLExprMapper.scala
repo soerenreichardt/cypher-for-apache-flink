@@ -3,14 +3,14 @@ package org.opencypher.flink
 import org.apache.flink.api.common.typeinfo.TypeInformation
 import org.apache.flink.table.api.scala._
 import org.apache.flink.table.api.{Table, Types}
-import org.apache.flink.table.expressions.{Expression, Literal, UnresolvedFieldReference}
+import org.apache.flink.table.expressions.{Expression, Literal, Null, UnresolvedFieldReference}
 import org.opencypher.flink.FlinkUtils._
 import org.opencypher.flink.physical.CAPFRuntimeContext
 import org.opencypher.okapi.api.types.{CTAny, CTList, CTNode, CTString}
 import org.opencypher.okapi.api.value.CypherValue.CypherList
 import org.opencypher.okapi.impl.exception.{IllegalArgumentException, IllegalStateException, NotImplementedException}
 import org.opencypher.okapi.ir.api.expr._
-import org.opencypher.okapi.relational.impl.table.RecordHeader
+import org.opencypher.okapi.relational.impl.table.{OpaqueField, ProjectedExpr, ProjectedField, RecordHeader}
 
 object FlinkSQLExprMapper {
 
@@ -65,8 +65,9 @@ object FlinkSQLExprMapper {
           val flinkExpressions = exprs.map(_.asFlinkSQLExpr)
           array(flinkExpressions.head, flinkExpressions.tail: _*)
 
-        case NullLit(_) =>
-          "Null"
+        case n: NullLit =>
+          val tpe = toFlinkType(n.cypherType)
+          Null(tpe)
 
         case l: Lit[_] => Literal(l.v, TypeInformation.of(l.v.getClass))
 
@@ -94,11 +95,13 @@ object FlinkSQLExprMapper {
           element in array
 
         case As(lhs, rhs) =>
+          val slot = header.slotsFor(rhs).head
+          val colName = ColumnName.of(slot)
           lhs match {
-            case e: Expr =>
-              e.asFlinkSQLExpr as Symbol(ColumnName.of(rhs))
+            case e: Lit[_] =>
+              e.asFlinkSQLExpr as Symbol(colName)
             case _ =>
-              Symbol(ColumnName.of(lhs)) as Symbol(ColumnName.of(rhs))
+              Symbol(ColumnName.of(lhs)) as Symbol(colName)
           }
 
         case HasType(rel, relType) =>
