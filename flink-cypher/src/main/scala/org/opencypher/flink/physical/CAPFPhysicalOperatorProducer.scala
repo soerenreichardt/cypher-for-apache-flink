@@ -319,7 +319,8 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
     * @param header resulting record header
     * @return optional operator
     */
-  override def planOptional(lhs: CAPFPhysicalOperator, rhs: CAPFPhysicalOperator, header: RecordHeader): CAPFPhysicalOperator = ???
+  override def planOptional(lhs: CAPFPhysicalOperator, rhs: CAPFPhysicalOperator, header: RecordHeader): CAPFPhysicalOperator =
+    operators.Optional(lhs, rhs, header)
 
   /**
     * Filters the rows of the first input by checking if there exists a corresponding row in the second input.

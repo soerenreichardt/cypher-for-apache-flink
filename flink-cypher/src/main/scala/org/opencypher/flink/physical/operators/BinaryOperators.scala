@@ -10,7 +10,7 @@ import org.opencypher.flink.schema.EntityTable._
 import org.opencypher.flink.TableOps._
 import org.opencypher.okapi.impl.exception.IllegalArgumentException
 import org.opencypher.okapi.ir.api.expr.{Expr, Var}
-import org.opencypher.okapi.relational.impl.table.RecordHeader
+import org.opencypher.okapi.relational.impl.table.{OpaqueField, RecordHeader, RecordSlot}
 
 private[flink] abstract class BinaryPhysicalOperator extends CAPFPhysicalOperator {
 
@@ -134,5 +134,72 @@ final case class ExistsSubQuery(
       )
 
     CAPFPhysicalResult(CAPFRecords.verifyAndCreate(header, updatedJoinedRecords)(left.records.capf), left.graphs ++ right.graphs)
+  }
+}
+
+/**
+  * This operator performs a left outer join between the already matched path and the optional matched pattern and
+  * updates the resulting columns.
+  *
+  * @param lhs previous match data
+  * @param rhs optional match data
+  * @param header result header (lhs header + rhs header)
+  */
+final case class Optional(lhs: CAPFPhysicalOperator, rhs: CAPFPhysicalOperator, header: RecordHeader)
+  extends BinaryPhysicalOperator {
+
+  override def executeBinary(left: CAPFPhysicalResult, right: CAPFPhysicalResult)(
+    implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
+    val leftData = left.records.data
+    val rightData = right.records.data
+    val leftHeader = left.records.header
+    val rightHeader = right.records.header
+
+    val commonFields = leftHeader.slots.intersect(rightHeader.slots)
+
+    val (joinSlots, otherCommonSlots) = commonFields.partition {
+      case RecordSlot(_, _: OpaqueField) => true
+      case RecordSlot(_, _)              => false
+    }
+
+    val joinFields = joinSlots
+      .map(_.content)
+      .collect { case OpaqueField(v) => v }
+
+    val otherCommonFields = otherCommonSlots
+      .map(_.content)
+
+    val columnsToRemove = joinFields
+      .flatMap(rightHeader.childSlots)
+      .map(_.content)
+      .union(otherCommonFields)
+      .map(ColumnName.of)
+
+    val lhsJoinSlots = joinFields.map(leftHeader.slotFor)
+    val rhsJoinSlots = joinFields.map(rightHeader.slotFor)
+
+    // Find the join pairs and introduce an alias for the right hand side
+    // This is necessary to be able to deduplicate the join columns later
+    val joinColumnMapping = lhsJoinSlots
+      .map(lhsSlot => {
+        lhsSlot -> rhsJoinSlots.find(_.content == lhsSlot.content).get
+      })
+      .map(pair => {
+        val lhsColName = ColumnName.of(pair._1)
+        val rhsColName = ColumnName.of(pair._2)
+
+        (lhsColName, rhsColName, ColumnNameGenerator.generateUniqueName(rightHeader))
+      })
+
+    // Rename join columns on the right hand side and drop common non-join columns
+    val reducedRhsData = joinColumnMapping
+      .foldLeft(rightData)((acc, col) => acc.safeRenameColumn(col._2, col._3))
+      .safeDropColumns(columnsToRemove: _*)
+
+    val joinCols = joinColumnMapping.map(t => t._1 -> t._3)
+    val joinedRecords =
+      joinTables(left.records.data, reducedRhsData, header, joinCols, "left")(deduplicate = true)(left.records.capf)
+
+    CAPFPhysicalResult(joinedRecords, left.graphs ++ right.graphs)
   }
 }
