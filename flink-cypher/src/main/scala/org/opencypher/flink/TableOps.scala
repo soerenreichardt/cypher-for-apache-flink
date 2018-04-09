@@ -112,6 +112,20 @@ object TableOps {
       table.select('*, expr as Symbol(name))
     }
 
+    def safeReplaceColumn(name: String, expr: Expression): Table = {
+      require(table.columns.contains(name), s"Cannot replace column `$name`. No column with that name exists. " +
+        s"Use `safeAddColumn` if you intend to add that column.")
+
+      val fieldsWithExpressions = table.columns.map { field =>
+        if (field == name) {
+          expr as Symbol(name)
+        } else {
+          UnresolvedFieldReference(field)
+        }
+      }
+      table.select(fieldsWithExpressions: _*)
+    }
+
   }
 
 }

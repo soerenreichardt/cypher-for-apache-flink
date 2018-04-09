@@ -39,8 +39,9 @@ object Demo extends App {
   val graph: CAPFGraph = session.readFrom(nodeTable, relTable)
 
   PrintPhysicalPlan.set()
-//  graph.cypher("MATCH (n:Person)-[r:KNOWS]->(n2:Person) RETURN *").getRecords.show
-  graph.cypher("MATCH (n:Person)-[r:KNOWS*1..3]->(n2:Person) RETURN *").getRecords.show
+//  graph.cypher("MATCH (n:Person)-[r:KNOWS]->(n2:Person) RETURN *").getRecords.show                                    // expand
+//  graph.cypher("MATCH (n:Person)-[r:KNOWS*1..3]->(n2:Person) RETURN *").getRecords.show                               // var expand
+//  graph.cypher("MATCH (n:Person) WHERE (n)--({age: 29}) RETURN n.name").getRecords.show                               // exists
 //  graph.cypher(
 //    """
 //      |MATCH (a {name: 'Alice'}), (b {name: 'Bob'})

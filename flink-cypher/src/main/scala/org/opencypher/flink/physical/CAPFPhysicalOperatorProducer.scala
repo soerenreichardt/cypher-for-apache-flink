@@ -329,7 +329,8 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
     * @param header      resulting record header
     * @return exists subquery operator
     */
-  override def planExistsSubQuery(lhs: CAPFPhysicalOperator, rhs: CAPFPhysicalOperator, targetField: Var, header: RecordHeader): CAPFPhysicalOperator = ???
+  override def planExistsSubQuery(lhs: CAPFPhysicalOperator, rhs: CAPFPhysicalOperator, targetField: Var, header: RecordHeader): CAPFPhysicalOperator =
+    operators.ExistsSubQuery(lhs, rhs, targetField, header)
 
   /**
     * Expands the records in the first input (nodes) via the records in the second input (relationships) into the
