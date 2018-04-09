@@ -155,26 +155,16 @@ class PhysicalPlanner[P <: PhysicalOperator[R, G, C], R <: CypherRecords, G <: P
         val in = process(sourceOp)
         val relationships = producer.planRelationshipScan(in, op.sourceGraph, rel, relHeader)
 
-        def expandInto(_source: Var, _rel: Var, _target: Var): P = {
-          val sourceSlot = in.header.slotFor(_source)
-          val targetSlot = in.header.slotFor(_target)
-          val relSourceSlot = relationships.header.sourceNodeSlot(_rel)
-          val relTargetSlot = relationships.header.targetNodeSlot(_rel)
-
-          producer.planJoin(
-            in,
-            relationships,
-            Seq((sourceSlot.content.key, relSourceSlot.content.key), (targetSlot.content.key, relTargetSlot.content.key)),
-            header
-          )
-        }
+        val startNode = StartNode(rel)()
+        val endNode = EndNode(rel)()
 
         direction match {
           case Directed =>
-            expandInto(source, rel, target)
+            producer.planJoin(in, relationships, Seq(source -> startNode, target -> endNode), header)
+
           case Undirected =>
-            val outgoing = expandInto(source, rel, target)
-            val incoming = expandInto(target, rel, source)
+            val outgoing = producer.planJoin(in, relationships, Seq(source -> startNode, target -> endNode), header)
+            val incoming = producer.planJoin(in, relationships, Seq(target -> startNode, source -> endNode), header)
             producer.planUnion(outgoing, incoming)
         }
 
