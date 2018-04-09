@@ -15,7 +15,7 @@ import org.opencypher.flink.schema.EntityTable._
 import org.opencypher.flink.{CAPFRecords, CAPFSession, ColumnName}
 import org.opencypher.okapi.api.graph.QualifiedGraphName
 import org.opencypher.okapi.api.types._
-import org.opencypher.okapi.api.value.CypherValue.CypherList
+import org.opencypher.okapi.api.value.CypherValue.{CypherInteger, CypherList}
 import org.opencypher.okapi.impl.exception.{IllegalArgumentException, IllegalStateException, NotImplementedException}
 import org.opencypher.okapi.ir.api.block.{Asc, Desc, SortItem}
 import org.opencypher.okapi.ir.api.expr._
@@ -251,14 +251,11 @@ final case class Aggregate(
       def withInnerExpr(expr: Expr)(f: Expression => Expression) =
         f(expr.asFlinkSQLExpr(records.header, inData, context))
 
-      val ds = inData.toDataSet[Row]
-
       val columns =
         if (group.nonEmpty) {
           group.flatMap { expr =>
             val withChildren = records.header.selfWithChildren(expr).map(_.content)
             withChildren.map(e => UnresolvedFieldReference(ColumnName.of(e)))
-//            withChildren.map(e => withInnerExpr(e)(identity))
           }
         } else null
 
@@ -377,34 +374,40 @@ final case class Unwind(in: CAPFPhysicalOperator, list: Expr, item: Var, header:
   }
 }
 
-final case class InitVarExpand(in: CAPFPhysicalOperator, source: Var, edgeList: Var, target: Var, header: RecordHeader)
-  extends UnaryPhysicalOperator {
+final case class Skip(in: CAPFPhysicalOperator, expr: Expr, header: RecordHeader) extends UnaryPhysicalOperator {
 
   override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
-    val sourceSlot = header.slotFor(source)
-    val edgeListSlot = header.slotFor(edgeList)
-    val targetSlot = header.slotFor(target)
-
-    assertIsNode(targetSlot)
+    val skip: Long = expr match {
+      case IntegerLit(v) => v
+      case Param(name) =>
+        context.parameters(name) match {
+          case CypherInteger(l) => l
+          case other => throw IllegalArgumentException("a CypherInteger", other)
+        }
+      case other => throw IllegalArgumentException("an integer literal or parameter", other)
+    }
 
     prev.mapRecordsWithDetails { records =>
-      val inputData = records.data
-      val keep = inputData.columns.map(UnresolvedFieldReference)
+      CAPFRecords.verifyAndCreate(header, records.data.offset(skip.toInt))(records.capf)
+    }
+  }
+}
 
-      val edgeListColName = columnName(edgeListSlot)
-      val emptyListLit = Literal(ListLit, Types.PRIMITIVE_ARRAY(TypeInformation.of(java.lang.Long.TYPE)))
-      val test = inputData.safeAddColumn("bar", "foo")
-      val test2 = inputData.select('*, emptyListLit as Symbol("bar"))
-      val withEmptyList = inputData.safeAddColumn(edgeListColName, emptyListLit)
+final case class Limit(in: CAPFPhysicalOperator, expr: Expr, header: RecordHeader) extends UnaryPhysicalOperator {
 
-      val cols = keep ++
-        Seq(UnresolvedFieldReference(edgeListColName)) ++
-        Seq(columnName(sourceSlot) as Symbol(columnName(targetSlot)))
+  override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
+    val limit: Long = expr match {
+      case IntegerLit(v) => v
+      case Param(name) =>
+        context.parameters(name) match {
+          case CypherInteger(v) => v
+          case other => throw IllegalArgumentException("a CypherInteger", other)
+        }
+      case other => throw IllegalArgumentException("an integer literal or parameter", other)
+    }
 
-      val initializedData = withEmptyList.select(
-        cols: _*)
-
-      CAPFRecords.verifyAndCreate(header, initializedData)(records.capf)
+    prev.mapRecordsWithDetails { records =>
+      CAPFRecords.verifyAndCreate(header, records.data.fetch(limit.toInt))(records.capf)
     }
   }
 }

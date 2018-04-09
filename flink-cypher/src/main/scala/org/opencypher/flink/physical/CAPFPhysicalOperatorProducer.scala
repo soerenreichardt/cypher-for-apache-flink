@@ -246,8 +246,7 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
     * @param header   resulting record header
     * @return init var expand operator
     */
-  override def planInitVarExpand(in: CAPFPhysicalOperator, source: Var, edgeList: Var, target: Var, header: RecordHeader): CAPFPhysicalOperator =
-    operators.InitVarExpand(in, source, edgeList, target, header)
+  override def planInitVarExpand(in: CAPFPhysicalOperator, source: Var, edgeList: Var, target: Var, header: RecordHeader): CAPFPhysicalOperator = ???
 
   /**
     * Skips the given amount of rows in the input records. The number of rows is specified by an expression which can be
@@ -258,7 +257,8 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
     * @param header resulting record header
     * @return skip operator
     */
-  override def planSkip(in: CAPFPhysicalOperator, expr: Expr, header: RecordHeader): CAPFPhysicalOperator = ???
+  override def planSkip(in: CAPFPhysicalOperator, expr: Expr, header: RecordHeader): CAPFPhysicalOperator =
+    operators.Skip(in, expr, header)
 
   /**
     * Limits the number of input records to the specified amount. The number of rows is specified by an expression which
@@ -269,7 +269,8 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
     * @param header resulting record header
     * @return limit operator
     */
-  override def planLimit(in: CAPFPhysicalOperator, expr: Expr, header: RecordHeader): CAPFPhysicalOperator = ???
+  override def planLimit(in: CAPFPhysicalOperator, expr: Expr, header: RecordHeader): CAPFPhysicalOperator =
+    operators.Limit(in, expr, header)
 
   /**
     * Computes a cartesian product between the two input records.
