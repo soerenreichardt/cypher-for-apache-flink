@@ -1,15 +1,14 @@
 package org.opencypher.flink
 
-import org.apache.flink.api.common.typeinfo.BasicTypeInfo
-import org.apache.flink.table.api.{Table, Types}
-import org.apache.flink.table.api.scala._
+import org.apache.flink.api.common.typeinfo.{BasicArrayTypeInfo, BasicTypeInfo, TypeInformation}
 import org.apache.flink.api.scala._
+import org.apache.flink.table.api.scala._
+import org.apache.flink.table.api.{Table, Types}
 import org.apache.flink.table.expressions._
-import org.apache.flink.table.shaded.org.apache.commons.lang.NotImplementedException
+import org.apache.flink.table.functions.ScalarFunction
 import org.apache.flink.types.Row
 import org.opencypher.flink.schema.EntityTable._
 import org.opencypher.okapi.impl.exception
-import org.opencypher.okapi.impl.exception.NotImplementedException
 
 object TableOps {
 
@@ -126,6 +125,31 @@ object TableOps {
       table.select(fieldsWithExpressions: _*)
     }
 
+    def safeToDataSet[T: TypeInformation](implicit capf: CAPFSession): DataSet[T] = {
+      val nameToTypeMap = table.getSchema.getColumnNames.zip(table.getSchema.getTypes).toMap
+
+      val arrayTypes = nameToTypeMap.filter { pair => pair._2.isInstanceOf[BasicArrayTypeInfo[_, _]] }
+
+      val mergeOp = new Merge(",")
+      val expressions = nameToTypeMap.map { pair =>
+        arrayTypes.map(_._1).toSet.contains(pair._1) match {
+          case true => mergeOp(UnresolvedFieldReference(pair._1)).cast(Types.STRING) as Symbol(pair._1)
+          case false => UnresolvedFieldReference(pair._1)
+        }
+      }.toSeq
+
+      val sanitizedTable = table.select(expressions: _*)
+      sanitizedTable.toDataSet[T]
+    }
+
+  }
+
+}
+
+class Merge(token: String) extends ScalarFunction {
+
+  def eval(str: Array[String]): String = {
+    str.mkString(token)
   }
 
 }

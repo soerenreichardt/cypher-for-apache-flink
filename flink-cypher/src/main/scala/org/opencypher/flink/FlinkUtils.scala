@@ -1,6 +1,7 @@
 package org.opencypher.flink
 
-import org.apache.flink.api.common.typeinfo.TypeInformation
+import org.apache.flink.api.common.typeinfo.{BasicArrayTypeInfo, PrimitiveArrayTypeInfo, TypeInformation}
+import org.apache.flink.api.java.typeutils.ObjectArrayTypeInfo
 import org.apache.flink.table.api.{Table, Types}
 import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.impl.exception.{IllegalArgumentException, NotImplementedException}
@@ -14,6 +15,13 @@ object FlinkUtils {
       case Types.LONG => Some(CTInteger)
       case Types.BOOLEAN => Some(CTBoolean)
       case Types.DOUBLE => Some(CTFloat)
+      case PrimitiveArrayTypeInfo.BOOLEAN_PRIMITIVE_ARRAY_TYPE_INFO => Some(CTList(CTBoolean))
+      case PrimitiveArrayTypeInfo.DOUBLE_PRIMITIVE_ARRAY_TYPE_INFO => Some(CTList(CTFloat))
+      case PrimitiveArrayTypeInfo.FLOAT_PRIMITIVE_ARRAY_TYPE_INFO => Some(CTList(CTFloat))
+      case PrimitiveArrayTypeInfo.INT_PRIMITIVE_ARRAY_TYPE_INFO => Some(CTList(CTInteger))
+      case PrimitiveArrayTypeInfo.LONG_PRIMITIVE_ARRAY_TYPE_INFO => Some(CTList(CTInteger))
+      case objArray: BasicArrayTypeInfo[_, _] => Some(CTList(fromFlinkType(objArray.getComponentInfo).get))
+
 //      TODO: other datatypes
       case _ => None
     }
@@ -30,6 +38,14 @@ object FlinkUtils {
       case CTFloat => Types.DOUBLE
       case _: CTNode => Types.LONG
       case _: CTRelationship => Types.LONG
+      case l: CTList =>
+        l.elementType match {
+          case CTString =>
+            Types.OBJECT_ARRAY(Types.STRING)
+          case cType =>
+            Types.PRIMITIVE_ARRAY(toFlinkType(cType))
+        }
+
 
       case x =>
         throw NotImplementedException("")

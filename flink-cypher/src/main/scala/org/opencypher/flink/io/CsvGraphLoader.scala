@@ -5,10 +5,21 @@ import java.net.URI
 import java.nio.file.{Files, Paths}
 import java.util.stream.Collectors
 
+import org.apache.flink.table.api.scala._
+import org.apache.flink.api.scala._
+import org.apache.flink.api.common.typeinfo.{BasicArrayTypeInfo, PrimitiveArrayTypeInfo, TypeInformation}
+import org.apache.flink.api.java.typeutils.ObjectArrayTypeInfo
+import org.apache.flink.table.api.scala.array
 import org.apache.flink.table.api.{Table, Types}
+import org.apache.flink.table.expressions.UnresolvedFieldReference
+import org.apache.flink.table.functions.{ScalarFunction, TableFunction}
 import org.apache.flink.table.sources.CsvTableSource
-import org.opencypher.flink.CAPFSession
+import org.apache.flink.types.Row
+import org.opencypher.flink.{CAPFSession, ColumnName}
+import org.opencypher.flink.TableOps._
 import org.opencypher.flink.schema.{CAPFNodeTable, CAPFRelationshipTable}
+import org.opencypher.flink.schema.EntityTable._
+import org.opencypher.flink.FlinkUtils._
 import org.opencypher.okapi.api.graph.PropertyGraph
 import org.opencypher.okapi.api.io.conversion.{NodeMapping, RelationshipMapping}
 import org.opencypher.okapi.impl.exception.IllegalArgumentException
@@ -60,10 +71,9 @@ class CsvGraphLoader(fileHandler: CsvGraphLoaderFileHandler)(implicit capf: CAPF
       val csvSource = new CsvTableSource(e.getRawPath, schema.names, schema.types)
       capf.tableEnv.registerTableSource(e.toString, csvSource)
 
-//      TODO: convertLists
-//      val table = convertLists(capf.tableEnv.scan(e.toString), schema)
+      val intermediateTable = capf.tableEnv.scan(e.toString)
 
-      val table = capf.tableEnv.scan(e.toString)
+      val table = convertLists(intermediateTable, schema)
 
       val nodeMapping = NodeMapping.create(schema.idField.name,
         impliedLabels = schema.implicitLabels.toSet,
@@ -84,7 +94,9 @@ class CsvGraphLoader(fileHandler: CsvGraphLoaderFileHandler)(implicit capf: CAPF
       val csvSource = new CsvTableSource(e.getRawPath, schema.names, schema.types)
       capf.tableEnv.registerTableSource(e.toString, csvSource)
 
-      val table = capf.tableEnv.scan(e.toString)
+      val intermediateTable = capf.tableEnv.scan(e.toString)
+
+      val table = convertLists(intermediateTable, schema)
 
       val relMapping = RelationshipMapping.create(schema.idField.name,
         schema.startIdField.name,
@@ -103,6 +115,35 @@ class CsvGraphLoader(fileHandler: CsvGraphLoaderFileHandler)(implicit capf: CAPF
   private def parseSchema[T <: CsvSchema](path: URI)(parser: String => T): T = {
     val text = fileHandler.readSchemaFile(path)
     parser(text)
+  }
+
+  private def convertLists(table: Table, schema: CsvSchema): Table = {
+    schema.propertyFields
+      .filter(field => field.getTargetType.isInstanceOf[PrimitiveArrayTypeInfo[_]] ||
+        field.getTargetType.isInstanceOf[ObjectArrayTypeInfo[_, _]] ||
+        field.getTargetType.isInstanceOf[BasicArrayTypeInfo[_, _]]
+      )
+      .foldLeft(table) {
+        case (t, field) =>
+          val split = new Split("\\|")
+          val tempIdField = "_tmp_id"
+          val splitColumn = t.select(
+            UnresolvedFieldReference(schema.idField.name) as Symbol(tempIdField),
+            split(UnresolvedFieldReference(field.name)) as Symbol(field.name))
+
+          t
+            .safeDropColumn(field.name)
+            .safeJoin(splitColumn, Seq((schema.idField.name, tempIdField)), "inner")
+            .safeDropColumn(tempIdField)
+      }
+  }
+
+}
+
+class Split(separator: String) extends ScalarFunction {
+
+  def eval(str: String): Array[String] = {
+    str.split(separator)
   }
 
 }

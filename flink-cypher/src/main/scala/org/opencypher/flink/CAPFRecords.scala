@@ -7,6 +7,7 @@ import org.apache.flink.table.expressions.{Expression, UnresolvedFieldReference}
 import org.apache.flink.types.Row
 import org.opencypher.flink.CAPFRecordHeader._
 import org.opencypher.flink.FlinkUtils._
+import org.opencypher.flink.TableOps._
 import org.opencypher.flink.schema.{CAPFEntityTable, CAPFNodeTable, CAPFRelationshipTable}
 import org.opencypher.flink.schema.EntityTable._
 import org.opencypher.okapi.api.io.conversion.{NodeMapping, RelationshipMapping}
@@ -33,8 +34,8 @@ sealed abstract class CAPFRecords(val header: RecordHeader, val data: Table)(imp
   override def size: Long = data.count()
 
   def toCypherMaps: DataSet[CypherMap] = {
-    val dataSet = data.toDataSet[Row]
-      dataSet.map(rowToCypherMap(header, data.getSchema.columnNameToIndex))
+    val dataSet = data.safeToDataSet[Row] // toDO: safe to dataset
+    dataSet.map(rowToCypherMap(header, data.getSchema.columnNameToIndex))
   }
 
   override def columns: Seq[String] =

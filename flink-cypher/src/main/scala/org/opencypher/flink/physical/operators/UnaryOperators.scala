@@ -1,19 +1,20 @@
 package org.opencypher.flink.physical.operators
 
-import org.apache.flink.api.common.typeinfo.{BasicTypeInfo, TypeInformation}
+import java.util.{Collections, UUID}
+
 import org.apache.flink.api.scala._
-import org.apache.flink.table.api.scala._
 import org.apache.flink.table.api.Types
+import org.apache.flink.table.api.scala._
 import org.apache.flink.table.expressions.{Expression, Literal, UnresolvedFieldReference}
 import org.apache.flink.types.Row
 import org.opencypher.flink.FlinkSQLExprMapper._
 import org.opencypher.flink.FlinkUtils._
 import org.opencypher.flink.TableOps._
 import org.opencypher.flink.physical.{CAPFPhysicalResult, CAPFRuntimeContext}
-import org.opencypher.flink.physical.operators.CAPFPhysicalOperator._
 import org.opencypher.flink.schema.EntityTable._
-import org.opencypher.flink.{CAPFRecords, CAPFSession, ColumnName}
+import org.opencypher.flink.{CAPFGraph, CAPFRecords, CAPFSession, ColumnName}
 import org.opencypher.okapi.api.graph.QualifiedGraphName
+import org.opencypher.okapi.api.schema.Schema
 import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.api.value.CypherValue.{CypherInteger, CypherList}
 import org.opencypher.okapi.impl.exception.{IllegalArgumentException, IllegalStateException, NotImplementedException}
@@ -22,8 +23,9 @@ import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.ir.impl.syntax.ExprSyntax._
 import org.opencypher.okapi.logical.impl._
 import org.opencypher.okapi.relational.impl.table._
+import org.opencypher.okapi.relational.impl.syntax.RecordHeaderSyntax._
 
-import scala.reflect.ClassTag
+import scala.collection.mutable
 
 private[flink] abstract class UnaryPhysicalOperator extends CAPFPhysicalOperator {
 
@@ -196,12 +198,6 @@ final case class RemoveAliases(
 final case class Filter(in: CAPFPhysicalOperator, expr: Expr, header: RecordHeader) extends UnaryPhysicalOperator {
   override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
     prev.mapRecordsWithDetails { records =>
-//      val filteredRows = records.data.where(expr.asFlinkSQLExpr(header, records.data, context))
-
-//      val selectedColumns = header.slots.map { ColumnName.of(_) }.map( UnresolvedFieldReference(_) )
-
-//      val newData = filteredRows.select(selectedColumns: _*)
-
       val filteredData = records.data.filter(expr.asFlinkSQLExpr(header, records.data, context))
 
       CAPFRecords.verifyAndCreate(header, filteredData)(records.capf)
@@ -412,3 +408,111 @@ final case class Limit(in: CAPFPhysicalOperator, expr: Expr, header: RecordHeade
   }
 }
 
+final case class ProjectPatternGraph(
+  in: CAPFPhysicalOperator,
+  toCreate: Set[ConstructedEntity],
+  name: String,
+  schema: Schema,
+  header: RecordHeader)
+  extends UnaryPhysicalOperator {
+
+  override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
+    val input = prev.records
+
+    val baseTable =
+      if (toCreate.isEmpty) input
+      else createEntities(toCreate, input)
+
+    val patternGraph = CAPFGraph.create(baseTable, schema)(input.capf)
+    prev.withGraph(name -> patternGraph)
+  }
+
+  private def createEntities(toCreate: Set[ConstructedEntity], records: CAPFRecords): CAPFRecords = {
+    val nodes = toCreate.collect { case c: ConstructedNode => c }
+    val rels = toCreate.collect { case r: ConstructedRelationship => r }
+
+    val nodesToCreate = nodes.flatMap(constructNode(_, records))
+    val recordsWithNodes = addEntitiesToRecords(nodesToCreate, records)
+
+    val relsToCreate = rels.flatMap(constructRel(_, recordsWithNodes))
+    addEntitiesToRecords(relsToCreate, recordsWithNodes)
+  }
+
+  private def addEntitiesToRecords(columnsToAdd: Set[(SlotContent, Expression)], records: CAPFRecords): CAPFRecords = {
+    val newData = columnsToAdd.foldLeft(records.data) {
+      case (acc, (expr, col)) =>
+        acc.safeAddColumn(ColumnName.of(expr), col)
+    }
+
+    val newHeader = records.header
+      .update(addContents(columnsToAdd.map(_._1).toSeq))._1
+
+    CAPFRecords.verifyAndCreate(newHeader, newData)(records.capf)
+  }
+
+  private def constructNode(node: ConstructedNode, records: CAPFRecords): Set[(SlotContent, Expression)] = {
+    val col = Literal(true, Types.BOOLEAN)
+    val labelTuples: Set[(SlotContent, Expression)] = node.labels.map { label =>
+      ProjectedExpr(HasLabel(node.v, label)(CTBoolean)) -> col
+    }
+
+    labelTuples + (OpaqueField(node.v) -> generatedId(records.capf))
+  }
+
+  private def constructRel(toConstruct: ConstructedRelationship, records: CAPFRecords): Set[(SlotContent, Expression)] = {
+    val ConstructedRelationship(rel, source, target, typ) = toConstruct
+    val header = records.header
+    val inData = records.data
+
+    val sourceTuple = {
+      val slot = header.slotFor(source)
+      val col = UnresolvedFieldReference(ColumnName.of(slot))
+      ProjectedExpr(StartNode(rel)(CTInteger)) -> col
+    }
+    val targetTuple = {
+      val slot = header.slotFor(target)
+      val col = UnresolvedFieldReference(ColumnName.of(slot))
+      ProjectedExpr(EndNode(rel)(CTInteger)) -> col
+    }
+
+    val relTuple = OpaqueField(rel) -> generatedId(records.capf)
+
+    val typeTuple = {
+      val col = Literal(typ, Types.STRING)
+      ProjectedExpr(Type(rel)(CTString)) -> col
+    }
+
+    Set(sourceTuple, targetTuple, relTuple, typeTuple)
+  }
+
+  private def generatedId(implicit capf: CAPFSession): Expression = {
+    val relIdOffset = 500L << 33
+    val firstIdCol = Literal(relIdOffset + java.util.UUID.randomUUID().toString.toLong, Types.LONG)
+    firstIdCol // TODO: monotonically increasing id
+  }
+
+}
+
+//object IdGenerator {
+//
+//  var lastIds = new java.util.concurrent.ConcurrentHashMap[Int, Long]
+//  var parallelism: Int = 0
+//  var baseValue: Long = 0
+//
+//  def increment(parId: Int, parallelism: Int): Long = {
+//    if (this.parallelism == 0) this.parallelism = parallelism
+//
+//    if (this.parallelism == parallelism) {
+//      val mapValue = lastIds.get(parId)
+//      if (mapValue == null) {
+//        lastIds.put(parId, baseValue + parId.toLong)
+//      } else {
+//        lastIds.put(parId, baseValue + parId * (((lastIds.get(parId) - baseValue) / parallelism) + 1))
+//      }
+//    } else {
+//      baseValue = ???
+//    }
+//
+//    lastIds.get(parId)
+//  }
+//}

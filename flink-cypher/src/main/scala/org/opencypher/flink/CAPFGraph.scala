@@ -7,6 +7,7 @@ import org.opencypher.flink.schema.{CAPFEntityTable, CAPFNodeTable}
 import org.opencypher.flink.CAPFConverters._
 import org.opencypher.okapi.api.graph.PropertyGraph
 import org.opencypher.okapi.api.schema.Schema
+import org.opencypher.okapi.api.table.CypherRecords
 import org.opencypher.okapi.api.types.{CTNode, CTRelationship}
 import org.opencypher.okapi.impl.exception.IllegalArgumentException
 import org.opencypher.okapi.ir.api.expr.Var
@@ -34,10 +35,13 @@ object CAPFGraph {
     }
 
   def create(nodeTable: CAPFNodeTable, entityTables: CAPFEntityTable*)(implicit capf: CAPFSession): CAPFGraph = {
-//    println(nodeTable.table.rows.foreach( s => s.toString()))
     val allTables = nodeTable +: entityTables
     val schema = allTables.map(_.schema).reduce(_ ++ _)
     new CAPFScanGraph(allTables, schema)
+  }
+
+  def create(records: CypherRecords, schema: Schema)(implicit capf: CAPFSession): CAPFGraph = {
+    ???
   }
 
   def createLazy(theSchema: Schema, loadGraph: => CAPFGraph)(implicit capf: CAPFSession): CAPFGraph =

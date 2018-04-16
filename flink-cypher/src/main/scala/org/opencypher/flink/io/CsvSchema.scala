@@ -3,7 +3,9 @@ package org.opencypher.flink.io
 import io.circe.Decoder
 import io.circe.generic.auto._
 import io.circe.parser.parse
-import org.apache.flink.api.common.typeinfo.TypeInformation
+import org.apache.flink.api.scala._
+import org.apache.flink.table.api.scala._
+import org.apache.flink.api.common.typeinfo.{BasicArrayTypeInfo, TypeInformation}
 import org.apache.flink.table.api.Types
 
 abstract class CsvSchema {
@@ -39,7 +41,7 @@ case class CsvField(name: String, column: Int, valueType: String) {
 
   lazy val getTargetType: TypeInformation[_] = valueType.toLowerCase match {
     case l if listType.pattern.matcher(l).matches() => l match {
-      case listType(inner) if inner == "string" => Types.OBJECT_ARRAY(extractSimpleType(inner))
+      case listType(inner) if inner == "string" => BasicArrayTypeInfo.STRING_ARRAY_TYPE_INFO//Types.OBJECT_ARRAY(extractSimpleType(inner))
       case listType(inner) => Types.PRIMITIVE_ARRAY(extractSimpleType(inner))
     }
     case other => extractSimpleType(other)
@@ -73,7 +75,7 @@ case class CsvNodeSchema(
   def types: Array[TypeInformation[_]] = {
     (List(idField) ++ optionalLabels ++ propertyFields)
       .sortBy(_.column)
-      .map(_.getTargetType)
+      .map(_.getSourceType)
       .toArray
   }
 
@@ -110,7 +112,7 @@ case class CsvRelSchema(
   def types: Array[TypeInformation[_]] = {
     (List(idField, startIdField, endIdField) ++ propertyFields)
       .sortBy(_.column)
-      .map(_.getTargetType)
+      .map(_.getSourceType)
       .toArray
   }
 }
