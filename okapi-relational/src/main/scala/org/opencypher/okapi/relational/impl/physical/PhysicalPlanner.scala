@@ -44,8 +44,9 @@ class PhysicalPlanner[P <: PhysicalOperator[R, G, C], R <: CypherRecords, G <: P
         producer.planRemoveAliases(process(in), dependent, header)
 
       case flat.Select(fields, graphs: Set[String], in, header) =>
-        val selected = producer.planSelectFields(process(in), fields, header)
-        producer.planSelectGraphs(selected, graphs)
+//        val selected = producer.planSelectFields(process(in), fields, header)
+//        producer.planSelectGraphs(selected, graphs)
+        producer.planSelect(process(in), fields.map(header.slotFor).map(_.content.key), header)
 
       case flat.EmptyRecords(in, header) =>
         producer.planEmptyRecords(process(in), header)
@@ -222,9 +223,6 @@ class PhysicalPlanner[P <: PhysicalOperator[R, G, C], R <: CypherRecords, G <: P
               Not(Equals(joinedExpands.header.slotFor(edge).content.key, renamedData.header.slotFor(newRelVar).content.key)(CTNode))(CTNode): Expr
             }),
             joinedData.header)
-
-          val fieldsToSelect = renamedVars.map(slot => Var(slot.content.key.withoutType)(slot.content.cypherType)).toIndexedSeq
-          val selectedData = producer.planSelectFields(withRelIsomorphism, fieldsToSelect, newHeader)
 
           val withEmptyFields = producer.planSelect(
             joinedExpands,

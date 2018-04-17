@@ -42,7 +42,7 @@ object Demo extends App {
 //  graph.cypher("MATCH (n:Person)-[r:KNOWS]->(n2:Person) RETURN *").getRecords.show                                    // expand
 //  graph.cypher("MATCH (n:Person)-[r:KNOWS*1..3]->(n2:Person) RETURN n.name, n2.name").getRecords.show                   // var expand
 //  graph.cypher("MATCH (n:Person) WHERE (n)--({age: 29}) RETURN n.name").getRecords.show                               // exists
-//  graph.cypher("MATCH (n:Person) OPTIONAL MATCH (n)-[:KNOWS]->(b {age: 29}) RETURN n.name, b.name").getRecords.show   // optional match
+  graph.cypher("MATCH (n:Person) OPTIONAL MATCH (n)-[:KNOWS]->(b {age: 29}) RETURN n.name, b.name").getRecords.show   // optional match
 //  graph.cypher(
 //    """
 //      |MATCH (a {name: 'Alice'}), (b {name: 'Bob'})
@@ -52,7 +52,7 @@ object Demo extends App {
 
 //  graph.cypher("MATCH (n) RETURN n.name, n.age ORDER BY n.age LIMIT 2").getRecords.show
 //  graph.cypher("WITH 'foo' AS bar UNWIND ['1', '2', '3'] AS x RETURN x, bar").getRecords.show
-  graph.cypher("MATCH (n:Employee), (m: Person) RETURN (n)-->(m)").getRecords.show
+//  graph.cypher("MATCH (n:Employee), (m: Person) RETURN (n)-->(m)").getRecords.show
 
 }
 

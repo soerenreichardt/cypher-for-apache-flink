@@ -125,6 +125,7 @@ final case class Select(in: CAPFPhysicalOperator, exprs: Seq[Expr], header: Reco
   }
 }
 
+@Deprecated
 final case class SelectFields(in: CAPFPhysicalOperator, field: IndexedSeq[Var], header: RecordHeader)
   extends UnaryPhysicalOperator {
 
