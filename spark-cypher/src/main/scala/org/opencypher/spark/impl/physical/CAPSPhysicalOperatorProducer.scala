@@ -22,7 +22,7 @@ import org.opencypher.okapi.ir.api.block.SortItem
 import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.logical.impl._
 import org.opencypher.okapi.relational.api.physical.{PhysicalOperatorProducer, PhysicalPlannerContext}
-import org.opencypher.okapi.relational.impl.table.{ProjectedExpr, ProjectedField, RecordHeader}
+import org.opencypher.okapi.relational.impl.table.{ProjectedExpr, ProjectedField, RecordHeader, RecordSlot}
 import org.opencypher.spark.api.CAPSSession
 import org.opencypher.spark.impl.physical.operators.CAPSPhysicalOperator
 import org.opencypher.spark.impl.{CAPSGraph, CAPSRecords}
@@ -85,6 +85,8 @@ final class CAPSPhysicalOperatorProducer(implicit caps: CAPSSession)
   override def planAlias(in: CAPSPhysicalOperator, expr: Expr, alias: Var, header: RecordHeader): CAPSPhysicalOperator =
     operators.Alias(in, expr, alias, header)
 
+  override def planBulkAlias(in: CAPSPhysicalOperator, exprs: Seq[Expr], aliases: Seq[RecordSlot], header: RecordHeader): CAPSPhysicalOperator = ???
+
   override def planUnwind(in: CAPSPhysicalOperator, list: Expr, item: Var, header: RecordHeader): CAPSPhysicalOperator =
     operators.Unwind(in, list, item, header)
 
@@ -106,11 +108,8 @@ final class CAPSPhysicalOperatorProducer(implicit caps: CAPSSession)
   override def planFilter(in: CAPSPhysicalOperator, expr: Expr, header: RecordHeader): CAPSPhysicalOperator =
     operators.Filter(in, expr, header)
 
-  override def planValueJoin(
-    lhs: CAPSPhysicalOperator,
-    rhs: CAPSPhysicalOperator,
-    predicates: Set[Equals],
-    header: RecordHeader): CAPSPhysicalOperator = operators.ValueJoin(lhs, rhs, predicates, header)
+  override def planJoin(lhs: CAPSPhysicalOperator, rhs: CAPSPhysicalOperator, joinColumns: Seq[(Expr, Expr)], header: RecordHeader, joinType: String): CAPSPhysicalOperator =
+    operators.Join(lhs, rhs, joinColumns, header, joinType)
 
   override def planDistinct(in: CAPSPhysicalOperator, fields: Set[Var]): CAPSPhysicalOperator =
     operators.Distinct(in, fields)
@@ -181,4 +180,7 @@ final class CAPSPhysicalOperatorProducer(implicit caps: CAPSSession)
 
   override def planLimit(in: CAPSPhysicalOperator, expr: Expr, header: RecordHeader): CAPSPhysicalOperator =
     operators.Limit(in, expr, header)
+
+  override def planSelect(in: CAPSPhysicalOperator, exprs: Seq[Expr], header: RecordHeader): CAPSPhysicalOperator =
+    operators.Select(in, exprs, header)
 }
