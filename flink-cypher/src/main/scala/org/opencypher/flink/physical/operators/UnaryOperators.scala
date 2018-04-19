@@ -275,8 +275,6 @@ final case class Aggregate(
           Left(inData.groupBy(columns.toSeq: _*))
         } else Right(inData)
 
-      val sum = data.left.get.select(s"n, sum(____n_dot_ageINTEGER)").toDataSet[Row]
-
       val flinkAggFunctions = aggregations.map {
         case (to, inner) =>
           val columnName = Symbol(ColumnName.from(to.name))
@@ -287,6 +285,9 @@ final case class Aggregate(
                   .cast(toFlinkType(to.cypherType))
                   .as(columnName)
               )
+
+            case CountStar(_) =>
+              withInnerExpr(IntegerLit(0)(CTInteger))(_.count.as(columnName))
 
             case Count(expr, distinct) => withInnerExpr(expr)( column =>
               column.count
