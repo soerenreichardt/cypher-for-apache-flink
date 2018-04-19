@@ -109,7 +109,7 @@ final class CAPSPhysicalOperatorProducer(implicit caps: CAPSSession)
     operators.Filter(in, expr, header)
 
   override def planJoin(lhs: CAPSPhysicalOperator, rhs: CAPSPhysicalOperator, joinColumns: Seq[(Expr, Expr)], header: RecordHeader, joinType: String): CAPSPhysicalOperator =
-    operators.Join(lhs, rhs, joinColumns, header, joinType)
+  ??? //    operators.Join(lhs, rhs, joinColumns, header, joinType)
 
   override def planDistinct(in: CAPSPhysicalOperator, fields: Set[Var]): CAPSPhysicalOperator =
     operators.Distinct(in, fields)
@@ -182,5 +182,5 @@ final class CAPSPhysicalOperatorProducer(implicit caps: CAPSSession)
     operators.Limit(in, expr, header)
 
   override def planSelect(in: CAPSPhysicalOperator, exprs: Seq[Expr], header: RecordHeader): CAPSPhysicalOperator =
-    operators.Select(in, exprs, header)
+    ??? // operators.Select(in, exprs, header)
 }

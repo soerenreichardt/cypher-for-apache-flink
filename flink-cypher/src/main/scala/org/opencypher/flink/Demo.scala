@@ -1,5 +1,7 @@
 package org.opencypher.flink
 
+import java.time.LocalDate
+
 import org.apache.flink.api.scala._
 import org.apache.flink.table.api.scala._
 import org.opencypher.flink.io.FileCsvPropertyGraphDataSource
@@ -8,10 +10,13 @@ import org.opencypher.okapi.api.graph.GraphName
 import org.opencypher.okapi.api.io.conversion.{NodeMapping, RelationshipMapping}
 import org.opencypher.okapi.relational.api.configuration.CoraConfiguration.PrintPhysicalPlan
 
+import java.sql._
 
 object Demo extends App {
 
   val session = CAPFSession.create()
+
+  val d = Date.valueOf(LocalDate.now())
 
   private val nodeDataSet = session.env.fromCollection(DemoData.nodes)
   val relsDataSet = session.env.fromCollection(DemoData.rels)
@@ -39,10 +44,10 @@ object Demo extends App {
   val graph: CAPFGraph = session.readFrom(nodeTable, relTable)
 
   PrintPhysicalPlan.set()
-//  graph.cypher("MATCH (n:Person)-[r:KNOWS]->(n2:Person) RETURN *").getRecords.show                                    // expand
+  graph.cypher("MATCH (n:Person)-[r:KNOWS]->(n2:Person) RETURN n, r.since, n2.name").getRecords.show                                    // expand
 //  graph.cypher("MATCH (n:Person)-[r:KNOWS*1..3]->(n2:Person) RETURN n.name, n2.name").getRecords.show                   // var expand
 //  graph.cypher("MATCH (n:Person) WHERE (n)--({age: 29}) RETURN n.name").getRecords.show                               // exists
-  graph.cypher("MATCH (n:Person) OPTIONAL MATCH (n)-[:KNOWS]->(b {age: 29}) RETURN n.name, b.name").getRecords.show   // optional match
+//  graph.cypher("MATCH (n:Person) OPTIONAL MATCH (n)-[:KNOWS]->(b {age: 29}) RETURN n.name, b.name").getRecords.show   // optional match
 //  graph.cypher(
 //    """
 //      |MATCH (a {name: 'Alice'}), (b {name: 'Bob'})

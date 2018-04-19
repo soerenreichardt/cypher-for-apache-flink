@@ -126,6 +126,7 @@ object TableOps {
     }
 
     def safeToDataSet[T: TypeInformation](implicit capf: CAPFSession): DataSet[T] = {
+      // TODO: preserve order of fields
       val nameToTypeMap = table.getSchema.getColumnNames.zip(table.getSchema.getTypes).toMap
 
       val arrayTypes = nameToTypeMap.filter { pair => pair._2.isInstanceOf[BasicArrayTypeInfo[_, _]] }

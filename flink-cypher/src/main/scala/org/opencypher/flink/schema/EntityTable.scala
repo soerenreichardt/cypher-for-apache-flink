@@ -33,7 +33,6 @@ object CAPFNodeTable {
 
 
     val nodeMapping = NodeMapping.create(nodeIdKey = sourceIdKey, impliedLabels = labels, propertyKeys = Set("Properties"))
-    print(nodeMapping)
     CAPFNodeTable(nodeMapping, nodes)
   }
 
@@ -58,7 +57,6 @@ object CAPFRelationshipTable {
       relType,
       properties)
 
-    print(relationshipMapping)
     CAPFRelationshipTable(relationshipMapping, rels)
   }
 }

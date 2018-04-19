@@ -50,6 +50,13 @@
         </dependency>
 
         <!-- Test -->
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-test-utils_${project.scala.binary.version}</artifactId>
+            <version>${dep.flink.version}</version>
+            <!--<type>test-jar</type>-->
+            <!--<scope>test</scope>-->
+        </dependency>
 
         <dependency>
             <groupId>org.opencypher</groupId>
