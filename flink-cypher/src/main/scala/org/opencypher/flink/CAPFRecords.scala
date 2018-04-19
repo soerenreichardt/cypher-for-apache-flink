@@ -34,7 +34,8 @@ sealed abstract class CAPFRecords(val header: RecordHeader, val data: Table)(imp
   override def size: Long = data.count()
 
   def toCypherMaps: DataSet[CypherMap] = {
-    val dataSet = data.safeToDataSet[Row] // toDO: safe to dataset
+    print(capf.tableEnv.explain(data))
+    val dataSet = data.toDataSet[Row] // TODO: safe to dataset
     dataSet.map(rowToCypherMap(header, data.getSchema.columnNameToIndex))
   }
 
