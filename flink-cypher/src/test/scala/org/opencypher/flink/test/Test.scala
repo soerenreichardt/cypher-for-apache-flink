@@ -2,6 +2,9 @@ package org.opencypher.flink.test
 
 import java.time.LocalDate
 
+import org.apache.flink.api.java.typeutils.RowTypeInfo
+import org.apache.flink.table.api.Types
+import org.apache.flink.types.Row
 import org.scalatest._
 
 import scala.collection.mutable

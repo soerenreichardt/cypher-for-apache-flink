@@ -3,8 +3,14 @@ package org.opencypher.flink
 import org.apache.flink.api.common.typeinfo.{BasicArrayTypeInfo, PrimitiveArrayTypeInfo, TypeInformation}
 import org.apache.flink.api.java.typeutils.ObjectArrayTypeInfo
 import org.apache.flink.table.api.{Table, Types}
+import org.apache.flink.types.Row
+import org.opencypher.flink.physical.CAPFRuntimeContext
 import org.opencypher.okapi.api.types._
+import org.opencypher.okapi.api.value.CypherValue
+import org.opencypher.okapi.api.value.CypherValue.CypherValue
 import org.opencypher.okapi.impl.exception.{IllegalArgumentException, NotImplementedException}
+import org.opencypher.okapi.ir.api.expr.{Expr, Param}
+import org.opencypher.okapi.relational.impl.table.RecordHeader
 
 object FlinkUtils {
 
@@ -49,6 +55,21 @@ object FlinkUtils {
 
       case x =>
         throw NotImplementedException("")
+    }
+  }
+
+  implicit class CypherRow(r: Row) {
+    def getCypherValue(expr: Expr, header: RecordHeader)(implicit context: CAPFRuntimeContext): CypherValue = {
+      expr match {
+        case Param(name) => context.parameters(name)
+        case _ =>
+          header.slotsFor(expr).headOption match {
+            case None => throw IllegalArgumentException(s"slot for $expr")
+            case Some(slot) =>
+              val index = slot.index
+              CypherValue(r.getField(index))
+          }
+      }
     }
   }
 

@@ -29,6 +29,8 @@ trait CAPFSession extends CypherSession {
   val env: ExecutionEnvironment
   val tableEnv: BatchTableEnvironment
 
+  def sql(query: String): CypherRecords
+
   def readFrom(entityTables: CAPFEntityTable*): PropertyGraph = entityTables.head match {
     case h: CAPFNodeTable => readFrom(h, entityTables.tail: _*)
     case _ => throw IllegalArgumentException("first argument of type NodeTable", "RelationshipTable")
@@ -140,4 +142,7 @@ sealed class CAPFSessionImpl(
     val qualifiedGraphName = store(graphName, ambient)
     IRExternalGraph(graphName.value, ambient.schema, qualifiedGraphName)
   }
+
+  override def sql(query: String): CAPFRecords =
+    CAPFRecords.wrap(tableEnv.sqlQuery(query))
 }

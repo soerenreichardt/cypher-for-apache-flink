@@ -4,6 +4,7 @@ import org.apache.flink.api.common.typeinfo.TypeInformation
 import org.apache.flink.table.api.scala._
 import org.apache.flink.table.api.{Table, Types}
 import org.apache.flink.table.expressions.{Expression, Literal, Null, UnresolvedFieldReference}
+import org.apache.flink.table.functions.ScalarFunction
 import org.opencypher.flink.FlinkUtils._
 import org.opencypher.flink.physical.CAPFRuntimeContext
 import org.opencypher.okapi.api.types.{CTAny, CTList, CTNode, CTString}

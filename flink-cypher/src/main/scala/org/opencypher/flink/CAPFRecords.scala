@@ -48,6 +48,10 @@ sealed abstract class CAPFRecords(val header: RecordHeader, val data: Table)(imp
   override def iterator: Iterator[CypherMap] =
     toCypherMaps.collect().iterator
 
+  def toLocalIterator: Iterator[CypherMap] =
+//  TODO: may be not a local iterator
+    iterator
+
   override lazy val columnType: Map[String, CypherType] = data.columnType
 
   def cache(): CAPFRecords = {
@@ -196,6 +200,9 @@ object CAPFRecords extends CypherRecordsCompanion[CAPFRecords, CAPFSession] {
     CAPFRecords.createInternal(newHeader, renamed)
   }
 
+  private [flink] def wrap(table: Table)(implicit capf: CAPFSession): CAPFRecords =
+    verifyAndCreate(prepareDataFrame(table))
+
   private def prepareDataFrame(initialTable: Table)(implicit capf: CAPFSession): (RecordHeader, Table) = {
     // TODO: cast to compatible types
     val initialHeader = CAPFRecordHeader.fromFlinkTableSchema(initialTable.getSchema)
@@ -215,6 +222,10 @@ object CAPFRecords extends CypherRecordsCompanion[CAPFRecords, CAPFSession] {
   override def unit()(implicit capf: CAPFSession): CAPFRecords = {
     val initialTable = capf.tableEnv.fromDataSet(capf.env.fromCollection(Seq(EmptyRow())))
     createInternal(RecordHeader.empty, initialTable)
+  }
+
+  def verifyAndCreate(headerAndData: (RecordHeader, Table))(implicit capf: CAPFSession): CAPFRecords = {
+    verifyAndCreate(headerAndData._1, headerAndData._2)
   }
 
   def verifyAndCreate(initialHeader: RecordHeader, initialData: Table)(implicit capf: CAPFSession): CAPFRecords = {
