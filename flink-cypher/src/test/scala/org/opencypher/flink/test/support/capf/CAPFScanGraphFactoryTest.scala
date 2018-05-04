@@ -1,6 +1,7 @@
 package org.opencypher.flink.test.support.capf
 
 import org.apache.flink.api.scala._
+import org.apache.flink.table.api.scala._
 import org.opencypher.flink.CAPFGraph
 import org.opencypher.flink.schema.{CAPFNodeTable, CAPFRelationshipTable}
 import org.opencypher.flink.test.CAPFTestSuite
@@ -36,7 +37,8 @@ class CAPFScanGraphFactoryTest extends CAPFTestSuite with GraphMatchingTestSuppo
           (0L, true, false, "Max"),
           (1L, false, true, "Martin")
         )
-      )
+      ),
+      'ID, 'IS_ASTRONAUT, 'IS_MARTIAN, 'NAME
     )
   )
 
@@ -50,7 +52,8 @@ class CAPFScanGraphFactoryTest extends CAPFTestSuite with GraphMatchingTestSuppo
           (3L, "German"),
           (4L, "Orbital")
         )
-      )
+      ),
+      'ID, 'TITLE
     )
   )
 
@@ -64,7 +67,8 @@ class CAPFScanGraphFactoryTest extends CAPFTestSuite with GraphMatchingTestSuppo
           (1L, 7L, 3L),
           (1L, 8L, 4L)
         )
-      )
+      ),
+      'SRC, 'ID, 'DST
     )
   )
 

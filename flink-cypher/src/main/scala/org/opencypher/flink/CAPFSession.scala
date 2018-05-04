@@ -49,6 +49,11 @@ object CAPFSession {
   def create(sessionNamespace: Namespace = SessionPropertyGraphDataSource.Namespace): CAPFSession =
     new CAPFSessionImpl(env, tableEnv, sessionNamespace)
 
+  def local(): CAPFSession = {
+    env.getConfig.disableSysoutLogging()
+    create()
+  }
+
 }
 
 sealed class CAPFSessionImpl(

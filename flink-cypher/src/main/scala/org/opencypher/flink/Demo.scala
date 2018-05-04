@@ -14,7 +14,7 @@ import java.sql._
 
 object Demo extends App {
 
-  val session = CAPFSession.create()
+  val session = CAPFSession.local()
 
   val d = Date.valueOf(LocalDate.now())
 
@@ -59,7 +59,7 @@ object Demo extends App {
 //  graph.cypher("MATCH (n) RETURN n.name, n.age ORDER BY n.age LIMIT 2").getRecords.show
 //  graph.cypher("WITH 'foo' AS bar UNWIND ['1', '2', '3'] AS x RETURN x, bar").getRecords.show
 //  graph.cypher("MATCH (n:Employee), (m: Person) RETURN (n)-[]->(m)").getRecords.show
-  graph.cypher("MATCH (n:Employee) RETURN n").getRecords.show
+//  graph.cypher("MATCH (n:Employee) RETURN n").getRecords.show
 }
 
 object DemoData {
