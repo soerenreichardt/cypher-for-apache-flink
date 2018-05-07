@@ -3,7 +3,7 @@ package org.opencypher.flink
 import org.opencypher.flink.physical.operators._
 import org.opencypher.okapi.ir.api.block.Asc
 import org.opencypher.okapi.ir.api.util.DirectCompilationStage
-import org.opencypher.okapi.trees.{BottomUp, TopDown}
+import org.opencypher.okapi.trees.TopDown
 
 case class PhysicalOptimizerContext()
 
