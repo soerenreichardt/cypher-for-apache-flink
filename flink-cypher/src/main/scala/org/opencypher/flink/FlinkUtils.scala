@@ -26,7 +26,8 @@ object FlinkUtils {
       case PrimitiveArrayTypeInfo.FLOAT_PRIMITIVE_ARRAY_TYPE_INFO => Some(CTList(CTFloat))
       case PrimitiveArrayTypeInfo.INT_PRIMITIVE_ARRAY_TYPE_INFO => Some(CTList(CTInteger))
       case PrimitiveArrayTypeInfo.LONG_PRIMITIVE_ARRAY_TYPE_INFO => Some(CTList(CTInteger))
-      case objArray: BasicArrayTypeInfo[_, _] => Some(CTList(fromFlinkType(objArray.getComponentInfo).get))
+      case basicArray: BasicArrayTypeInfo[_, _] => Some(CTList(fromFlinkType(basicArray.getComponentInfo).get))
+      case objArray: ObjectArrayTypeInfo[_, _] => Some(CTList(fromFlinkType(objArray.getComponentInfo).get))
 
 //      TODO: other datatypes
       case _ => None
@@ -39,7 +40,7 @@ object FlinkUtils {
     case CTNull | CTVoid => throw NotImplementedException("")
     case _ => ct.material match {
       case CTString => Types.STRING
-      case CTInteger => Types.INT
+      case CTInteger => Types.LONG
       case CTBoolean => Types.BOOLEAN
       case CTFloat => Types.DOUBLE
       case _: CTNode => Types.LONG

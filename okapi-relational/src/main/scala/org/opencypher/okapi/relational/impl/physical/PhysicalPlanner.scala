@@ -44,8 +44,6 @@ class PhysicalPlanner[P <: PhysicalOperator[R, G, C], R <: CypherRecords, G <: P
         producer.planRemoveAliases(process(in), dependent, header)
 
       case flat.Select(fields, graphs: Set[String], in, header) =>
-//        val selected = producer.planSelectFields(process(in), fields, header)
-//        producer.planSelectGraphs(selected, graphs)
         producer.planSelect(process(in), fields.map(header.slotFor).map(_.content.key), header)
 
       case flat.EmptyRecords(in, header) =>

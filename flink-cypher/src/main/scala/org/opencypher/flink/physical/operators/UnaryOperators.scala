@@ -229,7 +229,7 @@ final case class Project(in: CAPFPhysicalOperator, expr: Expr, header: RecordHea
 
       val newData = headerNames.diff(dataNames) match {
         case Seq(one) =>
-          val newCol: Expression = expr.asFlinkSQLExpr(header, records.data, context).as(Symbol(one))
+          val newCol: Expression = expr.asFlinkSQLExpr(header, records.data, context) as Symbol(one)
           val columnsToSelect = records.data.columns.map(UnresolvedFieldReference(_)) :+ newCol // TODO: missmatch between expression and column/table
 
           records.data.select(columnsToSelect: _*)
@@ -340,8 +340,8 @@ final case class OrderBy(in: CAPFPhysicalOperator, sortItems: Seq[SortItem[Expr]
     prev.mapRecordsWithDetails { records =>
 
       val sortExpression = sortItems.map {
-        case Asc(expr: Var) => expr.asFlinkSQLExpr(records.header, records.data, context)
-        case Desc(expr: Var) => expr.asFlinkSQLExpr(records.header, records.data, context)
+        case Asc(expr: Var) => expr.asFlinkSQLExpr(records.header, records.data, context).asc
+        case Desc(expr: Var) => expr.asFlinkSQLExpr(records.header, records.data, context).desc
         case other => throw IllegalArgumentException("ASC or DESC", other)
       }
 

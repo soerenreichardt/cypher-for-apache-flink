@@ -23,6 +23,8 @@ object Tags {
 
   object TckCoscTag extends Tag("TckCosc")
 
+  object TckCapfTag extends Tag("TckCapf")
+
   object WhiteList extends Tag("WhiteList Scenario")
 
   object BlackList extends Tag("BlackList Scenario")
