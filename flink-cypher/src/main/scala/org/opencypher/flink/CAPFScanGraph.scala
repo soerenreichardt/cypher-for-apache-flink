@@ -1,6 +1,8 @@
 package org.opencypher.flink
 
 import cats.data.NonEmptyVector
+import org.apache.flink.api.scala._
+import org.apache.flink.table.api.scala._
 import org.opencypher.flink.schema.{CAPFEntityTable, CAPFNodeTable, CAPFRelationshipTable}
 import org.opencypher.okapi.api.graph.PropertyGraph
 import org.opencypher.okapi.api.schema.Schema

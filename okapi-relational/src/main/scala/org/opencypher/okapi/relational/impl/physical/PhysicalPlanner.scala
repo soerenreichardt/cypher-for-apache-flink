@@ -44,7 +44,14 @@ class PhysicalPlanner[P <: PhysicalOperator[R, G, C], R <: CypherRecords, G <: P
         producer.planRemoveAliases(process(in), dependent, header)
 
       case flat.Select(fields, graphs: Set[String], in, header) =>
-        producer.planSelect(process(in), fields.map(header.slotFor).map(_.content.key), header)
+
+        val selectExpressions = fields
+          .flatMap(header.selfWithChildren)
+          .map(_.content.key)
+          .distinct
+
+        producer.planSelect(process(in), selectExpressions, header)
+//        producer.planSelect(process(in), fields.map(header.slotFor).map(_.content.key), header)
 
       case flat.EmptyRecords(in, header) =>
         producer.planEmptyRecords(process(in), header)
@@ -178,6 +185,10 @@ class PhysicalPlanner[P <: PhysicalOperator[R, G, C], R <: CypherRecords, G <: P
         val first = process(sourceOp)
         val second = process(relOp)
         val third = process(targetOp)
+
+        if (upper.isInfinity || upper < lower) {
+          throw new NotImplementedException("unbounded var expand")
+        }
 
         val expandHeader = RecordHeader.from(
           header.selfWithChildren(source).map(_.content) ++

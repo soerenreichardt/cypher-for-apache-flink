@@ -37,7 +37,7 @@ object FlinkUtils {
   }
 
   def toFlinkType(ct: CypherType): TypeInformation[_] = ct match {
-    case CTNull | CTVoid => throw NotImplementedException("")
+    case CTNull | CTVoid => Types.BOOLEAN // TODO: boolean is just a dummy
     case _ => ct.material match {
       case CTString => Types.STRING
       case CTInteger => Types.LONG

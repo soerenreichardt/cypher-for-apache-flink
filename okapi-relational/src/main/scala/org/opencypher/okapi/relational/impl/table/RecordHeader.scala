@@ -39,6 +39,22 @@ final case class RecordHeader(internalHeader: InternalHeader) {
   def ++(other: RecordHeader): RecordHeader =
     copy(internalHeader ++ other.internalHeader)
 
+  def ==(other: RecordHeader): Boolean = {
+    val slotEquality = this.slots.zip(other.slots).map {
+      case (s1: RecordSlot, s2: RecordSlot) if s1.content.key.withoutType == s2.content.key.withoutType =>
+        if (s1.content.cypherType == s2.content.cypherType) {
+          true
+        } else if (s1.content.cypherType.nullable == s2.content.cypherType || s1.content.cypherType == s2.content.cypherType.nullable) {
+          true
+        } else {
+          false
+        }
+    }
+
+    slotEquality.filter(_ == false).isEmpty
+  }
+
+
   def indexOf(content: SlotContent): Option[Int] = slots.find(_.content == content).map(_.index)
 
   /**

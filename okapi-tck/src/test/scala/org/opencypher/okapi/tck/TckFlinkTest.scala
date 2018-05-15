@@ -53,7 +53,7 @@ class TckFlinkTest extends CAPFTestSuite {
   }
 
   it("run Single Scenario") {
-    scenarios.get("Handle dependencies across WITH")
+    scenarios.get("OPTIONAL MATCH with previously bound nodes")
       .foreach(scenario => scenario(TCKGraph(defaultFactory,  CAPFGraph.empty)).execute())
   }
 }

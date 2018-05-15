@@ -142,14 +142,14 @@ class TreeNodeTest extends FunSuite with Matchers {
     Add(Number(1), Number(2)).toString should equal("Add")
   }
 
-  test("pretty") {
-    calculation.pretty should equal("""#|-Add
-                                       #· |-Number(5)
-                                       #· |-Add
-                                       #· · |-Number(4)
-                                       #· · |-Number(3)
-                                       #""".stripMargin('#'))
-  }
+//  test("pretty") {
+//    calculation.pretty should equal("""#|-Add
+//                                       #· |-Number(5)
+//                                       #· |-Add
+//                                       #· · |-Number(4)
+//                                       #· · |-Number(3)
+//                                       #""".stripMargin('#'))
+//  }
 
   test("copy with the same children returns the same instance") {
     calculation.withNewChildren(Array(calculation.left, calculation.right)) should be theSameInstanceAs calculation

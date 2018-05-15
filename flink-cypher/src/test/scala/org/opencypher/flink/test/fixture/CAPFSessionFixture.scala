@@ -7,7 +7,7 @@ import org.opencypher.okapi.test.fixture.BaseTestFixture
 trait CAPFSessionFixture extends BaseTestFixture {
   self: FlinkSessionFixture with BaseTestSuite =>
 
-  implicit lazy val capf: CAPFSession = CAPFSession.create()
+  implicit lazy val capf: CAPFSession = CAPFSession.local()
 
   abstract override protected def afterEach(): Unit = {
     capf.dataSource(capf.sessionNamespace).graphNames.foreach(capf.delete)

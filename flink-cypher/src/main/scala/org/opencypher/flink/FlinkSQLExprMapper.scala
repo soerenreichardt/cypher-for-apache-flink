@@ -4,14 +4,13 @@ import org.apache.flink.api.common.typeinfo.TypeInformation
 import org.apache.flink.table.api.scala._
 import org.apache.flink.table.api.{Table, Types}
 import org.apache.flink.table.expressions.{Expression, Literal, Null, UnresolvedFieldReference}
-import org.apache.flink.table.functions.ScalarFunction
 import org.opencypher.flink.FlinkUtils._
 import org.opencypher.flink.physical.CAPFRuntimeContext
 import org.opencypher.okapi.api.types.{CTAny, CTList, CTNode, CTString}
 import org.opencypher.okapi.api.value.CypherValue.CypherList
 import org.opencypher.okapi.impl.exception.{IllegalArgumentException, IllegalStateException, NotImplementedException}
 import org.opencypher.okapi.ir.api.expr._
-import org.opencypher.okapi.relational.impl.table.{OpaqueField, ProjectedExpr, ProjectedField, RecordHeader}
+import org.opencypher.okapi.relational.impl.table.RecordHeader
 
 object FlinkSQLExprMapper {
 
@@ -42,6 +41,9 @@ object FlinkSQLExprMapper {
           context.parameters(name) match {
             case CypherList(l) =>
               val expressionList = l.unwrap.map( elem => Literal(elem, TypeInformation.of(elem.getClass)))
+              if (expressionList.isEmpty)
+                throw new NotImplementedException("Empty lists are not yet supported by Flink")
+
               array(expressionList.head, expressionList.tail: _*)
             case notAList => throw IllegalArgumentException("a Cypher list", notAList)
           }
@@ -59,7 +61,7 @@ object FlinkSQLExprMapper {
           if (columns.contains(colName)) {
             UnresolvedFieldReference(colName)
           } else {
-            null
+            Null(toFlinkType(expr.cypherType)) as Symbol(colName)
           }
 
         case ListLit(exprs) =>

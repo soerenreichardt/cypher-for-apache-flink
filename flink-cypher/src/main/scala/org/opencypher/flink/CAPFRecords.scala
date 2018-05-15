@@ -3,7 +3,7 @@ package org.opencypher.flink
 import org.apache.flink.api.scala._
 import org.apache.flink.table.api.Table
 import org.apache.flink.table.api.scala._
-import org.apache.flink.table.expressions.{Expression, UnresolvedFieldReference}
+import org.apache.flink.table.expressions.{Expression, Null, UnresolvedFieldReference}
 import org.apache.flink.types.Row
 import org.opencypher.flink.CAPFRecordHeader._
 import org.opencypher.flink.FlinkUtils._
@@ -88,14 +88,21 @@ sealed abstract class CAPFRecords(val header: RecordHeader, val data: Table)(imp
     val renamedSlots = renamedSlotMapping.map(_._2)
 
     val withMissingColumns: Seq[Expression] = targetHeader.slots.map { targetSlot =>
+      val targetColName = ColumnName.of(targetSlot)
 
-      renamedSlots.find(_.content == targetSlot.content) match {
-        case Some(_) =>
+      renamedSlots.find(_.content.key.withoutType == targetSlot.content.key.withoutType) match {
+        case Some(sourceSlot) =>
+          val sourceColName = ColumnName.of(sourceSlot)
+
+          // the column exists in the source data
+//          if (sourceColName == targetColName) {
+//            sourceColName as Symbol(targetColName)
+//          }
           Symbol(ColumnName.of(targetSlot)) as Symbol(ColumnName.of(targetSlot)) // TODO: check for name equality
         case None => targetSlot.content.key match {
           case HasLabel(_, l: Label) => entityLabels(l.name) as Symbol(ColumnName.of(targetSlot))
           case _: Type if entityLabels.size == 1 => entityLabels.head as Symbol(ColumnName.of(targetSlot))
-          case _ => "Null" as Symbol(ColumnName.of(targetSlot))
+          case _ => Null(toFlinkType(targetSlot.content.cypherType)) as Symbol(ColumnName.of(targetSlot))
         }
       }
     }

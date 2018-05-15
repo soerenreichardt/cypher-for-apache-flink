@@ -1,11 +1,9 @@
 package org.opencypher.flink.physical.operators
 
-import java.util.{Collections, UUID}
-
-import org.apache.flink.api.scala._
+import org.apache.flink.api.java.typeutils.RowTypeInfo
 import org.apache.flink.table.api.Types
 import org.apache.flink.table.api.scala._
-import org.apache.flink.table.expressions.{Expression, Literal, UnresolvedFieldReference}
+import org.apache.flink.table.expressions.{Expression, Literal, ResolvedFieldReference, UnresolvedFieldReference}
 import org.apache.flink.types.Row
 import org.opencypher.flink.FlinkSQLExprMapper._
 import org.opencypher.flink.FlinkUtils._
@@ -22,10 +20,8 @@ import org.opencypher.okapi.ir.api.block.{Asc, Desc, SortItem}
 import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.ir.impl.syntax.ExprSyntax._
 import org.opencypher.okapi.logical.impl._
-import org.opencypher.okapi.relational.impl.table._
 import org.opencypher.okapi.relational.impl.syntax.RecordHeaderSyntax._
-
-import scala.collection.mutable
+import org.opencypher.okapi.relational.impl.table._
 
 private[flink] abstract class UnaryPhysicalOperator extends CAPFPhysicalOperator {
 
@@ -61,7 +57,7 @@ final case class Scan(in: CAPFPhysicalOperator, inGraph: LogicalGraph, v: Var, h
       case x =>
         throw IllegalArgumentException("an entity type", x)
     }
-    assert(header == records.header)
+    assert(header.==(records.header))
     CAPFPhysicalResult(records, graphs)
   }
 
@@ -118,21 +114,26 @@ final case class Select(in: CAPFPhysicalOperator, exprs: Seq[Expr], header: Reco
 
   override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
     prev.mapRecordsWithDetails { records =>
-      val propertyFields = exprs.flatMap {
-        _ match {
-          case v: Var =>
-            header.slotFor(v).content match {
-              case _: OpaqueField => header.childSlots(v).map(slot => slot.content.key)
-              case _ => Seq()
-            }
-          case other => Seq()
-        }
-      }
+//      val propertyFields = exprs.flatMap {
+//        _ match {
+//          case v: Var =>
+//            header.slotFor(v).content match {
+//              case _: OpaqueField => header.childSlots(v).map(slot => slot.content.key)
+//              case _ => Seq()
+//            }
+//          case other => Seq()
+//        }
+//      }
+//
+//      val alignedWithHeader = exprs ++ propertyFields
+//
+//      val asFlinkExpression = alignedWithHeader.distinct.map(_.asFlinkSQLExpr(header, records.data, context))
+//      val newData = records.data.select(asFlinkExpression: _*)
 
-      val alignedWithHeader = exprs ++ propertyFields
+      val data = records.data
 
-      val asFlinkExpression = alignedWithHeader.distinct.map(_.asFlinkSQLExpr(header, records.data, context))
-      val newData = records.data.select(asFlinkExpression: _*)
+      val columns = exprs.map(_.asFlinkSQLExpr(header, data, context))
+      val newData = data.select(columns: _*)
 
       CAPFRecords.verifyAndCreate(header, newData)(records.capf)
     }
@@ -225,7 +226,7 @@ final case class Project(in: CAPFPhysicalOperator, expr: Expr, header: RecordHea
   override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
     prev.mapRecordsWithDetails { records =>
       val headerNames = header.slotsFor(expr).map(ColumnName.of)
-      val dataNames = records.data.columns.toSeq
+      val dataNames = records.data.columns
 
       val newData = headerNames.diff(dataNames) match {
         case Seq(one) =>
@@ -303,7 +304,10 @@ final case class Aggregate(
             case Sum(expr) =>
               withInnerExpr(expr)(_.sum.as(columnName))
 
-            case Collect(expr, distinct) => ???
+            case Collect(expr, distinct) => withInnerExpr(expr) { column =>
+              val list = array(column)
+              list as columnName
+            }
             case x =>
               throw NotImplementedException(s"Aggregation function $x")
 
@@ -364,7 +368,8 @@ final case class Unwind(in: CAPFPhysicalOperator, list: Expr, item: Var, header:
               val flinkType = toFlinkType(item.cypherType)
               val nullable = item.cypherType.isNullable
 
-              val rowList = l.unwrap.map(java.lang.String.valueOf(_))
+              implicit val typeInfo = new RowTypeInfo(flinkType)
+              val rowList = l.unwrap.map(v => Row.of(v.asInstanceOf[AnyRef]))
               val rowDataSet = records.capf.env.fromCollection(rowList)
               val tableSchema = UnresolvedFieldReference(itemColumn)
               val table = records.capf.tableEnv.fromDataSet(rowDataSet, tableSchema)
@@ -417,6 +422,7 @@ final case class Limit(in: CAPFPhysicalOperator, expr: Expr, header: RecordHeade
         }
       case other => throw IllegalArgumentException("an integer literal or parameter", other)
     }
+
 
     prev.mapRecordsWithDetails { records =>
       CAPFRecords.verifyAndCreate(header, records.data.fetch(limit.toInt))(records.capf)
