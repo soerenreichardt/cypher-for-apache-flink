@@ -72,6 +72,7 @@
     <dep.neo4j.frontend.version>3.4.0-0412</dep.neo4j.frontend.version>
     <dep.netty.version>4.1.8.Final</dep.netty.version>
     <dep.neo4j.driver.version>1.4.2</dep.neo4j.driver.version>
+    <dep.flink.version>1.4.2</dep.flink.version>
     <dep.spark.version>2.2.1</dep.spark.version>
     <dep.spark.scope>compile</dep.spark.scope>
 
@@ -429,6 +430,7 @@
         <module>okapi-testing</module>
         <module>okapi-trees</module>
         <module>spark-cypher</module>
+        <module>flink-cypher</module>
       </modules>
 
       <build>

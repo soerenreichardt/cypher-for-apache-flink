@@ -223,21 +223,32 @@ class FlatOperatorProducer(implicit context: FlatPlannerContext) {
   }
 
   def boundedVarExpand(
+      source: Var,
       edge: Var,
-      edgeList: Var,
+//      edgeList: Var,
       target: Var,
       direction: Direction,
       lower: Int,
       upper: Int,
-      sourceOp: InitVarExpand,
+//      sourceOp: InitVarExpand,
+      sourceOp: FlatOperator,
       edgeOp: FlatOperator,
       targetOp: FlatOperator,
       isExpandInto: Boolean): FlatOperator = {
 
-    val (initHeader, _) = sourceOp.in.header.update(addContent(OpaqueField(edgeList)))
-    val header = initHeader ++ targetOp.header
+    val header = (1 to upper-1).foldLeft(sourceOp.header ++ edgeOp.header ++ targetOp.header) { (acc, i) =>
+      val edgeVar = Var(edge.name + "_" + i)(edge.cypherType)
+      val targetVar = Var(target.name + "_" + i)(target.cypherType)
 
-    BoundedVarExpand(edge, edgeList, target, direction, lower, upper, sourceOp, edgeOp, targetOp, header, isExpandInto)
+      val renamedEdgeSlots = edgeOp.header.selfWithChildren(edge).map(_.withOwner(edgeVar).content)
+      val renamedTargetSlots = targetOp.header.selfWithChildren(target).map(_.withOwner(targetVar).content)
+
+      acc ++ RecordHeader.from(renamedEdgeSlots: _*) ++ RecordHeader.from(renamedTargetSlots: _*)
+    }
+
+//    val header = (sourceOp.header ++ edgeOp.header ++ targetOp.header)
+
+    BoundedVarExpand(source, edge, target, direction, lower, upper, sourceOp, edgeOp, targetOp, header, isExpandInto)
   }
 
   def planOptional(lhs: FlatOperator, rhs: FlatOperator): FlatOperator = {

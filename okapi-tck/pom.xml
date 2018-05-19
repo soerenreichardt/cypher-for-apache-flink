@@ -23,6 +23,21 @@
   <dependencies>
     <dependency>
       <groupId>org.opencypher</groupId>
+      <artifactId>flink-cypher</artifactId>
+      <version>${project.parent.version}</version>
+      <scope>test</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.opencypher</groupId>
+      <artifactId>flink-cypher</artifactId>
+      <version>${project.parent.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.opencypher</groupId>
       <artifactId>tck</artifactId>
       <version>${dep.tck.version}</version>
     </dependency>

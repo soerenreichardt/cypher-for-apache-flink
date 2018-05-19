@@ -241,8 +241,9 @@ class FlatPlannerTest extends BaseTestSuite {
 
     val edgeScan = flatVarLengthEdgeScan(initVarExpand.edgeList)
     val flatOp = mkFlat.boundedVarExpand(
+      source,
       edgeScan.edge,
-      edgeList,
+//      edgeList,
       target,
       Directed,
       1,

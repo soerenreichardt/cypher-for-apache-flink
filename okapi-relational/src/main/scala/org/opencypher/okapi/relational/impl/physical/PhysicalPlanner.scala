@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2018 "Neo4j Sweden, AB" [https://neo4j.com]
+ * Copyright (c) 2016-2018 "Neo4j, Inc." [https://neo4j.com]
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -174,24 +174,74 @@ class PhysicalPlanner[P <: PhysicalOperator[R, G, C], R <: CypherRecords, G <: P
       case flat.InitVarExpand(source, edgeList, endNode, in, header) =>
         producer.planInitVarExpand(process(in), source, edgeList, endNode, header)
 
-      case flat.BoundedVarExpand(rel, edgeList, target, direction, lower, upper, sourceOp, relOp, targetOp, header, isExpandInto) =>
+      case flat.BoundedVarExpand(
+      source, rel, target, direction,
+      lower, upper,
+      sourceOp, relOp, targetOp,
+      header, isExpandInto) =>
         val first = process(sourceOp)
         val second = process(relOp)
         val third = process(targetOp)
 
-        producer.planBoundedVarExpand(
-          first,
-          second,
-          third,
-          rel,
-          edgeList,
-          target,
-          sourceOp.endNode,
-          lower,
-          upper,
-          direction,
-          header,
-          isExpandInto)
+        if (upper.isInfinity || upper < lower) {
+          throw new NotImplementedException("unbounded var expand")
+        }
+
+        val expandHeader = RecordHeader.from(
+          header.selfWithChildren(source).map(_.content) ++
+          header.selfWithChildren(rel).map(_.content) ++
+          header.selfWithChildren(target).map(_.content): _*)
+        val expand = producer.planExpandSource(first, second, third, source, rel, target, expandHeader)
+
+        // remove each new starting node from data as it is the same as the previous end node, the storing schema will be
+        // startNode, edge, endNode, edge_1, endNode_1, edge_2, ..., endNode_n
+        val relAndTargetSlots = (expand.header.selfWithChildren(rel) ++ expand.header.selfWithChildren(target)).map(_.content).toIndexedSeq
+        val relAndTarget = producer.planSelectFields(
+          expand,
+          relAndTargetSlots.map(slot => Var(slot.key.withoutType)(slot.cypherType)),
+          RecordHeader.from(relAndTargetSlots: _*)
+        )
+
+        def iterate(i: Int, joinedExpands: P, oldTargetVar: Var, edgeVars: Set[Var]): P = {
+          if (i == upper) return joinedExpands
+
+          val newRelVar = Var(rel.name + "_" + i)(rel.cypherType)
+          val newTargetVar = Var(target.name + "_" + i)(target.cypherType)
+
+          val renamedRelVars = header.selfWithChildren(rel).map(_.withOwner(newRelVar))
+          val renamedTargetVars = header.selfWithChildren(target).map(_.withOwner(newTargetVar))
+
+          val renamedVars = (renamedRelVars ++ renamedTargetVars)
+          val newHeader = RecordHeader.from(renamedVars.map(s => s.content): _*)
+
+          val renamedData = producer.planBulkAlias(relAndTarget, relAndTarget.header.slots.map(_.content.key), renamedVars, newHeader)
+
+          val joinedData = producer.planJoin(
+            joinedExpands,
+            renamedData,
+            Seq((joinedExpands.header.slotFor(oldTargetVar).content.key, renamedData.header.sourceNodeSlot(newRelVar).content.key)),
+            joinedExpands.header ++ newHeader
+          )
+
+          val withRelIsomorphism = producer.planFilter(
+            joinedData,
+            Ands(edgeVars.map { edge =>
+              Not(Equals(joinedExpands.header.slotFor(edge).content.key, renamedData.header.slotFor(newRelVar).content.key)(CTNode))(CTNode): Expr
+            }),
+            joinedData.header)
+
+          val withEmptyFields = producer.planSelect(
+            joinedExpands,
+            joinedExpands.header.slots.map(slot => slot.content.key) ++
+              renamedVars.map(slot => As(NullLit()(slot.content.cypherType), slot.content.key)(CTWildcard)),
+            joinedData.header)
+
+          val unionedData = producer.planUnion(withEmptyFields, withRelIsomorphism)
+
+          iterate(i+1, unionedData, newTargetVar, edgeVars + newRelVar)
+        }
+
+        iterate(1, expand, target, Set(rel))
 
       case flat.Optional(lhs, rhs, header) => planOptional(lhs, rhs, header)
 

@@ -33,6 +33,7 @@ import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.ir.impl.QueryCatalog
 import org.opencypher.okapi.logical.impl._
 import org.opencypher.okapi.relational.api.physical.{PhysicalOperatorProducer, PhysicalPlannerContext}
+import org.opencypher.okapi.relational.impl.table.{ProjectedExpr, ProjectedField, RecordHeader, RecordSlot}
 import org.opencypher.okapi.relational.impl.physical._
 import org.opencypher.okapi.relational.impl.table._
 import org.opencypher.spark.api.CAPSSession
@@ -95,7 +96,7 @@ final class CAPSPhysicalOperatorProducer(implicit caps: CAPSSession)
     in: CAPSPhysicalOperator,
     inGraph: LogicalGraph,
     v: Var,
-    header: RecordHeader): CAPSPhysicalOperator = operators.NodeScan(in, v, header)
+    header: RecordHeader): CAPSPhysicalOperator = operators.Scan(in, inGraph, v, header)
 
   override def planRelationshipScan(
     in: CAPSPhysicalOperator,
