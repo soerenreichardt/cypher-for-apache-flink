@@ -338,6 +338,7 @@
           <junitxml>.</junitxml>
           <filereports>WDF TestSuite.txt</filereports>
           <tagsToExclude>CAPSPatternGraphFactory</tagsToExclude>
+          <tagsToExclude>CAPFPatternGraphFactory</tagsToExclude>
           <!-- Enable full exception stack traces -->
           <stdout>F</stdout>
         </configuration>
@@ -405,6 +406,7 @@
         <module>spark-cypher-examples</module>
         <module>spark-cypher-tck</module>
         <module>spark-cypher-testing</module>
+        <module>flink-cypher</module>
       </modules>
     </profile>
 
