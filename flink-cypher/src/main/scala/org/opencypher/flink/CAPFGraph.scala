@@ -2,28 +2,80 @@ package org.opencypher.flink
 
 import org.apache.flink.api.scala._
 import org.apache.flink.table.api.scala._
+import org.apache.flink.table.expressions.UnresolvedFieldReference
 import org.opencypher.flink.schema.EntityTable._
 import org.opencypher.flink.schema.{CAPFEntityTable, CAPFNodeTable}
 import org.opencypher.flink.CAPFConverters._
-import org.opencypher.okapi.api.graph.PropertyGraph
+import org.opencypher.okapi.api.graph.{GraphOperations, PropertyGraph}
 import org.opencypher.okapi.api.schema.Schema
 import org.opencypher.okapi.api.table.CypherRecords
 import org.opencypher.okapi.api.types.{CTNode, CTRelationship}
 import org.opencypher.okapi.impl.exception.IllegalArgumentException
-import org.opencypher.okapi.ir.api.expr.Var
+import org.opencypher.okapi.ir.api.PropertyKey
+import org.opencypher.okapi.ir.api.expr.{Property, Var}
 import org.opencypher.okapi.relational.impl.table.{OpaqueField, RecordHeader}
 
-trait CAPFGraph extends PropertyGraph with Serializable {
+trait CAPFGraph extends PropertyGraph with GraphOperations with Serializable {
+
+  def tags: Set[Int]
+
+  implicit def session: CAPFSession
 
   override def nodes(name: String, nodeCypherType: CTNode): CAPFRecords
 
   override def relationships(name: String, relCypherType: CTRelationship): CAPFRecords
 
-  override def session: CAPFSession
+  override def unionAll(others: PropertyGraph*): CAPFGraph = {
+    CAPFUnionGraph(this :: others.map(_.asCapf).toList: _*)
+  }
 
-  override def union(other: PropertyGraph): CAPFGraph
+  override def schema: CAPFSchema
 
   override def toString = s"${getClass.getSimpleName}"
+
+  def nodesWithExactLabels(name: String, labels: Set[String]): CAPFRecords = {
+    val nodeType = CTNode(labels)
+    val nodeVar = Var(name)(nodeType)
+    val records = nodes(name, nodeType)
+
+    val idSlot = records.header.slotFor(nodeVar)
+
+    val labelSlots = records.header.labelSlots(nodeVar)
+      .filter(slot => labels.contains(slot._1.label.name))
+      .values
+
+    val propertyExprs = schema.nodeKeys(labels).flatMap {
+      case (key, cypherType) => Property(nodeVar, PropertyKey(key))(cypherType)
+    }.toSet
+    val propertySlots = records.header.propertySlots(nodeVar).filter {
+      case (_, propertySlot) => propertyExprs.contains(propertySlot.content.key)
+    }.values
+
+    val keepSlots = (Seq(idSlot) ++ labelSlots ++ propertySlots).map(_.content)
+    val keepCols = keepSlots.map(ColumnName.of)
+
+    val predicate = records.header.labelSlots(nodeVar)
+      .filterNot(slot => labels.contains(slot._1.label.name))
+      .values
+      .map(ColumnName.of)
+      .map(UnresolvedFieldReference(_) === false)
+      .reduceOption(_ && _)
+
+    val updatedData = predicate match {
+
+      case Some(filter) =>
+        records.data
+          .filter(filter)
+          .select(keepCols.map(UnresolvedFieldReference): _*)
+
+      case None =>
+        records.data.select(keepCols.map(UnresolvedFieldReference): _*)
+    }
+
+    val updatedHeader = RecordHeader.from(keepSlots: _*)
+
+    CAPFRecords.verifyAndCreate(updatedHeader, updatedData)(session)
+  }
 
 }
 
@@ -31,7 +83,7 @@ object CAPFGraph {
 
   def empty(implicit capf: CAPFSession): CAPFGraph =
     new EmptyGraph() {
-
+      override def tags: Set[Int] = Set.empty
     }
 
   def create(nodeTable: CAPFNodeTable, entityTables: CAPFEntityTable*)(implicit capf: CAPFSession): CAPFGraph = {
@@ -54,6 +106,8 @@ object CAPFGraph {
       if (g.schema == schema) g else throw IllegalArgumentException(s"a graph with schema $schema", g.schema)
     }
 
+    override def tags: Set[Int] = lazyGraph.tags
+
     override def session: CAPFSession = CAPF
 
     override def nodes(name: String, nodeCypherType: CTNode): CAPFRecords =
@@ -62,14 +116,11 @@ object CAPFGraph {
     override def relationships(name: String, relCypherType: CTRelationship): CAPFRecords =
       lazyGraph.relationships(name, relCypherType)
 
-    override def union(other: PropertyGraph): CAPFGraph =
-      lazyGraph.union(other)
-
   }
 
   sealed abstract class EmptyGraph(implicit val session: CAPFSession) extends CAPFGraph {
 
-    override val schema: Schema = Schema.empty
+    override val schema: CAPFSchema = CAPFSchema.empty
 
     override def nodes(name: String, cypherType: CTNode): CAPFRecords =
       CAPFRecords.empty(RecordHeader.from(OpaqueField(Var(name)(cypherType))))
@@ -77,7 +128,6 @@ object CAPFGraph {
     override def relationships(name: String, cypherType: CTRelationship): CAPFRecords =
       CAPFRecords.empty(RecordHeader.from(OpaqueField(Var(name)(cypherType))))
 
-    override def union(other: PropertyGraph): CAPFGraph = other.asCapf
   }
 
 }

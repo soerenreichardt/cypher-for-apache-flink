@@ -63,26 +63,30 @@ final case class Scan(in: CAPFPhysicalOperator, inGraph: LogicalGraph, v: Var, h
 
 }
 
-final case class Alias(in: CAPFPhysicalOperator, expr: Expr, alias: Var, header: RecordHeader)
+final case class Alias(in: CAPFPhysicalOperator, aliases: Seq[(Expr,  Var)], header: RecordHeader)
   extends UnaryPhysicalOperator {
 
   override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
-    prev.mapRecordsWithDetails { records =>
-      val oldSlot = records.header.slotsFor(expr).head
+   prev.mapRecordsWithDetails { records =>
+     val inHeader = records.header
 
-      val newSlot = header.slotsFor(alias).head
+     val newData = aliases.foldLeft(records.data) {
+       case (acc, (expr, alias)) =>
+         val oldSlot = inHeader.slotsFor(expr).head
+         val newSlot = header.slotsFor(alias).head
 
-      val oldColumnName = ColumnName.of(oldSlot)
-      val newColumnName = ColumnName.of(newSlot)
+         val oldColumnName = ColumnName.of(oldSlot)
+         val newColumnName = ColumnName.of(newSlot)
 
-      val newData = if (records.data.columns.contains(oldColumnName)) {
-        records.data.safeRenameColumn(oldColumnName, newColumnName)
-      } else {
-        throw IllegalArgumentException(s"a column with name $oldColumnName")
-      }
+         if (records.data.columns.contains(oldColumnName)) {
+           acc.safeRenameColumn(oldColumnName, newColumnName)
+         } else {
+           throw IllegalArgumentException(s"a column with name $oldColumnName")
+         }
+     }
 
-      CAPFRecords.verifyAndCreate(header, newData)(records.capf)
-    }
+     CAPFRecords.verifyAndCreate(header, newData)(records.capf)
+   }
   }
 }
 

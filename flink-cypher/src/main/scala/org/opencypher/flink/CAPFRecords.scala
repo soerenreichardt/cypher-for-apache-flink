@@ -28,9 +28,6 @@ sealed abstract class CAPFRecords(val header: RecordHeader, val data: Table)(imp
   override def show(implicit options: PrintOptions): Unit =
     RecordsPrinter.print(this)
 
-  override def register(name: String): Unit =
-    capf.tableEnv.registerTable(name, data)
-
   override def size: Long = data.count()
 
   def toCypherMaps: DataSet[CypherMap] = {
@@ -59,6 +56,20 @@ sealed abstract class CAPFRecords(val header: RecordHeader, val data: Table)(imp
     this
   }
 
+  def retag(replacements: Map[Int, Int]): CAPFRecords = {
+    val actualRetaggings = replacements.filterNot { case (from, to) => from == to }
+    val idColumns = header.contents.collect {
+      case f: OpaqueField => ColumnName.of(f)
+      case p@ProjectedExpr(StartNode(_)) => ColumnName.of(p)
+      case p@ProjectedExpr(EndNode(_)) => ColumnName.of(p)
+    }
+    val tableWithReplacedTags = idColumns.foldLeft(data) {
+      case (table, column) => table.safeReplaceTags(column, actualRetaggings)
+    }
+
+    CAPFRecords.verifyAndCreate(header, tableWithReplacedTags)
+  }
+
   override def collect: Array[CypherMap] =
     toCypherMaps.collect().toArray
 
@@ -67,8 +78,8 @@ sealed abstract class CAPFRecords(val header: RecordHeader, val data: Table)(imp
         .getOrElse(throw IllegalStateException("GraphScan table did not contain any fields"))
 
     val entityLabels: Set[String] = oldEntity.cypherType match {
-      case CTNode(labels) => labels
-      case CTRelationship(typ) => typ
+      case CTNode(labels,  _) => labels
+      case CTRelationship(typ, _) => typ
       case _ => throw IllegalArgumentException("CTNode or CTRelationship", oldEntity.cypherType)
     }
 

@@ -8,25 +8,15 @@ import org.opencypher.okapi.impl.util.PrintOptions
 import scala.reflect.runtime.universe.TypeTag
 
 trait CAPFResult extends CypherResult {
-  /**
-    * Retrieves the graph if one is returned by the query.
-    * If the query returns a table, `None` is returned.
-    *
-    * @return a graph if the query returned one, `None` otherwise
-    */
-  override def graph: Option[PropertyGraph]
 
-  /**
-    * The table of records if one was returned by the query.
-    * Returns `None` if the query returned a graph.
-    *
-    * @return a table of records, `None` otherwise.
-    */
-  override def records: Option[CypherRecords]
+  override def graph: Option[CAPFGraph]
 
-  /**
-    * API for printable plans. This is used for explaining the execution plan of a Cypher query.
-    */
+  override def records: Option[CAPFRecords]
+
+  override def getRecords: CAPFRecords = records.get
+
+  override def getGraph: CAPFGraph = graph.get
+
   override def plans: CAPFQueryPlans
 
   override def show(implicit options: PrintOptions): Unit =
@@ -37,4 +27,16 @@ trait CAPFResult extends CypherResult {
 
   override def toString = this.getClass.getSimpleName
 
+}
+
+object CAPFResult {
+  def empty(queryPlans: CAPFQueryPlans = CAPFQueryPlans.empty): CAPFResult = new CAPFResult {override def records: Option[CAPFRecords] = ???
+
+    override def records: Option[CAPFRecords] = None
+
+    override def graph: Option[CAPFGraph] = None
+
+    override def plans: CAPFQueryPlans = queryPlans
+
+  }
 }

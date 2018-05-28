@@ -9,8 +9,27 @@ import org.apache.flink.table.functions.ScalarFunction
 import org.apache.flink.types.Row
 import org.opencypher.flink.schema.EntityTable._
 import org.opencypher.okapi.impl.exception
+import org.opencypher.flink.Tags._
 
 object TableOps {
+
+  implicit class ColumnTagging(val col: UnresolvedFieldReference) extends AnyVal {
+
+    def replaceTag(from: Int, to: Int): UnresolvedFieldReference = {
+
+    }
+
+    def setTag(tag: Int): UnresolvedFieldReference = {
+      val tagLit = Literal(tag.toLong << idBits, Types.LONG)
+      val newId = col
+        .
+    }
+
+    def getTag: Expression = {
+      val shiftRight = new BitshiftRight(idBits)
+      shiftRight(col)
+    }
+  }
 
   implicit class RichTable(val table: Table) extends AnyVal {
 
@@ -143,7 +162,19 @@ object TableOps {
       sanitizedTable.toDataSet[T]
     }
 
+    def safeReplaceTags(columnName: String, replacements: Map[Int, Int]): Table = {
+      val dataType = table.getSchema.getType(columnName)
+      require(dataType == Types.LONG, s"Cannot remap long values in Column with type $dataType")
+
+      val col = UnresolvedFieldReference(columnName)
+      val updatedCol = replacements.foldLeft(col) {
+        case (current, (from, to)) => current.relaceTag(from, to)
+      }
+
+      safeReplaceColumn(columnName, updatedCol)
+    }
   }
+
 
 }
 
@@ -153,4 +184,18 @@ class Merge(token: String) extends ScalarFunction {
     str.mkString(token)
   }
 
+}
+
+class BitshiftRight(numBits: Int) extends ScalarFunction {
+
+  def eval(idField: Long): Long = {
+    idField >> numBits
+  }
+}
+
+class BitwiseAnd(other: AnyRef) extends ScalarFunction {
+
+  def eval(field: AnyRef): AnyRef = {
+    field & other
+  }
 }

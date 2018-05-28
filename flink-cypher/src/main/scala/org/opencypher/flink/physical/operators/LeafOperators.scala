@@ -1,10 +1,9 @@
 package org.opencypher.flink.physical.operators
 
-import org.apache.flink.api.scala._
-import org.apache.flink.table.api.scala._
-import org.opencypher.flink.{CAPFRecords, CAPFSession}
 import org.opencypher.flink.physical.{CAPFPhysicalResult, CAPFRuntimeContext}
-import org.opencypher.okapi.logical.impl.LogicalExternalGraph
+import org.opencypher.flink.{CAPFRecords, CAPFSession}
+import org.opencypher.okapi.api.graph.QualifiedGraphName
+import org.opencypher.okapi.relational.impl.flat.Start
 import org.opencypher.okapi.relational.impl.table.RecordHeader
 
 private[flink] abstract class LeafPhysicalOperator extends CAPFPhysicalOperator {
@@ -14,19 +13,28 @@ private[flink] abstract class LeafPhysicalOperator extends CAPFPhysicalOperator 
   def executeLeaf()(implicit context: CAPFRuntimeContext): CAPFPhysicalResult
 }
 
-final case class Start(records: CAPFRecords, graph: LogicalExternalGraph) extends LeafPhysicalOperator {
+object Start {
 
-  override def header: RecordHeader = records.header
-
-  override def executeLeaf()(implicit context: CAPFRuntimeContext): CAPFPhysicalResult =
-    CAPFPhysicalResult(records, Map(graph.name -> resolve(graph.qualifiedGraphName)))
+  def apply(qgn: QualifiedGraphName, records: CAPFRecords)(implicit capf: CAPFSession): Start = {
+    Start(qgn, Some(records))
+  }
 }
 
-final case class StartFromUnit(graph: LogicalExternalGraph)(implicit capf: CAPFSession)
-  extends LeafPhysicalOperator {
+final case class Start(qgn: QualifiedGraphName, recordsOpt: Option[CAPFRecords])
+  (implicit capf: CAPFSession) extends LeafPhysicalOperator {
 
-  override val header = RecordHeader.empty
+  override val header = recordsOpt.map(_.header).getOrElse(RecordHeader.empty)
 
-  override def executeLeaf()(implicit context: CAPFRuntimeContext): CAPFPhysicalResult =
-    CAPFPhysicalResult(CAPFRecords.unit(), Map(graph.name -> resolve(graph.qualifiedGraphName)))
+  override def executeLeaf()(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
+    val records = recordsOpt.getOrElse(CAPFRecords.unit())
+    CAPFPhysicalResult(records, resolve(qgn), qgn)
+  }
+
+  override def toString = {
+    val graphArg = qgn.toString
+    val recordsArg = recordsOpt.map(_.toString)
+    val allArgs = List(recordsArg, graphArg).mkString(",  ")
+    s"Start($allArgs)"
+  }
+
 }

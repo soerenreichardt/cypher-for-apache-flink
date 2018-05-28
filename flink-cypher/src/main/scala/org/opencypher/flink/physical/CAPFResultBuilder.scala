@@ -25,12 +25,16 @@ object CAPFResultBuilder {
 }
 
 case class CAPFQueryPlans(
-  logicalPlan: TreeNode[LogicalOperator],
-  flatPlan: TreeNode[FlatOperator],
-  physicalPlan: TreeNode[CAPFPhysicalOperator]) extends CypherQueryPlans {
+  logicalPlan: Option[TreeNode[LogicalOperator]],
+  flatPlan: Option[TreeNode[FlatOperator]],
+  physicalPlan: Option[TreeNode[CAPFPhysicalOperator]]) extends CypherQueryPlans {
 
-  override def logical: String = logicalPlan.pretty
+  override def logical: String = logicalPlan.map(_.pretty).getOrElse("")
 
-  override def physical: String = physicalPlan.pretty
+  override def physical: String = physicalPlan.map(_.pretty).getOrElse("")
 
+}
+
+object CAPFQueryPlans {
+  def empty: CAPFQueryPlans = CAPFQueryPlans(None, None, None)
 }
