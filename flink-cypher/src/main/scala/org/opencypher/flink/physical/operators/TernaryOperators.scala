@@ -27,48 +27,6 @@ private[flink] abstract class TernaryPhysicalOperator extends CAPFPhysicalOperat
     implicit context: CAPFRuntimeContext): CAPFPhysicalResult
 }
 
-final case class ExpandSource(
-  first: CAPFPhysicalOperator,
-  second: CAPFPhysicalOperator,
-  third: CAPFPhysicalOperator,
-  source: Var,
-  rel: Var,
-  target: Var,
-  header: RecordHeader,
-  removeSelfRelationships: Boolean = false)
-  extends TernaryPhysicalOperator {
-
-  override def executeTernary(first: CAPFPhysicalResult, second: CAPFPhysicalResult, third: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
-    val relationships = getRelationshipData(second.records)
-
-    val sourceSlot = first.records.header.slotFor(source)
-    val sourceSlotInRel = second.records.header.sourceNodeSlot(rel)
-    CAPFPhysicalOperator.assertIsNode(sourceSlot)
-    CAPFPhysicalOperator.assertIsNode(sourceSlotInRel)
-
-    val sourceToRelHeader = first.records.header ++ second.records.header
-    val sourceAndRel = CAPFPhysicalOperator.joinRecords(sourceToRelHeader, Seq(sourceSlot -> sourceSlotInRel))(first.records, relationships)
-
-    val targetSlot = third.records.header.slotFor(target)
-    val targetSlotInRel = sourceAndRel.header.targetNodeSlot(rel)
-    CAPFPhysicalOperator.assertIsNode(targetSlot)
-    CAPFPhysicalOperator.assertIsNode(targetSlotInRel)
-
-    val joinedRecords = CAPFPhysicalOperator.joinRecords(header, Seq(targetSlotInRel -> targetSlot))(sourceAndRel, third.records)
-    CAPFPhysicalResult(joinedRecords, first.graphs ++ second.graphs ++ third.graphs)
-  }
-
-  private def getRelationshipData(rels: CAPFRecords)(implicit context: CAPFRuntimeContext): CAPFRecords = {
-    if (removeSelfRelationships) {
-      val data = rels.data
-      val startNodeColumn: Expression = UnresolvedFieldReference(CAPFPhysicalOperator.columnName(rels.header.sourceNodeSlot(rel)))
-      val endNodeColumn: Expression = UnresolvedFieldReference(CAPFPhysicalOperator.columnName(rels.header.targetNodeSlot(rel)))
-
-      CAPFRecords.verifyAndCreate(rels.header, data.where(endNodeColumn !== startNodeColumn))(rels.capf)
-    } else rels
-  }
-}
-
 final case class BoundedVarExpand(
   first: CAPFPhysicalOperator,
   second: CAPFPhysicalOperator,
@@ -88,7 +46,7 @@ final case class BoundedVarExpand(
     (implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
     val expanded = expand(first.records, second.records)
 
-    CAPFPhysicalResult(finalize(expanded, third.records), first.graphs ++ second.graphs ++ third.graphs)
+    CAPFPhysicalResult(finalize(expanded, third.records), first.workingGraph, first.workingGraphName)
   }
 
   private def iterate(lhs: Table, rels: Table)(

@@ -44,7 +44,7 @@ final case class CAPFUnionGraph(graphs: Map[CAPFGraph, Map[Int, Int]])
 
     alignedScans
       .reduceOption(_ unionAll(targetHeader, _))
-      .map(_.distinct(node))
+      .map(_.distinct)
       .getOrElse(CAPFRecords.empty(targetHeader))
   }
 
@@ -61,8 +61,8 @@ final case class CAPFUnionGraph(graphs: Map[CAPFGraph, Map[Int, Int]])
     val alignedScans = relScans.map(_.alignWith(rel, targetHeader))
     alignedScans
       .reduceOption(_ unionAll(targetHeader, _))
-      .map(_.distinct(rel))
-      .getOrElse(CAPSRecords.empty(targetHeader))
+      .map(_.distinct)
+      .getOrElse(CAPFRecords.empty(targetHeader))
   }
 
 }

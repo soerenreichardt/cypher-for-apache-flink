@@ -71,7 +71,7 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
     in: CAPFPhysicalOperator,
     inGraph: LogicalGraph,
     v: Var,
-    header: RecordHeader): CAPFPhysicalOperator = operators.Scan(in, inGraph, v, header)
+    header: RecordHeader): CAPFPhysicalOperator = operators.NodeScan(in, v, header)
 
   override def planRelationshipScan(
     in: CAPFPhysicalOperator,
@@ -124,7 +124,7 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
     source: Var,
     edgeList: Var,
     target: Var,
-    header: RecordHeader): CAPFPhysicalOperator = operators.InitVarExpand(in, source, edgeList, target, header)
+    header: RecordHeader): CAPFPhysicalOperator = ???
 
   override def planBoundedVarExpand(
     first: CAPFPhysicalOperator,
@@ -158,9 +158,12 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
   override def planLimit(in: CAPFPhysicalOperator, expr: Expr, header: RecordHeader): CAPFPhysicalOperator =
     operators.Limit(in, expr, header)
 
-  override def planGraphUnionAll(graphs: List[CAPFPhysicalOperator], qgn: QualifiedGraphName):
-  CAPFPhysicalOperator = {
-    operators.GraphUnionAll(graphs, qgn)
-  }
-  
+  /**
+    * Performs a UNION ALL over graphs.
+    *
+    * @param graphs graphs to perform UNION ALL over together
+    * @param qgn    name for the union graph
+    * @return union all operator
+    */
+  override def planGraphUnionAll(graphs: List[CAPFPhysicalOperator], qgn: QualifiedGraphName): CAPFPhysicalOperator = ???
 }

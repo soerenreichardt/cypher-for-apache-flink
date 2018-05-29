@@ -30,7 +30,7 @@ trait CAPFResult extends CypherResult {
 }
 
 object CAPFResult {
-  def empty(queryPlans: CAPFQueryPlans = CAPFQueryPlans.empty): CAPFResult = new CAPFResult {override def records: Option[CAPFRecords] = ???
+  def empty(queryPlans: CAPFQueryPlans = CAPFQueryPlans.empty): CAPFResult = new CAPFResult {
 
     override def records: Option[CAPFRecords] = None
 

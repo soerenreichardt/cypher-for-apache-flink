@@ -1,26 +1,21 @@
 package org.opencypher.flink.physical.operators
 
 import org.apache.flink.api.java.typeutils.RowTypeInfo
-import org.apache.flink.table.api.Types
 import org.apache.flink.table.api.scala._
-import org.apache.flink.table.expressions.{Expression, Literal, ResolvedFieldReference, UnresolvedFieldReference}
+import org.apache.flink.table.expressions.{Expression, UnresolvedFieldReference}
 import org.apache.flink.types.Row
 import org.opencypher.flink.FlinkSQLExprMapper._
 import org.opencypher.flink.FlinkUtils._
 import org.opencypher.flink.TableOps._
 import org.opencypher.flink.physical.{CAPFPhysicalResult, CAPFRuntimeContext}
 import org.opencypher.flink.schema.EntityTable._
-import org.opencypher.flink.{CAPFGraph, CAPFRecords, CAPFSession, ColumnName}
-import org.opencypher.okapi.api.graph.QualifiedGraphName
-import org.opencypher.okapi.api.schema.Schema
+import org.opencypher.flink.{CAPFRecords, CAPFSession, ColumnName}
 import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.api.value.CypherValue.{CypherInteger, CypherList}
-import org.opencypher.okapi.impl.exception.{IllegalArgumentException, IllegalStateException, NotImplementedException}
+import org.opencypher.okapi.impl.exception.{IllegalArgumentException, IllegalStateException, NotImplementedException, SchemaException}
 import org.opencypher.okapi.ir.api.block.{Asc, Desc, SortItem}
 import org.opencypher.okapi.ir.api.expr._
-import org.opencypher.okapi.ir.impl.syntax.ExprSyntax._
 import org.opencypher.okapi.logical.impl._
-import org.opencypher.okapi.relational.impl.syntax.RecordHeaderSyntax._
 import org.opencypher.okapi.relational.impl.table._
 
 private[flink] abstract class UnaryPhysicalOperator extends CAPFPhysicalOperator {
@@ -32,6 +27,46 @@ private[flink] abstract class UnaryPhysicalOperator extends CAPFPhysicalOperator
   def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult
 }
 
+final case class NodeScan(in: CAPFPhysicalOperator, v: Var, header: RecordHeader) extends UnaryPhysicalOperator {
+
+  override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
+    val graph = prev.workingGraph
+    val records = v.cypherType match {
+      case n: CTNode => graph.nodes(v.name, n)
+      case other => throw IllegalArgumentException("Node variable", other)
+    }
+    if (header != records.header) {
+      throw SchemaException(
+        s"""
+           |Graph schema does not match actual records returned for scan $v:
+           |  - Computed record header based on graph schema: ${header.slots.map(_.content).mkString("[", ",", "]")}
+           |  - Actual record header: ${records.header.slots.map(_.content).mkString("[", ",", "]")}
+         """.stripMargin)
+    }
+    CAPFPhysicalResult(records, graph, prev.workingGraphName)
+  }
+}
+
+final case class RelationshipScan(in: CAPFPhysicalOperator, v: Var, header: RecordHeader) extends UnaryPhysicalOperator {
+
+  override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
+    val graph = prev.workingGraph
+    val records = v.cypherType match {
+      case r: CTRelationship => graph.relationships(v.name, r)
+      case other => throw IllegalArgumentException("Relationship variable", other)
+    }
+    if (header != records.header) {
+      throw SchemaException(
+        s"""
+           |Graph schema does not match actual records returned for scan $v:
+           |  - Computed record header based on graph schema: ${header.slots.map(_.content).mkString("[", ",", "]")}
+           |  - Actual record header: ${records.header.slots.map(_.content).mkString("[", ",", "]")}
+        """.stripMargin)
+    }
+    CAPFPhysicalResult(records, graph, v.cypherType.graph.get)
+  }
+}
+
 final case class Cache(in: CAPFPhysicalOperator) extends UnaryPhysicalOperator with InheritedHeader {
 
   override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
@@ -41,26 +76,6 @@ final case class Cache(in: CAPFPhysicalOperator) extends UnaryPhysicalOperator w
       prev
     })
   }
-}
-
-final case class Scan(in: CAPFPhysicalOperator, inGraph: LogicalGraph, v: Var, header: RecordHeader)
-  extends UnaryPhysicalOperator {
-
-  override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
-    val graphs = prev.graphs
-    val graph = graphs(inGraph.name)
-    val records = v.cypherType match {
-      case r: CTRelationship =>
-        graph.relationships(v.name, r)
-      case n: CTNode =>
-        graph.nodes(v.name, n)
-      case x =>
-        throw IllegalArgumentException("an entity type", x)
-    }
-    assert(header.==(records.header))
-    CAPFPhysicalResult(records, graphs)
-  }
-
 }
 
 final case class Alias(in: CAPFPhysicalOperator, aliases: Seq[(Expr,  Var)], header: RecordHeader)
@@ -144,44 +159,27 @@ final case class Select(in: CAPFPhysicalOperator, exprs: Seq[Expr], header: Reco
   }
 }
 
-@Deprecated
-final case class SelectFields(in: CAPFPhysicalOperator, field: IndexedSeq[Var], header: RecordHeader)
-  extends UnaryPhysicalOperator {
+final case class Drop(in: CAPFPhysicalOperator, dropFields: Seq[Expr], header: RecordHeader) extends UnaryPhysicalOperator {
 
   override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
     prev.mapRecordsWithDetails { records =>
-      val fieldIndices = field.zipWithIndex.toMap
+      val columnsToDrop = dropFields
+        .map(ColumnName.of)
+        .filter(records.data.columns.contains)
 
-      val groupedSlots = header.slots.sortBy {
-        _.content match {
-          case content: FieldSlotContent =>
-            fieldIndices.getOrElse(content.field, Int.MaxValue)
-          case content@ProjectedExpr(expr) =>
-            val deps = expr.dependencies
-            deps.headOption
-              .filter(_ => deps.size == 1)
-              .flatMap(fieldIndices.get)
-              .getOrElse(Int.MaxValue)
-        }
-      }
-
-      val data = records.data
-      val columns = groupedSlots.map { s =>
-        UnresolvedFieldReference(ColumnName.of(s))
-      }
-      val newData = records.data.select(columns: _*)
-
-      CAPFRecords.verifyAndCreate(header, newData)(records.capf)
+      val withDroppedFields = records.data.safeDropColumns(columnsToDrop: _*)
+      CAPFRecords.verifyAndCreate(header, withDroppedFields)(records.capf)
     }
   }
 }
 
-final case class SelectGraphs(in: CAPFPhysicalOperator, graphs: Set[String])
-  extends UnaryPhysicalOperator with InheritedHeader {
+final case class ReturnGraph(in: CAPFPhysicalOperator) extends UnaryPhysicalOperator {
 
-  override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult =
-    prev.selectGraphs(graphs)
+  override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
+    CAPFPhysicalResult(CAPFRecords.empty(header)(prev.records.capf), prev.workingGraph, prev.workingGraphName)
+  }
 
+  override def header: RecordHeader = RecordHeader.empty
 }
 
 final case class EmptyRecords(in: CAPFPhysicalOperator, header: RecordHeader)(implicit capf: CAPFSession)
@@ -190,12 +188,6 @@ final case class EmptyRecords(in: CAPFPhysicalOperator, header: RecordHeader)(im
   override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult =
     prev.mapRecordsWithDetails(_ => CAPFRecords.empty(header))
 
-}
-
-final case class SetSourceGraph(in: CAPFPhysicalOperator, graph: LogicalExternalGraph) extends UnaryPhysicalOperator with InheritedHeader {
-
-  override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult =
-    prev.withGraph(graph.name -> resolve(graph.qualifiedGraphName))
 }
 
 final case class RemoveAliases(
@@ -245,12 +237,6 @@ final case class Project(in: CAPFPhysicalOperator, expr: Expr, header: RecordHea
       CAPFRecords.verifyAndCreate(header, newData)(records.capf)
     }
   }
-}
-
-final case class ProjectExternalGraph(in: CAPFPhysicalOperator, name: String, qualifiedGraphName: QualifiedGraphName) extends UnaryPhysicalOperator with InheritedHeader {
-
-  override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult =
-    prev.withGraph(name -> resolve(qualifiedGraphName))
 }
 
 final case class Aggregate(
@@ -434,89 +420,10 @@ final case class Limit(in: CAPFPhysicalOperator, expr: Expr, header: RecordHeade
   }
 }
 
-final case class ProjectPatternGraph(
-  in: CAPFPhysicalOperator,
-  toCreate: Set[ConstructedEntity],
-  name: String,
-  schema: Schema,
-  header: RecordHeader)
-  extends UnaryPhysicalOperator {
+final case class FromGraph(in: CAPFPhysicalOperator, graph: LogicalCatalogGraph) extends UnaryPhysicalOperator with InheritedHeader {
 
-  override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
-    val input = prev.records
-
-    val baseTable =
-      if (toCreate.isEmpty) input
-      else createEntities(toCreate, input)
-
-    val patternGraph = CAPFGraph.create(baseTable, schema)(input.capf)
-    prev.withGraph(name -> patternGraph)
-  }
-
-  private def createEntities(toCreate: Set[ConstructedEntity], records: CAPFRecords): CAPFRecords = {
-    val nodes = toCreate.collect { case c: ConstructedNode => c }
-    val rels = toCreate.collect { case r: ConstructedRelationship => r }
-
-    val nodesToCreate = nodes.flatMap(constructNode(_, records))
-    val recordsWithNodes = addEntitiesToRecords(nodesToCreate, records)
-
-    val relsToCreate = rels.flatMap(constructRel(_, recordsWithNodes))
-    addEntitiesToRecords(relsToCreate, recordsWithNodes)
-  }
-
-  private def addEntitiesToRecords(columnsToAdd: Set[(SlotContent, Expression)], records: CAPFRecords): CAPFRecords = {
-    val newData = columnsToAdd.foldLeft(records.data) {
-      case (acc, (expr, col)) =>
-        acc.safeAddColumn(ColumnName.of(expr), col)
-    }
-
-    val newHeader = records.header
-      .update(addContents(columnsToAdd.map(_._1).toSeq))._1
-
-    CAPFRecords.verifyAndCreate(newHeader, newData)(records.capf)
-  }
-
-  private def constructNode(node: ConstructedNode, records: CAPFRecords): Set[(SlotContent, Expression)] = {
-    val col = Literal(true, Types.BOOLEAN)
-    val labelTuples: Set[(SlotContent, Expression)] = node.labels.map { label =>
-      ProjectedExpr(HasLabel(node.v, label)(CTBoolean)) -> col
-    }
-
-    labelTuples + (OpaqueField(node.v) -> generatedId(records.capf))
-  }
-
-  private def constructRel(toConstruct: ConstructedRelationship, records: CAPFRecords): Set[(SlotContent, Expression)] = {
-    val ConstructedRelationship(rel, source, target, typ) = toConstruct
-    val header = records.header
-    val inData = records.data
-
-    val sourceTuple = {
-      val slot = header.slotFor(source)
-      val col = UnresolvedFieldReference(ColumnName.of(slot))
-      ProjectedExpr(StartNode(rel)(CTInteger)) -> col
-    }
-    val targetTuple = {
-      val slot = header.slotFor(target)
-      val col = UnresolvedFieldReference(ColumnName.of(slot))
-      ProjectedExpr(EndNode(rel)(CTInteger)) -> col
-    }
-
-    val relTuple = OpaqueField(rel) -> generatedId(records.capf)
-
-    val typeTuple = {
-      val col = Literal(typ, Types.STRING)
-      ProjectedExpr(Type(rel)(CTString)) -> col
-    }
-
-    Set(sourceTuple, targetTuple, relTuple, typeTuple)
-  }
-
-  private def generatedId(implicit capf: CAPFSession): Expression = {
-    val relIdOffset = 500L << 33
-    val firstIdCol = Literal(relIdOffset + java.util.UUID.randomUUID().toString.toLong, Types.LONG)
-    firstIdCol // TODO: monotonically increasing id
-  }
-
+  override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult =
+    CAPFPhysicalResult(prev.records, resolve(graph.qualifiedGraphName), graph.qualifiedGraphName)
 }
 
 //object IdGenerator {

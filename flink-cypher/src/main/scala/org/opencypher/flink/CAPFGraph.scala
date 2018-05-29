@@ -1,11 +1,8 @@
 package org.opencypher.flink
 
-import org.apache.flink.api.scala._
-import org.apache.flink.table.api.scala._
-import org.apache.flink.table.expressions.UnresolvedFieldReference
-import org.opencypher.flink.schema.EntityTable._
-import org.opencypher.flink.schema.{CAPFEntityTable, CAPFNodeTable}
 import org.opencypher.flink.CAPFConverters._
+import org.opencypher.flink.schema.{CAPFEntityTable, CAPFNodeTable}
+import org.opencypher.flink.CAPFSchema._
 import org.opencypher.okapi.api.graph.{GraphOperations, PropertyGraph}
 import org.opencypher.okapi.api.schema.Schema
 import org.opencypher.okapi.api.table.CypherRecords
@@ -54,27 +51,28 @@ trait CAPFGraph extends PropertyGraph with GraphOperations with Serializable {
     val keepSlots = (Seq(idSlot) ++ labelSlots ++ propertySlots).map(_.content)
     val keepCols = keepSlots.map(ColumnName.of)
 
-    val predicate = records.header.labelSlots(nodeVar)
-      .filterNot(slot => labels.contains(slot._1.label.name))
-      .values
-      .map(ColumnName.of)
-      .map(UnresolvedFieldReference(_) === false)
-      .reduceOption(_ && _)
-
-    val updatedData = predicate match {
-
-      case Some(filter) =>
-        records.data
-          .filter(filter)
-          .select(keepCols.map(UnresolvedFieldReference): _*)
-
-      case None =>
-        records.data.select(keepCols.map(UnresolvedFieldReference): _*)
-    }
-
-    val updatedHeader = RecordHeader.from(keepSlots: _*)
-
-    CAPFRecords.verifyAndCreate(updatedHeader, updatedData)(session)
+    ???
+//    val predicate = records.header.labelSlots(nodeVar)
+//      .filterNot(slot => labels.contains(slot._1.label.name))
+//      .values
+//      .map(c => UnresolvedFieldReference(ColumnName.of(c)))
+//      .map(_ === false)
+//      .reduceOption(_ && _)
+//
+//    val updatedData = predicate match {
+//
+//      case Some(filter) =>
+//        records.data
+//          .filter(filter)
+//          .select(keepCols.map(UnresolvedFieldReference): _*)
+//
+//      case None =>
+//        records.data.select(keepCols.map(UnresolvedFieldReference): _*)
+//    }
+//
+//    val updatedHeader = RecordHeader.from(keepSlots: _*)
+//
+//    CAPFRecords.verifyAndCreate(updatedHeader, updatedData)(session)
   }
 
 }
@@ -87,19 +85,25 @@ object CAPFGraph {
     }
 
   def create(nodeTable: CAPFNodeTable, entityTables: CAPFEntityTable*)(implicit capf: CAPFSession): CAPFGraph = {
+    create(Set(0), nodeTable, entityTables: _*)
+  }
+
+  def create(tags: Set[Int], nodeTable: CAPFNodeTable, entityTables: CAPFEntityTable*)(implicit capf: CAPFSession): CAPFGraph = {
     val allTables = nodeTable +: entityTables
-    val schema = allTables.map(_.schema).reduce(_ ++ _)
-    new CAPFScanGraph(allTables, schema)
+    val schema = allTables.map(_.schema).reduce[Schema](_ ++ _).asCapf
+    new CAPFScanGraph(allTables, schema, tags)
   }
 
-  def create(records: CypherRecords, schema: Schema)(implicit capf: CAPFSession): CAPFGraph = {
+  def create(records: CypherRecords, schema: Schema, tags: Set[Int] = Set(0))(implicit capf: CAPFSession): CAPFGraph = {
+    val capfRecords = records.asCapf
     ???
+//    new CAPFPatternGraph(capfRecords, schema, tags)
   }
 
-  def createLazy(theSchema: Schema, loadGraph: => CAPFGraph)(implicit capf: CAPFSession): CAPFGraph =
+  def createLazy(theSchema: CAPFSchema, loadGraph: => CAPFGraph)(implicit capf: CAPFSession): CAPFGraph =
     new LazyGraph(theSchema, loadGraph) {}
 
-  sealed abstract class LazyGraph(override val schema: Schema, loadGraph: => CAPFGraph)(implicit CAPF: CAPFSession)
+  sealed abstract class LazyGraph(override val schema: CAPFSchema, loadGraph: => CAPFGraph)(implicit CAPF: CAPFSession)
     extends CAPFGraph {
     protected lazy val lazyGraph: CAPFGraph = {
       val g = loadGraph

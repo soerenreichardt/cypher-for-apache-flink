@@ -7,22 +7,26 @@ import org.apache.flink.table.api.{Table, Types}
 import org.apache.flink.table.expressions._
 import org.apache.flink.table.functions.ScalarFunction
 import org.apache.flink.types.Row
+import org.opencypher.flink.CAPFCypherType._
 import org.opencypher.flink.schema.EntityTable._
 import org.opencypher.okapi.impl.exception
 import org.opencypher.flink.Tags._
+import org.opencypher.okapi.api.types.CypherType
+import org.opencypher.okapi.impl.exception.IllegalArgumentException
 
 object TableOps {
 
   implicit class ColumnTagging(val col: UnresolvedFieldReference) extends AnyVal {
 
     def replaceTag(from: Int, to: Int): UnresolvedFieldReference = {
-
+      ???
     }
 
     def setTag(tag: Int): UnresolvedFieldReference = {
-      val tagLit = Literal(tag.toLong << idBits, Types.LONG)
-      val newId = col
-        .
+      val bitAnd = new BitwiseAnd(invertedTagMask)
+      val bitOr = new BitwiseOr(tag.toLong)
+
+      ???
     }
 
     def getTag: Expression = {
@@ -32,6 +36,12 @@ object TableOps {
   }
 
   implicit class RichTable(val table: Table) extends AnyVal {
+
+    def cypherTypeForColumn(columnName: String): CypherType = {
+      val compatibleCypherType = table.getSchema.getType(columnName).get.cypherCompatibleDataType.flatMap(_.toCypherType())
+      compatibleCypherType.getOrElse(
+        throw IllegalArgumentException("a supported Flink Type that can be converted to CypherType", table.getSchema.getType(columnName)))
+    }
 
     def col(colName: String): Table =
       table.select(colName)
@@ -130,6 +140,12 @@ object TableOps {
       table.select('*, expr as Symbol(name))
     }
 
+  def safeAddColumns(columns: (String, Expression)*): Table = {
+    columns.foldLeft(table) { case (tempTable, (colName, col)) =>
+      tempTable.safeAddColumn(colName, col)
+    }
+  }
+
     def safeReplaceColumn(name: String, expr: Expression): Table = {
       require(table.columns.contains(name), s"Cannot replace column `$name`. No column with that name exists. " +
         s"Use `safeAddColumn` if you intend to add that column.")
@@ -168,7 +184,7 @@ object TableOps {
 
       val col = UnresolvedFieldReference(columnName)
       val updatedCol = replacements.foldLeft(col) {
-        case (current, (from, to)) => current.relaceTag(from, to)
+        case (current, (from, to)) => current.replaceTag(from, to)
       }
 
       safeReplaceColumn(columnName, updatedCol)
@@ -193,9 +209,16 @@ class BitshiftRight(numBits: Int) extends ScalarFunction {
   }
 }
 
-class BitwiseAnd(other: AnyRef) extends ScalarFunction {
+class BitwiseAnd(other: Long) extends ScalarFunction {
 
-  def eval(field: AnyRef): AnyRef = {
+  def eval(field: Long): Long = {
     field & other
+  }
+}
+
+class BitwiseOr(field: Long) extends ScalarFunction {
+
+  def eval(other: Long): Long = {
+    field | other
   }
 }

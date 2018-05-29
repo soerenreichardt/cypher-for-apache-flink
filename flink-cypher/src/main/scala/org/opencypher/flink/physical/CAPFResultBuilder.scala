@@ -17,9 +17,9 @@ object CAPFResultBuilder {
 
       override def records: Option[CAPFRecords] = Some(result.records)
 
-      override def graph: Option[CAPFGraph] = result.graphs.values.headOption
+      override def graph: Option[CAPFGraph] = Some(result.workingGraph)
 
-      override def plans = CAPFQueryPlans(logical, flat, physical)
+      override def plans = CAPFQueryPlans(Some(logical), Some(flat), Some(physical))
     }
   }
 }

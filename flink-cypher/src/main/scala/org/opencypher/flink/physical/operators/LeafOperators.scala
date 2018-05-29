@@ -3,7 +3,6 @@ package org.opencypher.flink.physical.operators
 import org.opencypher.flink.physical.{CAPFPhysicalResult, CAPFRuntimeContext}
 import org.opencypher.flink.{CAPFRecords, CAPFSession}
 import org.opencypher.okapi.api.graph.QualifiedGraphName
-import org.opencypher.okapi.relational.impl.flat.Start
 import org.opencypher.okapi.relational.impl.table.RecordHeader
 
 private[flink] abstract class LeafPhysicalOperator extends CAPFPhysicalOperator {

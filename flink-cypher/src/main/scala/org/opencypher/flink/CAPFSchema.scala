@@ -53,7 +53,7 @@ object CAPFSchema {
   }
 }
 
-case class CAPFSchema private[schema](schema: Schema) extends Schema {
+case class CAPFSchema private(schema: Schema) extends Schema {
 
   override def labels: Set[String] = schema.labels
 

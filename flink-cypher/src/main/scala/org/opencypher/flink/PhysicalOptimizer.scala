@@ -31,8 +31,8 @@ class PhysicalOptimizer extends DirectCompilationStage[CAPFPhysicalOperator, CAP
   object InsertCachingOperators extends (CAPFPhysicalOperator => CAPFPhysicalOperator) {
     def apply(input: CAPFPhysicalOperator): CAPFPhysicalOperator = {
       val replacements = calculateReplacementMap(input).filterKeys {
-        case _: Start | _: StartFromUnit  => false
-        case _                            => true
+        case _: Start => false
+        case _        => true
       }
 
       val nodesToReplace = replacements.keySet

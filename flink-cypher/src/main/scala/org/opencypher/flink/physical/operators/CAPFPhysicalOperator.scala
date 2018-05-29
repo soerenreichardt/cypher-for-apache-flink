@@ -25,6 +25,8 @@ private[flink] abstract class CAPFPhysicalOperator
     context.resolve(qualifiedGraphName).map(_.asCapf).getOrElse(throw IllegalArgumentException(s"a graph at $qualifiedGraphName"))
   }
 
+  protected def resolveTags(qgn: QualifiedGraphName)(implicit context: CAPFRuntimeContext): Set[Int] = context.patternGraphTags.getOrElse(qgn, resolve(qgn).tags)
+
   override def args: Iterator[Any] = super.args.flatMap {
     case RecordHeader(_) | Some(RecordHeader(_)) => None
     case other                                   => Some(other)
@@ -65,7 +67,7 @@ object CAPFPhysicalOperator {
 
   def assertIsNode(slot: RecordSlot): Unit = {
     slot.content.cypherType match {
-      case CTNode(_) =>
+      case CTNode(_, _) =>
       case x =>
         throw IllegalArgumentException(s"Expected $slot to contain a node, but was $x")
     }

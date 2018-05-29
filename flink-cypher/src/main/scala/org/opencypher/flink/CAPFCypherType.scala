@@ -1,7 +1,9 @@
 package org.opencypher.flink
 
-import org.apache.flink.api.common.typeinfo.TypeInformation
+import org.apache.flink.api.common.typeinfo.{BasicArrayTypeInfo, PrimitiveArrayTypeInfo, TypeInformation}
+import org.apache.flink.api.java.typeutils.ObjectArrayTypeInfo
 import org.apache.flink.table.api.Types
+import org.opencypher.flink.FlinkUtils.fromFlinkType
 import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.impl.exception.NotImplementedException
 
@@ -35,5 +37,36 @@ object CAPFCypherType {
     }
 
     def isFlinkCompatible: Boolean = toFlinkType.isDefined
+  }
+
+  implicit class RichDataType(val tpe: TypeInformation[_]) extends AnyVal {
+    def toCypherType(): Option[CypherType] = {
+      val result = tpe match {
+        case Types.STRING => Some(CTString)
+        case Types.INT => Some(CTInteger)
+        case Types.LONG => Some(CTInteger)
+        case Types.BOOLEAN => Some(CTBoolean)
+        case Types.DOUBLE => Some(CTFloat)
+        case PrimitiveArrayTypeInfo.BOOLEAN_PRIMITIVE_ARRAY_TYPE_INFO => Some(CTList(CTBoolean))
+        case PrimitiveArrayTypeInfo.DOUBLE_PRIMITIVE_ARRAY_TYPE_INFO => Some(CTList(CTFloat))
+        case PrimitiveArrayTypeInfo.FLOAT_PRIMITIVE_ARRAY_TYPE_INFO => Some(CTList(CTFloat))
+        case PrimitiveArrayTypeInfo.INT_PRIMITIVE_ARRAY_TYPE_INFO => Some(CTList(CTInteger))
+        case PrimitiveArrayTypeInfo.LONG_PRIMITIVE_ARRAY_TYPE_INFO => Some(CTList(CTInteger))
+        case basicArray: BasicArrayTypeInfo[_, _] => Some(CTList(fromFlinkType(basicArray.getComponentInfo).get))
+        case objArray: ObjectArrayTypeInfo[_, _] => Some(CTList(fromFlinkType(objArray.getComponentInfo).get))
+
+        //      TODO: other datatypes
+        case _ => None
+      }
+
+      result
+    }
+
+    def cypherCompatibleDataType: Option[TypeInformation[_]] = tpe match {
+      case Types.BYTE | Types.SHORT | Types.INT | Types.DECIMAL => Some(Types.LONG)
+      case Types.FLOAT => Some(Types.DOUBLE)
+      case compatible if tpe.toCypherType().isDefined => Some(compatible)
+      case _ => None
+    }
   }
 }

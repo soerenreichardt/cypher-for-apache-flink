@@ -21,6 +21,7 @@ import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.ir.api.{Label, PropertyKey}
 import org.opencypher.okapi.relational.impl.exception.DuplicateSourceColumnException
 import org.opencypher.okapi.relational.impl.table._
+import org.opencypher.okapi.relational.impl.syntax.RecordHeaderSyntax._
 
 sealed abstract class CAPFRecords(val header: RecordHeader, val data: Table)(implicit val capf: CAPFSession)
   extends CypherRecords with Serializable {
@@ -29,6 +30,10 @@ sealed abstract class CAPFRecords(val header: RecordHeader, val data: Table)(imp
     RecordsPrinter.print(this)
 
   override def size: Long = data.count()
+
+  def flinkColumns: IndexedSeq[String] = header.internalHeader.columns
+
+//  def mapTable(f: Table => Table): CAPFRecords = verifyAndCreate(prepareTable(f(data)))
 
   def toCypherMaps: DataSet[CypherMap] = {
     print(capf.tableEnv.explain(data))
@@ -69,6 +74,98 @@ sealed abstract class CAPFRecords(val header: RecordHeader, val data: Table)(imp
 
     CAPFRecords.verifyAndCreate(header, tableWithReplacedTags)
   }
+
+  def select(fields: Set[Var]): CAPFRecords = {
+    val selectedHeader = header.select(fields)
+    val selectedColumnNames = selectedHeader.contents.map(ColumnName.of).toSeq
+    val selectedColumns = data.select(selectedColumnNames.map(UnresolvedFieldReference): _*)
+    CAPFRecords.verifyAndCreate(selectedHeader, selectedColumns)
+  }
+
+  def compact(implicit details: RetainedDetails): CAPFRecords = {
+    val cachedHeader = header.update(compactFields)._1
+    if (header == cachedHeader) {
+      this
+    } else {
+      val cachedData = {
+        val columns = cachedHeader.slots.map(c => UnresolvedFieldReference(ColumnName.of(c.content)))
+        data.select(columns: _*)
+      }
+
+      CAPFRecords.verifyAndCreate(cachedHeader, cachedData)
+    }
+  }
+
+  def addAliases(aliasToOriginal: Map[Var, Var]): CAPFRecords = {
+    val (updatedHeader, updatedData) = aliasToOriginal.foldLeft((header, data)) {
+      case ((tempHeader, tempTable), (nextAlias, nextOriginal)) =>
+        val originalSlots = tempHeader.selfWithChildren(nextOriginal).toList
+        val slotsToAdd = originalSlots.map(_.withOwner(nextAlias))
+        val updatedHeader = tempHeader ++ RecordHeader.from(slotsToAdd)
+        val originalColumns = originalSlots.map(ColumnName.of).map(UnresolvedFieldReference)
+        val aliasColumns = slotsToAdd.map(ColumnName.of)
+        val additions = aliasColumns.zip(originalColumns)
+        val updatedTable = tempTable.safeAddColumns(additions: _*)
+        updatedHeader -> updatedTable
+    }
+    CAPFRecords.verifyAndCreate(updatedHeader, updatedData)
+  }
+
+  def retagVariable(v: Var, replacements: Map[Int, Int]): CAPFRecords = {
+    val slotsToRetag = v.cypherType match {
+      case _: CTNode => Set(header.slotFor(v))
+      case _: CTRelationship =>
+        val idSlot = header. slotFor(v)
+        val sourceSlot = header.sourceNodeSlot(v)
+        val targetSlot = header.targetNodeSlot(v)
+        Set(idSlot, sourceSlot, targetSlot)
+      case _ => Set.empty
+    }
+    val columnsToRetag = slotsToRetag.map(ColumnName.of)
+    val retaggedData = columnsToRetag.foldLeft(data) { case (table, columnName) =>
+    table.safeReplaceTags(columnName, replacements)
+    }
+    CAPFRecords.verifyAndCreate(header, retaggedData)
+  }
+
+  def renameVars(aliasToOriginal: Map[Var, Var]): CAPFRecords = {
+    val (updatedHeader, updatedData) = aliasToOriginal.foldLeft((header, data)) {
+      case ((tempHeader, tempTable), (nextAlias, nextOriginal)) =>
+        val slotsToReassign = tempHeader.selfWithChildren(nextOriginal).toList
+        val reassignedSlots = slotsToReassign.map(_.withOwner(nextAlias))
+        val updatedHeader = tempHeader --
+          RecordHeader.from(slotsToReassign) ++
+          RecordHeader.from(reassignedSlots)
+        val originalColumns = slotsToReassign.map(ColumnName.of)
+        val aliasColumns = reassignedSlots.map(ColumnName.of)
+        val updatedTable = tempTable.safeRenameColumns(originalColumns, aliasColumns)
+        updatedHeader -> updatedTable
+    }
+    CAPFRecords.verifyAndCreate(updatedHeader, updatedData)
+  }
+
+  def removeVars(vars: Set[Var]): CAPFRecords = {
+    val (updatedHeader, updatedData) = vars.foldLeft((header, data)) {
+      case ((tempHeader, tempTable), nextFieldToRemove) =>
+        val slotsToRemove = tempHeader.selfWithChildren(nextFieldToRemove)
+        val updatedHeader = tempHeader -- RecordHeader.from(slotsToRemove.toList)
+        updatedHeader -> tempTable.safeDropColumns(slotsToRemove.map(ColumnName.of): _*)
+    }
+    CAPFRecords.verifyAndCreate(updatedHeader, updatedData)
+  }
+
+  def unionAll(header: RecordHeader, other: CAPFRecords): CAPFRecords = {
+    val unionData = data.union(other.data)
+    CAPFRecords.verifyAndCreate(header, unionData)
+  }
+
+  def distinct: CAPFRecords = {
+    CAPFRecords.verifyAndCreate(header, data.distinct())
+  }
+
+//  def distinct(fields: Var*): CAPFRecords = {
+//
+//  }
 
   override def collect: Array[CypherMap] =
     toCypherMaps.collect().toArray
@@ -123,11 +220,6 @@ sealed abstract class CAPFRecords(val header: RecordHeader, val data: Table)(imp
   }
 
   def toTable(): Table = data
-
-  def unionAll(header: RecordHeader, other: CAPFRecords): CAPFRecords = {
-    val unionData = data.union(other.data)
-    CAPFRecords.verifyAndCreate(header, unionData)
-  }
 }
 
 object CAPFRecords extends CypherRecordsCompanion[CAPFRecords, CAPFSession] {
@@ -194,7 +286,7 @@ object CAPFRecords extends CypherRecordsCompanion[CAPFRecords, CAPFSession] {
     }
 
     val (sourceHeader, sourceTable) = {
-      prepareDataFrame(entityTable.table.table)
+      prepareTable(entityTable.table.table)
     }
 
     val slotContents: Seq[SlotContent] = sourceHeader.slots.map {
@@ -219,9 +311,9 @@ object CAPFRecords extends CypherRecordsCompanion[CAPFRecords, CAPFSession] {
   }
 
   private [flink] def wrap(table: Table)(implicit capf: CAPFSession): CAPFRecords =
-    verifyAndCreate(prepareDataFrame(table))
+    verifyAndCreate(prepareTable(table))
 
-  private def prepareDataFrame(initialTable: Table)(implicit capf: CAPFSession): (RecordHeader, Table) = {
+  private def prepareTable(initialTable: Table)(implicit capf: CAPFSession): (RecordHeader, Table) = {
     // TODO: cast to compatible types
     val initialHeader = CAPFRecordHeader.fromFlinkTableSchema(initialTable.getSchema)
     val withRenamedColumns = initialTable.as(initialHeader.internalHeader.columns.mkString(","))

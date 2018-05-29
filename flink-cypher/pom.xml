@@ -59,6 +59,32 @@
             <!--<scope>test</scope>-->
         </dependency>
 
+        <!-- Neo4j -->
+        <dependency>
+            <groupId>org.neo4j.driver</groupId>
+            <artifactId>neo4j-java-driver</artifactId>
+            <version>${dep.neo4j.driver.version}</version>
+        </dependency>
+
+        <!-- Utils -->
+        <dependency>
+            <groupId>io.circe</groupId>
+            <artifactId>circe-core_${project.scala.binary.version}</artifactId>
+            <version>${dep.circe.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>io.circe</groupId>
+            <artifactId>circe-generic_${project.scala.binary.version}</artifactId>
+            <version>${dep.circe.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>io.circe</groupId>
+            <artifactId>circe-parser_${project.scala.binary.version}</artifactId>
+            <version>${dep.circe.version}</version>
+        </dependency>
+
     </dependencies>
 
 </project>
