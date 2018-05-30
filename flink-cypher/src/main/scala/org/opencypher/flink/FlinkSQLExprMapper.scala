@@ -122,13 +122,13 @@ object FlinkSQLExprMapper {
 
         case Exists(e) => e.asFlinkSQLExpr.isNotNull
         case Id(e) => e.asFlinkSQLExpr
-        case Labels(e) =>
-          val node = Var(ColumnName.of(header.slotsFor(e).head))(CTNode)
-          val labelExprs = header.labels(node)
-          val labelColumns = labelExprs.map(_.asFlinkSQLExpr)
-          val labelNames = labelExprs.map(_.label.name)
-          val booleanLabelFlagColumn = array(labelColumns.head, labelColumns.tail: _*)
-          ???
+//        case Labels(e) =>
+//          val node = Var(ColumnName.of(header.slotsFor(e).head))(CTNode)
+//          val labelExprs = header.labels(node)
+//          val labelColumns = labelExprs.map(_.asFlinkSQLExpr)
+//          val labelNames = labelExprs.map(_.label.name)
+//          val booleanLabelFlagColumn = array(labelColumns.head, labelColumns.tail: _*)
+//          ???
 //          TODO
 
         case Keys(e) =>

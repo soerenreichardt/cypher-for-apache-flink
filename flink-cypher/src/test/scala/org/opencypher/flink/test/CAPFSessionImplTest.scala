@@ -1,16 +1,54 @@
 package org.opencypher.flink.test
 
+import org.apache.flink.api.scala._
+import org.apache.flink.table.api.scala._
 import org.opencypher.flink.CAPFRecords
 import org.opencypher.okapi.api.value.CypherValue.CypherMap
-import org.opencypher.flink.test.fixture.TeamDataFixture
+import org.opencypher.flink.test.fixture.{GraphConstructionFixture, TeamDataFixture}
+import org.opencypher.flink.value.CAPFNode
+import org.opencypher.okapi.api.graph.{Namespace, QualifiedGraphName}
+import org.opencypher.okapi.impl.io.SessionGraphDataSource
+import org.opencypher.okapi.testing.Bag
+import org.opencypher.okapi.testing.Bag._
 
-import scala.collection.Bag
+class CAPFSessionImplTest extends CAPFTestSuite with TeamDataFixture with GraphConstructionFixture {
 
-class CAPFSessionImplTest extends CAPFTestSuite with TeamDataFixture {
+  it("can use multiple session graph data sources") {
+    capf.registerSource(Namespace("working"), new SessionGraphDataSource())
+    capf.registerSource(Namespace("foo"), new SessionGraphDataSource())
+
+    val g1 = initGraph("CREATE (:A)")
+    val g2 = initGraph("CREATE (:B)")
+    val g3 = initGraph("CREATE (:C)")
+
+    capf.catalog.store(QualifiedGraphName("session.a"), g1)
+    capf.catalog.store(QualifiedGraphName("working.a"), g2)
+    capf.cypher("CREATE GRAPH working.b { FROM GRAPH working.a RETURN GRAPH }")
+    capf.catalog.store(QualifiedGraphName("foo.bar.baz.a"), g3)
+
+    val r1 = capf.cypher("FROM GRAPH a MATCH (n) RETURN n")
+    val r2 = capf.cypher("FROM GRAPH working.a MATCH (n) RETURN n")
+    val r3 = capf.cypher("FROM GRAPH wokring.b MATCH (n) RETURN n")
+    val r4 = capf.cypher("FROM GRAPH foo.bar.baz.a MATCH (n) RETURN n")
+
+    r1.getRecords.collect.toBag should equal(Bag(
+      CypherMap("n" -> CAPFNode(0L, Set("A")))
+    ))
+    r2.getRecords.collect.toBag should equal(Bag(
+      CypherMap("n" -> CAPFNode(0L, Set("B")))
+    ))
+    r3.getRecords.collect.toBag should equal(Bag(
+      CypherMap("n" -> CAPFNode(0L, Set("B")))
+    ))
+    r4.getRecords.collect.toBag should equal(Bag(
+      CypherMap("n" -> CAPFNode(0L, Set("C")))
+    ))
+  }
 
   it("can execute sql on registred tables") {
-    CAPFRecords.wrap(personDF).register("people")
-    CAPFRecords.wrap(knowsDF).register("knows")
+
+    tableEnv.registerTable("people", CAPFRecords.wrap(personDF).toTable())
+    tableEnv.registerTable("knows", CAPFRecords.wrap(knowsDF).toTable())
 
     val sqlResult = capf.sql(
       """

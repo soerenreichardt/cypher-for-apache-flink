@@ -6,7 +6,7 @@ import org.opencypher.okapi.impl.exception.UnsupportedOperationException
 
 object CAPFConverters {
 
-  implicit class RichPropertyGraph(graph: PropertyGraph) {
+  implicit class RichPropertyGraph(val graph: PropertyGraph) extends AnyVal {
     def asCapf: CAPFGraph = graph match {
       case capf: CAPFGraph  => capf
       case _                => throw UnsupportedOperationException(s"can only handle CAPS graphs, got $graph")

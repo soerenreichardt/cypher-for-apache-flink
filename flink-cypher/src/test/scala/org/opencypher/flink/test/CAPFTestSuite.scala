@@ -2,16 +2,15 @@ package org.opencypher.flink.test
 
 import org.opencypher.flink.physical.CAPFRuntimeContext
 import org.opencypher.flink.test.fixture.{CAPFSessionFixture, FlinkSessionFixture}
-import org.opencypher.flink.test.support.{GraphMatchingTestSupport, RecordMatchingTestSupport, RowDebugOutputSupport}
-import org.opencypher.okapi.test.BaseTestSuite
+import org.opencypher.flink.test.support.{GraphMatchingTestSupport, RecordMatchingTestSupport}
+import org.opencypher.okapi.testing.BaseTestSuite
 
 abstract class CAPFTestSuite
   extends BaseTestSuite
   with FlinkSessionFixture
   with CAPFSessionFixture
   with GraphMatchingTestSupport
-  with RecordMatchingTestSupport
-  with RowDebugOutputSupport {
+  with RecordMatchingTestSupport {
 
   implicit val context: CAPFRuntimeContext = CAPFRuntimeContext.empty
 }

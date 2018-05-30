@@ -39,8 +39,8 @@ object Demo extends App {
     .withSourceRelTypeKey("TYPE", Set("KNOWS"))
     .withPropertyKey("since", "SINCE")
 
-  val nodeTable = CAPFNodeTable(nodeMapping, nodes)
-  val relTable = CAPFRelationshipTable(relMapping, rels)
+  val nodeTable = CAPFNodeTable.fromMapping(nodeMapping, nodes)
+  val relTable = CAPFRelationshipTable.fromMapping(relMapping, rels)
 
   val graph: CAPFGraph = session.readFrom(nodeTable, relTable)
 

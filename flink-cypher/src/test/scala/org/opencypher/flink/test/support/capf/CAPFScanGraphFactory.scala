@@ -2,25 +2,27 @@ package org.opencypher.flink.test.support.capf
 
 import org.apache.flink.api.java.typeutils.RowTypeInfo
 import org.apache.flink.table.api.Types
-import org.apache.flink.table.api.scala._
-import org.apache.flink.api.scala._
 import org.apache.flink.types.Row
 import org.opencypher.flink.FlinkUtils._
+import org.opencypher.flink.GraphEntity.sourceIdKey
+import org.opencypher.flink.Relationship.{sourceStartNodeKey, sourceEndNodeKey}
+import org.opencypher.flink.CAPFSchema._
 import org.opencypher.flink.schema.{CAPFNodeTable, CAPFRelationshipTable}
 import org.opencypher.flink.{CAPFGraph, CAPFScanGraph, CAPFSession}
 import org.opencypher.okapi.api.io.conversion.{NodeMapping, RelationshipMapping}
-import org.opencypher.okapi.api.value.CypherValue.{CypherFloat, CypherInteger}
-import org.opencypher.okapi.ir.test.support.creation.propertygraph.TestPropertyGraph
+import org.opencypher.okapi.testing.propertygraph.InMemoryTestGraph
 
 object CAPFScanGraphFactory extends CAPFTestGraphFactory {
 
-  override def apply(propertyGraph: TestPropertyGraph)(implicit capf: CAPFSession): CAPFGraph = {
-    val schema = computeSchema(propertyGraph)
+  val tableEntityKey = s"___$sourceIdKey"
+
+  override def apply(propertyGraph: InMemoryTestGraph)(implicit capf: CAPFSession): CAPFGraph = {
+    val schema = computeSchema(propertyGraph).asCapf
 
     val nodeScans = schema.labelCombinations.combos.map { labels =>
       val propKeys = schema.nodeKeys(labels)
 
-      val header = Seq("ID") ++ propKeys.keys
+      val header = Seq(tableEntityKey) ++ propKeys.keys
       val rows = propertyGraph.nodes
         .filter(_.labels == labels)
         .map { node =>
@@ -39,7 +41,7 @@ object CAPFScanGraphFactory extends CAPFTestGraphFactory {
       val records = capf.tableEnv.fromDataSet(rowDataSet)
 
       CAPFNodeTable(NodeMapping
-        .on("ID")
+        .on(tableEntityKey)
         .withImpliedLabels(labels.toSeq: _*)
         .withPropertyKeys(propKeys.keys.toSeq: _*), records)
     }
@@ -47,7 +49,7 @@ object CAPFScanGraphFactory extends CAPFTestGraphFactory {
     val relScans = schema.relationshipTypes.map { relType =>
       val propKeys = schema.relationshipKeys(relType)
 
-      val header = Seq("ID", "SRC", "DST") ++ propKeys.keys
+      val header = Seq(tableEntityKey, sourceStartNodeKey, sourceEndNodeKey) ++ propKeys.keys
       val rows = propertyGraph.relationships
         .filter(_.relType == relType)
         .map { rel =>
@@ -63,14 +65,14 @@ object CAPFScanGraphFactory extends CAPFTestGraphFactory {
       val records = capf.tableEnv.fromDataSet(rowDataSet)
 
       CAPFRelationshipTable(RelationshipMapping
-        .on("ID")
-        .from("SRC")
-        .to("DST")
+        .on(tableEntityKey)
+        .from(sourceStartNodeKey)
+        .to(sourceEndNodeKey)
         .relType(relType)
         .withPropertyKeys(propKeys.keys.toSeq: _*), records)
     }
 
-    new CAPFScanGraph(nodeScans.toSeq ++ relScans, schema)
+    new CAPFScanGraph(nodeScans.toSeq ++ relScans, schema,  Set(0))
   }
 
   override def name: String ="CAPFScanGraphFactory"

@@ -42,7 +42,7 @@ object EntityTable {
 
   implicit class FlinkTable(val table: Table) extends CypherTable[String] {
 
-    override def columns: Seq[String] = table.columns
+    override def columns: Seq[String] = table.getSchema.getColumnNames
 
     override def columnType: Map[String, CypherType] = columns.map(c => c -> table.cypherTypeForColumn(c)).toMap
 
@@ -92,7 +92,7 @@ object CAPFNodeTable {
   }
 }
 
-case class CAPFRelationshipTable(mapping: RelationshipMapping, table: Table) extends RelationshipTable(mapping, table) with CAPFEntityTable
+case class CAPFRelationshipTable(mapping: RelationshipMapping, table: FlinkTable) extends RelationshipTable(mapping, table) with CAPFEntityTable
 
 object CAPFRelationshipTable {
 

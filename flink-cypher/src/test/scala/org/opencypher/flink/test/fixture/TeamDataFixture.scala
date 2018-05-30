@@ -5,12 +5,17 @@ import org.apache.flink.table.api.scala._
 import org.apache.flink.api.scala._
 import org.apache.flink.types.Row
 import org.opencypher.flink.schema.{CAPFNodeTable, CAPFRelationshipTable}
-import org.opencypher.flink.test.support.RowDebugOutputSupport
+import org.opencypher.flink.value.{CAPFNode, CAPFRelationship}
 import org.opencypher.okapi.api.io.conversion.{NodeMapping, RelationshipMapping}
+import org.opencypher.okapi.api.schema.Schema
+import org.opencypher.okapi.api.types.{CTInteger, CTList, CTString, CTVoid}
+import org.opencypher.okapi.api.value.CypherValue.{CypherList, CypherMap}
+import org.opencypher.okapi.testing.Bag
+import org.opencypher.okapi.testing.Bag._
 
-import scala.collection.{Bag, mutable}
+import scala.collection.mutable
 
-trait TeamDataFixture extends TestDataFixture with RowDebugOutputSupport {
+trait TeamDataFixture extends TestDataFixture {
 
   self: CAPFSessionFixture =>
 
@@ -25,28 +30,37 @@ trait TeamDataFixture extends TestDataFixture with RowDebugOutputSupport {
       |       CREATE (c)-[:KNOWS {since: 2016}]->(d)
     """.stripMargin
 
+  lazy val dataFixtureSchema: Schema = Schema.empty
+    .withNodePropertyKeys("Person", "German")("name" -> CTString, "luckyNumber" -> CTInteger,  "languages" -> CTList(CTString).nullable)
+    .withNodePropertyKeys("Person", "Swede")("name" -> CTString, "luckyNumber" -> CTInteger)
+    .withNodePropertyKeys("Person")("name" -> CTString, "luckyNumber" -> CTInteger, "languages" -> CTList(CTVoid))
+    .withRelationshipPropertyKeys("KNOWS")("since" -> CTInteger)
+
   override lazy val nbrNodes = 4
 
   override def nbrRels = 3
 
-  lazy val teamDataGraphNodes: Bag[Row] = Bag(
-    Row.of(0L: java.lang.Long, true: java.lang.Boolean, true: java.lang.Boolean, false: java.lang.Boolean, 42L: java.lang.Long, "Stefan"),
-    Row.of(1L: java.lang.Long, false: java.lang.Boolean, true: java.lang.Boolean, true: java.lang.Boolean, 23L: java.lang.Long, "Mats"),
-    Row.of(2L: java.lang.Long, true: java.lang.Boolean, true: java.lang.Boolean, false: java.lang.Boolean, 1337L: java.lang.Long, "Martin"),
-    Row.of(3L: java.lang.Long, true: java.lang.Boolean, true: java.lang.Boolean, false: java.lang.Boolean, 8L: java.lang.Long, "Max")
+  lazy val teamDataGraphNodes: Bag[CypherMap] = Bag(
+    CypherMap("n" -> CAPFNode(0L, Set("Person", "German"), CypherMap("name" -> "Stefan", "luckyNumber" -> 42L, "languages" -> CypherList("German", "English", "Klingon")))),
+    CypherMap("n" -> CAPFNode(1L, Set("Person", "Swede"), CypherMap("name" -> "Mats", "luckyNumber" -> 23L))),
+    CypherMap("n" -> CAPFNode(2L, Set("Person", "German"), CypherMap("name" -> "Martin", "luckyNumber" -> 1337L))),
+    CypherMap("n" -> CAPFNode(3L, Set("Person", "German"), CypherMap("name" -> "Max", "luckyNumber" -> 8L))),
+    CypherMap("n" -> CAPFNode(4L, Set("Person"), CypherMap("name" -> "Donald", "luckyNumber" -> 8L, "languages" -> CypherList())))
   )
 
-  lazy val teamDataGraphRels: Bag[Row] = Bag(
-    Row.of(0L: java.lang.Long, 0L: java.lang.Long, "KNOWS", 1L: java.lang.Long, 2016L: java.lang.Long),
-    Row.of(1L: java.lang.Long, 1L: java.lang.Long, "KNOWS", 2L: java.lang.Long, 2016L: java.lang.Long),
-    Row.of(2L: java.lang.Long, 2L: java.lang.Long, "KNOWS", 3L: java.lang.Long, 2016L: java.lang.Long)
+  lazy val teamDataGraphRels: Bag[CypherMap] = Bag(
+    CypherMap("r" -> CAPFRelationship(0, 0, 1, "KNOWS", CypherMap("since" -> 2016))),
+    CypherMap("r" -> CAPFRelationship(1, 1, 2, "KNOWS", CypherMap("since" -> 2016))),
+    CypherMap("r" -> CAPFRelationship(2, 2, 3, "KNOWS", CypherMap("since" -> 2016)))
   )
+
+  lazy val csvTestGraphTags: Set[Int] = Set(0, 1)
 
   lazy val csvTestGraphNodes: Bag[Row] = Bag(
-    Row.of(1L: java.lang.Long, true: java.lang.Boolean, true: java.lang.Boolean, true: java.lang.Boolean, false: java.lang.Boolean, mutable.WrappedArray.make(Array("german", "english")), 42L: java.lang.Long, "Stefan"),
-    Row.of(2L: java.lang.Long, true: java.lang.Boolean, false: java.lang.Boolean, true: java.lang.Boolean, true: java.lang.Boolean, mutable.WrappedArray.make(Array("swedish", "english", "german")), 23L: java.lang.Long, "Mats"),
-    Row.of(3L: java.lang.Long, true: java.lang.Boolean, true: java.lang.Boolean, true: java.lang.Boolean, false: java.lang.Boolean, mutable.WrappedArray.make(Array("german", "english")), 1337L: java.lang.Long, "Martin"),
-    Row.of(4L: java.lang.Long, true: java.lang.Boolean, true: java.lang.Boolean, true: java.lang.Boolean, false: java.lang.Boolean, mutable.WrappedArray.make(Array("german", "swedish", "english")), 8L: java.lang.Long, "Max")
+    Row.of(1L: java.lang.Long, true: java.lang.Boolean, true: java.lang.Boolean, true: java.lang.Boolean, false: java.lang.Boolean, wrap(Array("german", "english")), 42L: java.lang.Long, "Stefan"),
+    Row.of(2L: java.lang.Long, true: java.lang.Boolean, false: java.lang.Boolean, true: java.lang.Boolean, true: java.lang.Boolean, wrap(Array("swedish", "english", "german")), 23L: java.lang.Long, "Mats"),
+    Row.of(3L: java.lang.Long, true: java.lang.Boolean, true: java.lang.Boolean, true: java.lang.Boolean, false: java.lang.Boolean, wrap(Array("german", "english")), 1337L: java.lang.Long, "Martin"),
+    Row.of(4L: java.lang.Long, true: java.lang.Boolean, true: java.lang.Boolean, true: java.lang.Boolean, false: java.lang.Boolean, wrap(Array("german", "swedish", "english")), 8L: java.lang.Long, "Max")
   )
 
   /**
@@ -73,6 +87,36 @@ trait TeamDataFixture extends TestDataFixture with RowDebugOutputSupport {
     Row.of(30L: java.lang.Long, 3L: java.lang.Long, "KNOWS", 4L: java.lang.Long, 2015L: java.lang.Long)
   )
 
+  lazy val dataFixtureWithoutArrays =
+    """
+       CREATE (a:Person:German {name: "Stefan", luckyNumber: 42})
+       CREATE (b:Person:Swede  {name: "Mats", luckyNumber: 23})
+       CREATE (c:Person:German {name: "Martin", luckyNumber: 1337})
+       CREATE (d:Person:German {name: "Max", luckyNumber: 8})
+       CREATE (e:Person {name: "Donald", luckyNumber: 8})
+       CREATE (a)-[:KNOWS {since: 2015}]->(b)
+       CREATE (b)-[:KNOWS {since: 2016}]->(c)
+       CREATE (c)-[:KNOWS {since: 2017}]->(d)
+    """
+
+  lazy val csvTestGraphNodesWithoutArrays: Bag[Row] = Bag(
+    Row.of(0L: java.lang.Long, true: java.lang.Boolean, true: java.lang.Boolean, false: java.lang.Boolean, 42L: java.lang.Long, "Stefan"),
+    Row.of(1L: java.lang.Long, false: java.lang.Boolean, true: java.lang.Boolean, true: java.lang.Boolean, 23L: java.lang.Long, "Mats"),
+    Row.of(2L: java.lang.Long, true: java.lang.Boolean, true: java.lang.Boolean, false: java.lang.Boolean, 1337L: java.lang.Long, "Martin"),
+    Row.of(3L: java.lang.Long, true: java.lang.Boolean, true: java.lang.Boolean, false: java.lang.Boolean, 8L: java.lang.Long, "Max"),
+    Row.of(4L: java.lang.Long, false: java.lang.Boolean, true: java.lang.Boolean, false: java.lang.Boolean, 8L: java.lang.Long, "Donald")
+  )
+
+  lazy val csvTestGraphRelsWithoutArrays: Bag[Row] = Bag(
+    Row.of(0L: java.lang.Long, 5L: java.lang.Long, "KNOWS", 1L: java.lang.Long, 2015L: java.lang.Long),
+    Row.of(1L: java.lang.Long, 6L: java.lang.Long, "KNOWS", 2L: java.lang.Long, 2016L: java.lang.Long),
+    Row.of(2L: java.lang.Long, 7L: java.lang.Long, "KNOWS", 3L: java.lang.Long, 2017L: java.lang.Long)
+  )
+
+  private  def wrap[T](s: Array[T]): mutable.WrappedArray[T] = {
+    mutable.WrappedArray.make(s)
+  }
+
   private lazy val personMapping: NodeMapping = NodeMapping
     .on("ID")
     .withImpliedLabel("Person")
@@ -91,7 +135,7 @@ trait TeamDataFixture extends TestDataFixture with RowDebugOutputSupport {
     )
   )
 
-  lazy val personTable = CAPFNodeTable(personMapping, personDF)
+  lazy val personTable = CAPFNodeTable.fromMapping(personMapping, personDF)
 
   private lazy val knowsMapping: RelationshipMapping = RelationshipMapping
     .on("ID").from("SRC").to("DST").relType("KNOWS").withPropertyKey("since" -> "SINCE")
@@ -109,7 +153,7 @@ trait TeamDataFixture extends TestDataFixture with RowDebugOutputSupport {
     )
   )
 
-  lazy val knowsTable = CAPFRelationshipTable(knowsMapping, knowsDF)
+  lazy val knowsTable = CAPFRelationshipTable.fromMapping(knowsMapping, knowsDF)
 
   private lazy val programmerMapping = NodeMapping
     .on("ID")
@@ -130,7 +174,7 @@ trait TeamDataFixture extends TestDataFixture with RowDebugOutputSupport {
     )
   )
 
-  lazy val programmerTable = CAPFNodeTable(programmerMapping, programmerDF)
+  lazy val programmerTable = CAPFNodeTable.fromMapping(programmerMapping, programmerDF)
 
   private lazy val brogrammerMapping = NodeMapping
     .on("ID")
@@ -149,7 +193,7 @@ trait TeamDataFixture extends TestDataFixture with RowDebugOutputSupport {
     )
   )
 
-  lazy val brogrammerTable = CAPFNodeTable(brogrammerMapping, brogrammerDF)
+  lazy val brogrammerTable = CAPFNodeTable.fromMapping(brogrammerMapping, brogrammerDF)
 
   private lazy val bookMapping = NodeMapping
     .on("ID")
@@ -168,7 +212,7 @@ trait TeamDataFixture extends TestDataFixture with RowDebugOutputSupport {
     )
   )
 
-  lazy val  bookTable = CAPFNodeTable(bookMapping, bookDF)
+  lazy val  bookTable = CAPFNodeTable.fromMapping(bookMapping, bookDF)
 
   private lazy val readsMapping = RelationshipMapping
     .on("ID").from("SRC").to("DST").relType("READS").withPropertyKey("recommends" -> "RECOMMENDS")
@@ -184,7 +228,7 @@ trait TeamDataFixture extends TestDataFixture with RowDebugOutputSupport {
     )
   )
 
-  lazy val readsTable = CAPFRelationshipTable(readsMapping, readsDF)
+  lazy val readsTable = CAPFRelationshipTable.fromMapping(readsMapping, readsDF)
 
   private lazy val influencesMapping = RelationshipMapping
     .on("ID").from("SRC").to("DST").relType("INFLUENCES")
@@ -195,7 +239,7 @@ trait TeamDataFixture extends TestDataFixture with RowDebugOutputSupport {
     )
   )
 
-  lazy val influencesTable = CAPFRelationshipTable(influencesMapping, influencesDF)
+  lazy val influencesTable = CAPFRelationshipTable.fromMapping(influencesMapping, influencesDF)
 
 }
 

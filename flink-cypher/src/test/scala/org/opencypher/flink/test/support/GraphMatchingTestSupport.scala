@@ -6,7 +6,7 @@ import org.apache.flink.api.scala.ExecutionEnvironment
 import org.apache.flink.table.api.BatchTableEnvironment
 import org.opencypher.flink.CAPFGraph
 import org.opencypher.flink.test.fixture.{CAPFSessionFixture, FlinkSessionFixture}
-import org.opencypher.okapi.test.BaseTestSuite
+import org.opencypher.okapi.testing.BaseTestSuite
 import org.scalatest.Assertion
 
 trait GraphMatchingTestSupport {
