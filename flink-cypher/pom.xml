@@ -66,6 +66,13 @@
         </dependency>
 
         <dependency>
+            <groupId>org.opencypher</groupId>
+            <artifactId>okapi-tck</artifactId>
+            <version>${project.parent.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
             <groupId>org.scalatest</groupId>
             <artifactId>scalatest_${project.scala.binary.version}</artifactId>
             <version>${dep.scalatest.version}</version>

@@ -6,7 +6,7 @@ import org.apache.flink.table.api.{Table, Types}
 import org.apache.flink.table.expressions.{Expression, Literal, Null, UnresolvedFieldReference}
 import org.opencypher.flink.FlinkUtils._
 import org.opencypher.flink.physical.CAPFRuntimeContext
-import org.opencypher.okapi.api.types.{CTAny, CTList, CTNode, CTString}
+import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.api.value.CypherValue.CypherList
 import org.opencypher.okapi.impl.exception.{IllegalArgumentException, IllegalStateException, NotImplementedException}
 import org.opencypher.okapi.ir.api.expr._
@@ -158,6 +158,11 @@ object FlinkSQLExprMapper {
           header.targetNodeSlot(rel).content.key.asFlinkSQLExpr
 
         case ToFloat(e) => e.asFlinkSQLExpr.cast(Types.DOUBLE)
+
+        case Explode(list) => list.cypherType match {
+          case CTList(_) | CTListOrNull(_) => list.asFlinkSQLExpr.flatten()
+          case other => throw IllegalArgumentException("CTList", other)
+        }
 
         case ep: ExistsPatternExpr => ep.targetField.asFlinkSQLExpr
 

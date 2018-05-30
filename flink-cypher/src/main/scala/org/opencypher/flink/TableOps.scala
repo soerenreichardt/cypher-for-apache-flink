@@ -139,9 +139,9 @@ object TableOps {
 
       joinType match {
         case "inner" => table.join(other, joinExpr)
-        case "left" => table.leftOuterJoin(other, joinExpr)
-        case "right" => table.rightOuterJoin(other, joinExpr)
-        case "outer" | "full" => table.fullOuterJoin(other, joinExpr)
+        case "left_outer" => table.leftOuterJoin(other, joinExpr)
+        case "right_outer" => table.rightOuterJoin(other, joinExpr)
+        case "full_outer" => table.fullOuterJoin(other, joinExpr)
         case x => throw exception.NotImplementedException(s"Join type $x")
       }
     }

@@ -1,31 +1,38 @@
-package org.opencypher.okapi.tck
+package org.opencypher.flink.test.tck
 
 import java.io.File
 
 import org.opencypher.flink.CAPFGraph
 import org.opencypher.flink.test.CAPFTestSuite
 import org.opencypher.flink.test.support.capf.{CAPFScanGraphFactory, CAPFTestGraphFactory}
-import org.opencypher.okapi.tck.Tags.{BlackList, TckCapfTag, WhiteList}
+import org.opencypher.okapi.tck.test.{ScenariosFor, TCKGraph}
+import org.opencypher.okapi.tck.test.Tags.{BlackList, WhiteList}
 import org.opencypher.tools.tck.api.CypherTCK
+import org.scalatest.Tag
 import org.scalatest.prop.TableDrivenPropertyChecks._
 
 import scala.util.{Failure, Success, Try}
 
-class TckFlinkTest extends CAPFTestSuite {
+class TckFlinkCypherTest extends CAPFTestSuite {
+
+  object TckCapfTag extends Tag("TckFlinkCypher")
 
   private val factories = Table(
-    "factory",
-    CAPFScanGraphFactory
+    ("factory", "additional_blacklist"),
+    (CAPFScanGraphFactory, Set.empty[String])
   )
 
   private val defaultFactory: CAPFTestGraphFactory = CAPFScanGraphFactory
 
-  private val scenarios = ScenariosFor("flink")
+  private val blacklistFile = getClass.getResource("/scenario_blacklist").getFile
+  private val scenarios = ScenariosFor(blacklistFile)
 
-  forAll(factories) { factory =>
+  forAll(factories) { (factory, additional_blacklist) =>
     forAll(scenarios.whiteList) { scenario =>
-      test(s"[${factory.name}, ${WhiteList.name}] $scenario", WhiteList, TckCapfTag) {
-        scenario(TCKGraph(factory, CAPFGraph.empty)).execute()
+      if (!additional_blacklist.contains(scenario.toString)) {
+        test(s"[${factory.name}, ${WhiteList.name}] $scenario", WhiteList, TckCapfTag, Tag(factory.name)) {
+          scenario(TCKGraph(factory, CAPFGraph.empty)).execute()
+        }
       }
     }
   }
@@ -49,11 +56,12 @@ class TckFlinkTest extends CAPFTestSuite {
     CypherTCK
       .parseFilesystemFeature(file)
       .scenarios
+      .foreach(scenario => scenario(TCKGraph(defaultFactory,  CAPFGraph.empty)).execute())
+  }
+
+  ignore("run Single Scenario") {
+    scenarios.get("A simple pattern with one bound endpoint")
       .foreach(scenario => scenario(TCKGraph(defaultFactory, CAPFGraph.empty)).execute())
   }
 
-  it("run Single Scenario") {
-    scenarios.get("OPTIONAL MATCH with previously bound nodes")
-      .foreach(scenario => scenario(TCKGraph(defaultFactory,  CAPFGraph.empty)).execute())
-  }
 }
