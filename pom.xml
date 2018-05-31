@@ -7,6 +7,10 @@
   <groupId>org.opencypher</groupId>
   <artifactId>okapi</artifactId>
   <version>1.0.0-SNAPSHOT</version>
+  <modules>
+    <module>flink-cypher-tck</module>
+      <module>flink-cypher-testing</module>
+  </modules>
 
   <name>Okapi - openCypher query compilation API and pipeline</name>
   <packaging>pom</packaging>
@@ -240,7 +244,7 @@
           </execution>
         </executions>
         <configuration>
-          <recompileMode>incremental</recompileMode>
+          <!--<recompileMode>incremental</recompileMode>-->
           <scalaVersion>${project.scala.version}</scalaVersion>
           <scalaCompatVersion>${project.scala.binary.version}</scalaCompatVersion>
           <encoding>${project.build.encoding}</encoding>
@@ -407,6 +411,8 @@
         <module>spark-cypher-tck</module>
         <module>spark-cypher-testing</module>
         <module>flink-cypher</module>
+        <module>flink-cypher-tck</module>
+        <module>flink-cypher-testing</module>
       </modules>
     </profile>
 
@@ -559,6 +565,13 @@
       <groupId>org.scalacheck</groupId>
       <artifactId>scalacheck_${project.scala.binary.version}</artifactId>
       <version>${dep.scalacheck.version}</version>
+      <scope>test</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-all</artifactId>
+      <version>${dep.netty.version}</version>
       <scope>test</scope>
     </dependency>
 

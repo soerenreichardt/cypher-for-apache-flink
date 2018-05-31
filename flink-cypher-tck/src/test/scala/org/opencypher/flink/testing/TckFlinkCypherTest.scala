@@ -1,12 +1,12 @@
-package org.opencypher.flink.test.tck
+package org.opencypher.flink.testing
 
 import java.io.File
 
 import org.opencypher.flink.CAPFGraph
 import org.opencypher.flink.test.CAPFTestSuite
 import org.opencypher.flink.test.support.capf.{CAPFScanGraphFactory, CAPFTestGraphFactory}
-import org.opencypher.okapi.tck.test.{ScenariosFor, TCKGraph}
 import org.opencypher.okapi.tck.test.Tags.{BlackList, WhiteList}
+import org.opencypher.okapi.tck.test.{ScenariosFor, TCKGraph}
 import org.opencypher.tools.tck.api.CypherTCK
 import org.scalatest.Tag
 import org.scalatest.prop.TableDrivenPropertyChecks._
@@ -59,8 +59,8 @@ class TckFlinkCypherTest extends CAPFTestSuite {
       .foreach(scenario => scenario(TCKGraph(defaultFactory,  CAPFGraph.empty)).execute())
   }
 
-  ignore("run Single Scenario") {
-    scenarios.get("A simple pattern with one bound endpoint")
+  it("run Single Scenario") {
+    scenarios.get("Handling triadic friend of a friend that is not a friend with explicit subset of relationship type")
       .foreach(scenario => scenario(TCKGraph(defaultFactory, CAPFGraph.empty)).execute())
   }
 

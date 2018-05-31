@@ -40,7 +40,7 @@ object CAPFScanGraphFactory extends CAPFTestGraphFactory {
       val rowDataSet = capf.env.fromCollection(rows)
       val records = capf.tableEnv.fromDataSet(rowDataSet)
 
-      CAPFNodeTable(NodeMapping
+      CAPFNodeTable.fromMapping(NodeMapping
         .on(tableEntityKey)
         .withImpliedLabels(labels.toSeq: _*)
         .withPropertyKeys(propKeys.keys.toSeq: _*), records)
@@ -64,7 +64,7 @@ object CAPFScanGraphFactory extends CAPFTestGraphFactory {
       val rowDataSet = capf.env.fromCollection(rows)
       val records = capf.tableEnv.fromDataSet(rowDataSet)
 
-      CAPFRelationshipTable(RelationshipMapping
+      CAPFRelationshipTable.fromMapping(RelationshipMapping
         .on(tableEntityKey)
         .from(sourceStartNodeKey)
         .to(sourceEndNodeKey)
