@@ -46,7 +46,7 @@ trait RecordMatchingTestSupport {
         case slot: ProjectedExpr    => OpaqueField(Var(slot.expr.withoutType)(slot.cypherType))
       }
       val newHeader = RecordHeader.from(newSlots: _*)
-      val newData = records.data.safeRenameColumns(records.data.columns, newHeader.internalHeader.columns)
+      val newData = records.data.safeRenameColumns(records.data.columns, newHeader.columns)
       CAPFRecords.verifyAndCreate(newHeader, newData)(records.capf)
     }
   }

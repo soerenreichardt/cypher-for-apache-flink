@@ -104,4 +104,6 @@ case class CAPFSchema private(schema: Schema) extends Schema {
   override def withOverwrittenNodePropertyKeys(nodeLabels: Set[String], propertyKeys: PropertyKeys): Schema = schema.withOverwrittenNodePropertyKeys(nodeLabels, propertyKeys)
 
   override def withOverwrittenRelationshipPropertyKeys(relType: String, propertyKeys: PropertyKeys): Schema = schema.withOverwrittenRelationshipPropertyKeys(relType, propertyKeys)
+
+  override def toJson: String = schema.toJson
 }

@@ -12,7 +12,7 @@ import org.opencypher.okapi.relational.impl.table.RecordHeader
 final case class rowToCypherMap(header: RecordHeader, columnNameToIndex: Map[String, Int]) extends (Row => CypherMap) {
 
   override def apply(row: Row): CypherMap = {
-    val values = header.internalHeader.fields.map { field =>
+    val values = header.fieldsAsVar.map { field =>
       field.name -> constructValue(row, field)
     }.toSeq
 

@@ -15,6 +15,7 @@ import org.opencypher.okapi.impl.exception.IllegalArgumentException
 import org.opencypher.okapi.ir.api.expr.{Expr, Var}
 import org.opencypher.okapi.ir.api.set.SetPropertyItem
 import org.opencypher.okapi.logical.impl.LogicalPatternGraph
+import org.opencypher.okapi.relational.impl.physical.LeftOuterJoin
 import org.opencypher.okapi.relational.impl.table.{OpaqueField, RecordHeader, RecordSlot}
 
 private[flink] abstract class BinaryPhysicalOperator extends CAPFPhysicalOperator {
@@ -96,7 +97,7 @@ final case class ExistsSubQuery(
     val leftHeader = left.records.header
     val rightHeader = right.records.header
 
-    val joinFields = leftHeader.internalHeader.fields.intersect(rightHeader.internalHeader.fields)
+    val joinFields = leftHeader.fieldsAsVar.intersect(rightHeader.fieldsAsVar)
 
     val columnsToRemove = joinFields
       .flatMap(rightHeader.childSlots)
@@ -128,7 +129,7 @@ final case class ExistsSubQuery(
     val joinCols = joinColumnMapping.map(t => t._1 -> t._3)
 
     val joinedRecords =
-      joinTables(left.records.data, distinctRightData, header, joinCols, "left")(deduplicate = true)(left.records.capf)
+      joinTables(left.records.data, distinctRightData, header, joinCols, "left_outer")(deduplicate = true)(left.records.capf)
 
     val targetFieldColumnName = ColumnName.of(rightHeader.slotFor(targetField))
 

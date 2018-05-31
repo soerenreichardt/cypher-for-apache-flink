@@ -47,7 +47,7 @@ object Demo extends App {
 
   PrintPhysicalPlan.set()
   PrintTimings.set()
-    graph.cypher("MATCH (n:Person)-[r:KNOWS]->(n2:Person) RETURN COUNT(*)").getRecords.show                                    // expand
+//    graph.cypher("MATCH (n:Person)-[r:KNOWS]->(n2:Person) RETURN COUNT(*)").getRecords.show                                    // expand
 //  graph.cypher("MATCH (n:Person)-[r:KNOWS*1..3]->(n2:Person) RETURN n.name, n2.name").getRecords.show                   // var expand / currently fails because CTInteger gets mapped to LONG
 //  graph.cypher("MATCH (n:Person) WHERE (n)--({age: 29}) RETURN n.name").getRecords.show                               // exists
 //  graph.cypher("MATCH (n:Person) OPTIONAL MATCH (n)-[:KNOWS]->(b {age: 29}) RETURN n.name, b.name").getRecords.show   // optional match

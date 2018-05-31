@@ -8,6 +8,7 @@ import org.apache.flink.types.Row
 import org.opencypher.flink.CAPFRecordHeader._
 import org.opencypher.flink.FlinkUtils._
 import org.opencypher.flink.TableOps._
+import org.opencypher.flink.CAPFCypherType._
 import org.opencypher.flink.schema.{CAPFEntityTable, CAPFNodeTable, CAPFRelationshipTable}
 import org.opencypher.flink.schema.EntityTable._
 import org.opencypher.okapi.api.io.conversion.{NodeMapping, RelationshipMapping}
@@ -30,10 +31,6 @@ sealed abstract class CAPFRecords(val header: RecordHeader, val data: Table)(imp
     RecordsPrinter.print(this)
 
   override def size: Long = data.count()
-
-  def flinkColumns: IndexedSeq[String] = header.internalHeader.columns
-
-//  def mapTable(f: Table => Table): CAPFRecords = verifyAndCreate(prepareTable(f(data)))
 
   def toCypherMaps: DataSet[CypherMap] = {
     print(capf.tableEnv.explain(data))
@@ -171,7 +168,7 @@ sealed abstract class CAPFRecords(val header: RecordHeader, val data: Table)(imp
     toCypherMaps.collect().toArray
 
   def alignWith(v: Var, targetHeader: RecordHeader): CAPFRecords = {
-    val oldEntity = this.header.internalHeader.fields.headOption
+    val oldEntity = this.header.fieldsAsVar.headOption
         .getOrElse(throw IllegalStateException("GraphScan table did not contain any fields"))
 
     val entityLabels: Set[String] = oldEntity.cypherType match {
@@ -304,7 +301,7 @@ object CAPFRecords extends CypherRecordsCompanion[CAPFRecords, CAPFSession] {
         slot.content
     }
     val newHeader = RecordHeader.from(slotContents: _*)
-    val expressions: Vector[Expression] = newHeader.internalHeader.columns.map(f => UnresolvedFieldReference(f))
+    val expressions = newHeader.slots.map(ColumnName.of).map(UnresolvedFieldReference)
     val renamed = sourceTable.as(expressions:_*)
 
     CAPFRecords.createInternal(newHeader, renamed)
@@ -316,12 +313,12 @@ object CAPFRecords extends CypherRecordsCompanion[CAPFRecords, CAPFSession] {
   private def prepareTable(initialTable: Table)(implicit capf: CAPFSession): (RecordHeader, Table) = {
     // TODO: cast to compatible types
     val initialHeader = CAPFRecordHeader.fromFlinkTableSchema(initialTable.getSchema)
-    val withRenamedColumns = initialTable.as(initialHeader.internalHeader.columns.mkString(","))
+    val withRenamedColumns = initialTable.as(initialHeader.columns.mkString(","))
     (initialHeader, withRenamedColumns)
   }
 
   def empty(initialHeader: RecordHeader = RecordHeader.empty)(implicit capf: CAPFSession): CAPFRecords = {
-    val nameToFlinkTypeMapping = initialHeader.internalHeader.slots.map(slot => ColumnName.of(slot) -> toFlinkType(slot.content.cypherType))
+    val nameToFlinkTypeMapping = initialHeader.slots.map(slot => ColumnName.of(slot) -> toFlinkType(slot.content.cypherType))
 
     //    TODO: rename columns and set correct datatypes
     val emptyDataSet = capf.env.fromCollection(Set.empty[Any])
@@ -339,7 +336,7 @@ object CAPFRecords extends CypherRecordsCompanion[CAPFRecords, CAPFSession] {
   }
 
   def verifyAndCreate(initialHeader: RecordHeader, initialData: Table)(implicit capf: CAPFSession): CAPFRecords = {
-    val initialDataColumns = initialData.columns.toSeq
+    val initialDataColumns = initialData.columns
 
     val duplicateColumns = initialDataColumns.groupBy(identity).collect {
       case (key, values) if values.size > 1 => key
@@ -350,12 +347,12 @@ object CAPFRecords extends CypherRecordsCompanion[CAPFRecords, CAPFSession] {
         "a Table with destinct columns",
         s"a Table with duplicate columns: $duplicateColumns")
 
-    val headerColumnNames = initialHeader.internalHeader.columns.toSet
+    val headerColumnNames = initialHeader.slots.map(ColumnName.of).toSet
     val dataColumnNames = initialData.columns.toSet
     val missingColumnNames = headerColumnNames -- dataColumnNames
     if (missingColumnNames.nonEmpty) {
       throw IllegalArgumentException(
-        s"data with columns ${initialHeader.internalHeader.columns.sorted.mkString("\n", ", ", "\n")}",
+        s"data with columns ${initialHeader.columns.sorted.mkString("\n", ", ", "\n")}",
         s"data with missing columns ${missingColumnNames.toSeq.sorted.mkString("\n", ", ", "\n")}"
       )
     }
