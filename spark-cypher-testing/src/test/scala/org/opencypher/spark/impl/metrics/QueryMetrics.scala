@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.Union
 import org.apache.spark.sql.execution.UnionExec
 import org.opencypher.spark.impl.CAPSConverters._
 import org.opencypher.spark.impl.acceptance.DefaultGraphInit
-import org.opencypher.spark.impl.metrics.SparkQueryPlanCostEstimation._
+import org.opencypher.spark.impl.util.SparkQueryPlanCostEstimation._
 import org.opencypher.spark.testing.CAPSTestSuite
 
 class QueryMetrics extends CAPSTestSuite with DefaultGraphInit {
@@ -78,12 +78,12 @@ class QueryMetrics extends CAPSTestSuite with DefaultGraphInit {
   }
 
   it("not aliasing column names enables plan reuse") {
-    import session.implicits._
+    import sparkSession.implicits._
 
-    session.sessionState.conf.setConfString("spark.sql.inMemoryColumnarStorage.batchSize", "1")
+    sparkSession.sessionState.conf.setConfString("spark.sql.inMemoryColumnarStorage.batchSize", "1")
 
-    val inputDF = session.createDataFrame(Seq((0L, 1L))).toDF("a", "b")
-    val df0 = session.createDataFrame(Seq((0L, 1L))).toDF("c", "d")
+    val inputDF = sparkSession.createDataFrame(Seq((0L, 1L))).toDF("a", "b")
+    val df0 = sparkSession.createDataFrame(Seq((0L, 1L))).toDF("c", "d")
 
     val df1 = inputDF.filter($"a" === 0)
     val df2 = inputDF.filter($"a" === 0)
@@ -115,10 +115,10 @@ class QueryMetrics extends CAPSTestSuite with DefaultGraphInit {
   }
 
   it("aliasing column names undermines plan reuse") {
-    import session.implicits._
+    import sparkSession.implicits._
 
-    val inputDF = session.createDataFrame(Seq((0L, 1L))).toDF("a", "b")
-    val df0 = session.createDataFrame(Seq((0L, 1L))).toDF("c", "d")
+    val inputDF = sparkSession.createDataFrame(Seq((0L, 1L))).toDF("a", "b")
+    val df0 = sparkSession.createDataFrame(Seq((0L, 1L))).toDF("c", "d")
 
     val df1 = inputDF.filter($"a" === 0)
     val df2 = inputDF.filter($"a" === 0)

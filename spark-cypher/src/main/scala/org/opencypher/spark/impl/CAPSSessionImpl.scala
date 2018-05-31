@@ -29,12 +29,14 @@ package org.opencypher.spark.impl
 import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.sql.SparkSession
+import org.opencypher.okapi.api.configuration.Configuration.PrintTimings
 import org.opencypher.okapi.api.graph._
 import org.opencypher.okapi.api.table.CypherRecords
 import org.opencypher.okapi.api.value.CypherValue._
 import org.opencypher.okapi.api.value._
 import org.opencypher.okapi.impl.io.SessionGraphDataSource
-import org.opencypher.okapi.impl.util.Measurement.time
+import org.opencypher.okapi.impl.util.Measurement
+import org.opencypher.okapi.impl.util.Measurement.printTiming
 import org.opencypher.okapi.ir.api._
 import org.opencypher.okapi.ir.api.configuration.IrConfiguration.PrintIr
 import org.opencypher.okapi.ir.api.expr.{Expr, Var}
@@ -48,6 +50,8 @@ import org.opencypher.okapi.relational.impl.physical.PhysicalPlanner
 import org.opencypher.spark.api.CAPSSession
 import org.opencypher.spark.impl.CAPSConverters._
 import org.opencypher.spark.impl.physical._
+
+import scala.concurrent.duration.Duration
 
 sealed class CAPSSessionImpl(val sparkSession: SparkSession)
   extends CAPSSession
@@ -75,7 +79,7 @@ sealed class CAPSSessionImpl(val sparkSession: SparkSession)
     val ambientGraphNew = mountAmbientGraph(graph)
 
     val drivingTable = maybeDrivingTable.getOrElse(CAPSRecords.unit())
-    val inputFields = drivingTable.asCaps.header.internalHeader.fields
+    val inputFields = drivingTable.asCaps.header.fieldsAsVar
 
     val (stmt, extractedLiterals, semState) = time("AST construction")(parser.process(query, inputFields)(CypherParser.defaultContext))
 
@@ -133,7 +137,7 @@ sealed class CAPSSessionImpl(val sparkSession: SparkSession)
     in: CypherRecords,
     expr: Expr,
     queryParameters: CypherMap): CAPSRecords = {
-    val scan = planStart(graph, in.asCaps.header.internalHeader.fields)
+    val scan = planStart(graph, in.asCaps.header.fieldsAsVar)
     val filter = producer.planFilter(expr, scan)
     planPhysical(in, queryParameters, filter).getRecords
   }
@@ -143,7 +147,7 @@ sealed class CAPSSessionImpl(val sparkSession: SparkSession)
     in: CypherRecords,
     fields: List[Var],
     queryParameters: CypherMap): CAPSRecords = {
-    val scan = planStart(graph, in.asCaps.header.internalHeader.fields)
+    val scan = planStart(graph, in.asCaps.header.fieldsAsVar)
     val select = producer.planSelect(fields, scan)
     planPhysical(in, queryParameters, select).getRecords
   }
@@ -153,7 +157,7 @@ sealed class CAPSSessionImpl(val sparkSession: SparkSession)
     in: CypherRecords,
     expr: Expr,
     queryParameters: CypherMap): CAPSRecords = {
-    val scan = planStart(graph, in.asCaps.header.internalHeader.fields)
+    val scan = planStart(graph, in.asCaps.header.fieldsAsVar)
     val project = producer.projectExpr(expr, scan)
     planPhysical(in, queryParameters, project).getRecords
   }
@@ -164,7 +168,7 @@ sealed class CAPSSessionImpl(val sparkSession: SparkSession)
     alias: (Expr, Var),
     queryParameters: CypherMap): CAPSRecords = {
     val (expr, v) = alias
-    val scan = planStart(graph, in.asCaps.header.internalHeader.fields)
+    val scan = planStart(graph, in.asCaps.header.fieldsAsVar)
     val select = producer.projectField(IRField(v.name)(v.cypherType), expr, scan)
     planPhysical(in, queryParameters, select).getRecords
   }
@@ -231,6 +235,10 @@ sealed class CAPSSessionImpl(val sparkSession: SparkSession)
 
     CAPSResultBuilder.from(logicalPlan, flatPlan, optimizedPhysicalPlan)(
       CAPSRuntimeContext(physicalPlannerContext.parameters, graphAt, collection.mutable.Map.empty, collection.mutable.Map.empty))
+  }
+
+  private[opencypher] def time[T](description: String)(code: => T): T = {
+    if (PrintTimings.isSet) printTiming(description)(code) else code
   }
 
   private[opencypher] val qgnGenerator = new QGNGenerator {

@@ -24,37 +24,39 @@
  * described as "implementation extensions to Cypher" or as "proposed changes to
  * Cypher that are not yet approved by the openCypher community".
  */
-package org.opencypher.okapi.relational.impl.table
+package org.opencypher.spark.api.io.fs
 
-import org.opencypher.okapi.testing.BaseTestSuite
+import org.junit.rules.TemporaryFolder
+import org.opencypher.okapi.api.graph.GraphName
+import org.opencypher.spark.api.io.csv.CsvDataSource
+import org.opencypher.spark.api.io.fs.DefaultGraphDirectoryStructure.pathSeparator
+import org.opencypher.spark.testing.CAPSTestSuite
 
-class ColumnNameTest extends BaseTestSuite {
+class DefaultFileSystemTest extends CAPSTestSuite {
 
-  test("escape length 0 spark identifier") {
-    fromString("") should equal("_empty_")
+  protected var tempDir = new TemporaryFolder()
+
+  override protected def beforeEach(): Unit = {
+    tempDir.create()
+    super.beforeEach()
   }
 
-  test("escape length 1 spark identifiers") {
-    fromString("a") should equal("a")
-    fromString("1") should equal("_1")
-    fromString("_") should equal("_bar_")
+  override protected def afterEach(): Unit = {
+    tempDir.delete()
+    tempDir = new TemporaryFolder()
+    super.afterEach()
   }
 
-  test("escape length > 1 spark identifiers") {
-    fromString("aa") should equal("aa")
-    fromString("a1") should equal("a1")
-    fromString("_1") should equal("_bar_1")
-    fromString("a_") should equal("a_bar_")
+  it("creates a data source root folder when it does not exist yet") {
+    val graph = caps.cypher(
+      """
+        |CONSTRUCT
+        |  NEW ()
+        |RETURN GRAPH
+      """.stripMargin).getGraph
+    val ds = CsvDataSource(
+      s"${tempDir.getRoot.getAbsolutePath}${pathSeparator}someNewFolder1${pathSeparator}someNewFolder2")
+    ds.store(GraphName("foo"), graph)
   }
 
-  test("escape weird chars") {
-    ".?!'\"`=@#$()^&%[]{}<>,:;|+*/\\-".foreach { ch =>
-      fromString(s"$ch").forall(esc => Character.isLetter(esc) || esc == '_')
-      fromString(s"a$ch").forall(esc => Character.isLetter(esc) || esc == '_')
-      fromString(s"1$ch").forall(esc => Character.isLetterOrDigit(esc) || esc == '_')
-      fromString(s"_$ch").forall(esc => Character.isLetter(esc) || esc == '_')
-    }
-  }
-
-  def fromString(text: String) = ColumnName.from(text)
 }

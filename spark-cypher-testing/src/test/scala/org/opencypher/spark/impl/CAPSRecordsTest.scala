@@ -34,7 +34,7 @@ import org.opencypher.okapi.api.value.CypherValue._
 import org.opencypher.okapi.impl.exception.InternalException
 import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.ir.api.{Label, PropertyKey}
-import org.opencypher.okapi.relational.impl.table.{ColumnName, OpaqueField, ProjectedExpr, RecordHeader}
+import org.opencypher.okapi.relational.impl.table.{OpaqueField, ProjectedExpr, RecordHeader}
 import org.opencypher.okapi.testing.Bag
 import org.opencypher.okapi.testing.Bag._
 import org.opencypher.spark.api.io.{CAPSNodeTable, CAPSRelationshipTable}
@@ -45,7 +45,7 @@ import org.opencypher.spark.testing.fixture.{GraphConstructionFixture, TeamDataF
 class CAPSRecordsTest extends CAPSTestSuite with GraphConstructionFixture with TeamDataFixture {
 
   test("retags a node variable") {
-    val givenDF = session.createDataFrame(
+    val givenDF = sparkSession.createDataFrame(
       Seq(
         (1L, true, "Mats"),
         (2L, false, "Martin"),
@@ -69,14 +69,14 @@ class CAPSRecordsTest extends CAPSTestSuite with GraphConstructionFixture with T
 
     val retagged = records.retagVariable(entityVar, Map(fromTag -> toTag))
 
-    val nodeIdCol = ColumnName.of(records.header.slotFor(entityVar))
+    val nodeIdCol = records.header.of(records.header.slotFor(entityVar))
 
     validateTag(records.data, nodeIdCol, fromTag)
     validateTag(retagged.data, nodeIdCol, toTag)
   }
 
   it("retags a relationship variable") {
-    val givenDF = session.createDataFrame(
+    val givenDF = sparkSession.createDataFrame(
       Seq(
         (10L, 1L, 2L, "RED"),
         (11L, 2L, 3L, "BLUE"),
@@ -100,9 +100,9 @@ class CAPSRecordsTest extends CAPSTestSuite with GraphConstructionFixture with T
 
     val retagged = records.retagVariable(entityVar, Map(fromTag -> toTag))
 
-    val relIdCol = ColumnName.of(records.header.slotFor(entityVar))
-    val sourceIdCol = ColumnName.of(records.header.sourceNodeSlot(entityVar))
-    val targetIdCol = ColumnName.of(records.header.targetNodeSlot(entityVar))
+    val relIdCol = records.header.of(records.header.slotFor(entityVar))
+    val sourceIdCol = records.header.of(records.header.sourceNodeSlot(entityVar))
+    val targetIdCol = records.header.of(records.header.targetNodeSlot(entityVar))
 
     validateTag(records.data, relIdCol, fromTag)
     validateTag(retagged.data, relIdCol, toTag)
@@ -135,7 +135,7 @@ class CAPSRecordsTest extends CAPSTestSuite with GraphConstructionFixture with T
     CAPSRecords.create(personTable).toDF().createOrReplaceTempView("people")
 
     // When
-    val df = session.sql("SELECT * FROM people")
+    val df = sparkSession.sql("SELECT * FROM people")
 
     // Then
     df.collect() should equal(Array(
@@ -147,7 +147,7 @@ class CAPSRecordsTest extends CAPSTestSuite with GraphConstructionFixture with T
   }
 
   test("verify CAPSRecords header") {
-    val givenDF = session.createDataFrame(
+    val givenDF = sparkSession.createDataFrame(
           Seq(
             (1L, true, "Mats"),
             (2L, false, "Martin"),
@@ -176,7 +176,7 @@ class CAPSRecordsTest extends CAPSTestSuite with GraphConstructionFixture with T
 
   test("verify CAPSRecords header for relationship with a fixed type") {
 
-    val givenDF = session.createDataFrame(
+    val givenDF = sparkSession.createDataFrame(
           Seq(
             (10L, 1L, 2L, "red"),
             (11L, 2L, 3L, "blue"),
@@ -206,7 +206,7 @@ class CAPSRecordsTest extends CAPSTestSuite with GraphConstructionFixture with T
   }
 
   test("contract relationships with a dynamic type") {
-    val givenDF = session.createDataFrame(
+    val givenDF = sparkSession.createDataFrame(
           Seq(
             (10L, 1L, 2L, "RED"),
             (11L, 2L, 3L, "BLUE"),
@@ -235,7 +235,7 @@ class CAPSRecordsTest extends CAPSTestSuite with GraphConstructionFixture with T
   }
 
   test("can not construct records with data/header column name conflict") {
-    val data = session.createDataFrame(Seq((1, "foo"), (2, "bar"))).toDF("int", "string")
+    val data = sparkSession.createDataFrame(Seq((1, "foo"), (2, "bar"))).toDF("int", "string")
     val header = RecordHeader.from(OpaqueField(Var("int")()), OpaqueField(Var("notString")()))
 
     a[InternalException] shouldBe thrownBy {
@@ -244,7 +244,7 @@ class CAPSRecordsTest extends CAPSTestSuite with GraphConstructionFixture with T
   }
 
   test("can construct records with matching data/header") {
-    val data = session.createDataFrame(Seq((1L, "foo"), (2L, "bar"))).toDF("int", "string")
+    val data = sparkSession.createDataFrame(Seq((1L, "foo"), (2L, "bar"))).toDF("int", "string")
     val header = RecordHeader.from(OpaqueField(Var("int")(CTInteger)), OpaqueField(Var("string")(CTString)))
 
     val records = CAPSRecords.verifyAndCreate(header, data) // no exception is thrown

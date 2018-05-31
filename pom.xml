@@ -7,10 +7,6 @@
   <groupId>org.opencypher</groupId>
   <artifactId>okapi</artifactId>
   <version>1.0.0-SNAPSHOT</version>
-  <modules>
-    <module>flink-cypher-tck</module>
-      <module>flink-cypher-testing</module>
-  </modules>
 
   <name>Okapi - openCypher query compilation API and pipeline</name>
   <packaging>pom</packaging>
@@ -72,13 +68,14 @@
     <dep.circe.version>0.9.1</dep.circe.version>
     <dep.eff.version>5.0.0</dep.eff.version>
     <dep.hadoop.version>2.7.0</dep.hadoop.version>
-    <dep.neo4j.version>3.4.0-SNAPSHOT</dep.neo4j.version>
-    <dep.neo4j.frontend.version>3.4.0-0412</dep.neo4j.frontend.version>
+    <dep.neo4j.version>3.4.0</dep.neo4j.version>
+    <dep.netty.version>4.1.8.Final</dep.netty.version>
     <dep.netty.version>4.1.8.Final</dep.netty.version>
     <dep.neo4j.driver.version>1.4.2</dep.neo4j.driver.version>
-    <dep.flink.version>1.4.2</dep.flink.version>
+    <dep.opencypher.front-end.version>2.0.0</dep.opencypher.front-end.version>
     <dep.spark.version>2.2.1</dep.spark.version>
     <dep.spark.scope>compile</dep.spark.scope>
+    <dep.upickle.version>0.6.6</dep.upickle.version>
 
     <!-- Test scope dependencies -->
     <dep.bouncycastle.version>1.57</dep.bouncycastle.version>
@@ -89,18 +86,8 @@
     <dep.neo4j.harness.version>3.3.3</dep.neo4j.harness.version>
     <dep.scalatest.version>3.0.5</dep.scalatest.version>
     <dep.scalacheck.version>1.13.5</dep.scalacheck.version>
+    <dep.spark-measure.version>0.11</dep.spark-measure.version>
   </properties>
-
-  <repositories>
-    <repository>
-      <id>snapshots</id>
-      <name>neo-snapshots</name>
-      <url>https://neo.jfrog.io/neo/opencypher-public</url>
-      <snapshots>
-        <enabled>true</enabled>
-      </snapshots>
-    </repository>
-  </repositories>
 
   <build>
     <resources>
@@ -258,6 +245,7 @@
             <arg>-feature</arg>
             <arg>-Xfatal-warnings</arg>
             <arg>-Xfuture</arg>
+            <!--<arg>-Ytyper-debug</arg>-->
             <arg>-Ywarn-adapted-args</arg>
             <arg>-Yopt-warnings:at-inline-failed</arg>
             <arg>-Yopt:l:project</arg>
@@ -265,7 +253,7 @@
           </args>
           <jvmArgs>
             <!-- Workaround for Scala compiler error: https://github.com/freechipsproject/firrtl/issues/66 -->
-            <jvmArg>-Xss256m</jvmArg>
+            <jvmArg>-Xss512m</jvmArg>
           </jvmArgs>
         </configuration>
       </plugin>
@@ -342,7 +330,6 @@
           <junitxml>.</junitxml>
           <filereports>WDF TestSuite.txt</filereports>
           <tagsToExclude>CAPSPatternGraphFactory</tagsToExclude>
-          <tagsToExclude>CAPFPatternGraphFactory</tagsToExclude>
           <!-- Enable full exception stack traces -->
           <stdout>F</stdout>
         </configuration>
@@ -361,32 +348,6 @@
   </build>
 
   <profiles>
-
-    <!-- Only run license checking if there is a src/main/scala directory -->
-    <profile>
-      <id>has-sources</id>
-      <activation>
-        <activeByDefault>false</activeByDefault>
-        <file>
-          <exists>src/main/scala</exists>
-        </file>
-        <property>
-          <name>cluster</name>
-        </property>
-      </activation>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.neo4j.build.plugins</groupId>
-            <artifactId>licensing-maven-plugin</artifactId>
-          </plugin>
-          <plugin>
-            <groupId>com.mycila</groupId>
-            <artifactId>license-maven-plugin</artifactId>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
 
     <profile>
       <activation>
@@ -417,7 +378,35 @@
     </profile>
 
     <profile>
-      <id>cluster</id>
+      <id>check-licenses</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+        <file>
+          <exists>src/main/scala</exists>
+        </file>
+        <property>
+          <name>cluster</name>
+        </property>
+      </activation>
+      <build>
+        <plugins>
+          <!-- License file checking-->
+          <!--<plugin>-->
+            <!--<groupId>org.neo4j.build.plugins</groupId>-->
+            <!--<artifactId>licensing-maven-plugin</artifactId>-->
+          <!--</plugin>-->
+
+          <!-- License header checking -->
+          <plugin>
+            <groupId>com.mycila</groupId>
+            <artifactId>license-maven-plugin</artifactId>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+
+    <profile>
+      <id>cluster-package</id>
       <properties>
         <project.artifact.classifier>cluster</project.artifact.classifier>
         <dep.spark.scope>provided</dep.spark.scope>
@@ -428,7 +417,6 @@
         </property>
       </activation>
 
-      <!-- We're skipping TCK and examples -->
       <modules>
         <module>licensecheck-config</module>
         <module>okapi-api</module>
@@ -436,9 +424,11 @@
         <module>okapi-logical</module>
         <module>okapi-relational</module>
         <module>okapi-testing</module>
+        <module>okapi-tck</module>
         <module>okapi-trees</module>
         <module>spark-cypher</module>
         <module>flink-cypher</module>
+        <module>spark-cypher-testing</module>
       </modules>
 
       <build>
@@ -565,13 +555,6 @@
       <groupId>org.scalacheck</groupId>
       <artifactId>scalacheck_${project.scala.binary.version}</artifactId>
       <version>${dep.scalacheck.version}</version>
-      <scope>test</scope>
-    </dependency>
-
-    <dependency>
-      <groupId>io.netty</groupId>
-      <artifactId>netty-all</artifactId>
-      <version>${dep.netty.version}</version>
       <scope>test</scope>
     </dependency>
 
