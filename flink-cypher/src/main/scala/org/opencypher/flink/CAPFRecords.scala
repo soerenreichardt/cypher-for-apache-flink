@@ -1,7 +1,8 @@
 package org.opencypher.flink
 
+import org.apache.flink.api.java.typeutils.RowTypeInfo
 import org.apache.flink.api.scala._
-import org.apache.flink.table.api.Table
+import org.apache.flink.table.api.{Table, Types}
 import org.apache.flink.table.api.scala._
 import org.apache.flink.table.expressions.{Expression, Null, UnresolvedFieldReference}
 import org.apache.flink.types.Row
@@ -313,16 +314,18 @@ object CAPFRecords extends CypherRecordsCompanion[CAPFRecords, CAPFSession] {
   private def prepareTable(initialTable: Table)(implicit capf: CAPFSession): (RecordHeader, Table) = {
     // TODO: cast to compatible types
     val initialHeader = CAPFRecordHeader.fromFlinkTableSchema(initialTable.getSchema)
-    val withRenamedColumns = initialTable.as(initialHeader.columns.mkString(","))
+    val withRenamedColumns = initialTable.as(initialHeader.slots.map(ColumnName.of).mkString(","))
     (initialHeader, withRenamedColumns)
   }
 
   def empty(initialHeader: RecordHeader = RecordHeader.empty)(implicit capf: CAPFSession): CAPFRecords = {
-    val nameToFlinkTypeMapping = initialHeader.slots.map(slot => ColumnName.of(slot) -> toFlinkType(slot.content.cypherType))
+    val nameToFlinkTypeMapping = initialHeader.slots.map(slot => UnresolvedFieldReference(ColumnName.of(slot)) -> toFlinkType(slot.content.cypherType))
+
+    implicit val rowTypeInfo = new RowTypeInfo(nameToFlinkTypeMapping.map(_._2): _*)
 
     //    TODO: rename columns and set correct datatypes
-    val emptyDataSet = capf.env.fromCollection(Set.empty[Any])
-    val initialTable = capf.tableEnv.fromDataSet(emptyDataSet)
+    val emptyDataSet = capf.env.fromCollection(Seq.empty[Row])
+    val initialTable = capf.tableEnv.fromDataSet(emptyDataSet, nameToFlinkTypeMapping.map(_._1): _*)
     createInternal(initialHeader, initialTable)
   }
 
@@ -352,7 +355,7 @@ object CAPFRecords extends CypherRecordsCompanion[CAPFRecords, CAPFSession] {
     val missingColumnNames = headerColumnNames -- dataColumnNames
     if (missingColumnNames.nonEmpty) {
       throw IllegalArgumentException(
-        s"data with columns ${initialHeader.columns.sorted.mkString("\n", ", ", "\n")}",
+        s"data with columns ${initialHeader.slots.map(ColumnName.of).sorted.mkString("\n", ", ", "\n")}",
         s"data with missing columns ${missingColumnNames.toSeq.sorted.mkString("\n", ", ", "\n")}"
       )
     }
