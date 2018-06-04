@@ -3,7 +3,7 @@ package org.opencypher.flink
 import org.apache.flink.api.common.typeinfo.{BasicArrayTypeInfo, BasicTypeInfo, TypeInformation}
 import org.apache.flink.api.scala._
 import org.apache.flink.table.api.scala._
-import org.apache.flink.table.api.{Table, Types}
+import org.apache.flink.table.api.{Table, TableSchema, Types}
 import org.apache.flink.table.expressions._
 import org.apache.flink.table.functions.ScalarFunction
 import org.apache.flink.types.Row
@@ -15,7 +15,7 @@ import org.opencypher.flink.physical.CAPFRuntimeContext
 import org.opencypher.okapi.api.types.CypherType
 import org.opencypher.okapi.api.value.CypherValue
 import org.opencypher.okapi.api.value.CypherValue.CypherValue
-import org.opencypher.okapi.impl.exception.IllegalArgumentException
+import org.opencypher.okapi.impl.exception.{IllegalArgumentException, IllegalStateException}
 import org.opencypher.okapi.ir.api.expr.{Expr, Param}
 import org.opencypher.okapi.relational.impl.table.RecordHeader
 
@@ -34,6 +34,16 @@ object TableOps {
           }
       }
     }
+  }
+
+  implicit class RichTableSchema(val schema: TableSchema) extends AnyVal {
+
+    def columnNameToIndex: Map[String, Int] = {
+      (0 to schema.getColumnCount - 1).map { i =>
+        schema.getColumnName(i).getOrElse(throw IllegalStateException(s"Column at index $i does not exist")) -> i
+      }.toMap
+    }
+
   }
 
   implicit class ColumnTagging(val col: UnresolvedFieldReference) extends AnyVal {
