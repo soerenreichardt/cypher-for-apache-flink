@@ -25,12 +25,12 @@ object ColumnName {
   }
 
   def of(expr: Expr): String = {
-    expr match {
-      case Var(name) => name
-      case _ =>
-        val columnNameBuilder = new NameBuilder() += None += expr.withoutType
-        columnNameBuilder.result()
+    val builder = expr match {
+      case Var(name) => new NameBuilder() += name
+      case _: Property => new NameBuilder() += None += expr.withoutType + expr.cypherType.material.name
+      case _ => new NameBuilder() += None += expr.withoutType
     }
+    builder.result()
   }
 
   def from(name: String): String = (new NameBuilder() += name).result()

@@ -5,6 +5,7 @@ import java.io.File
 import org.opencypher.flink.CAPFGraph
 import org.opencypher.flink.test.CAPFTestSuite
 import org.opencypher.flink.test.support.capf.{CAPFScanGraphFactory, CAPFTestGraphFactory}
+import org.opencypher.okapi.relational.api.configuration.CoraConfiguration.PrintPhysicalPlan
 import org.opencypher.okapi.tck.test.Tags.{BlackList, WhiteList}
 import org.opencypher.okapi.tck.test.{ScenariosFor, TCKGraph}
 import org.opencypher.tools.tck.api.CypherTCK
@@ -26,6 +27,8 @@ class TckFlinkCypherTest extends CAPFTestSuite {
 
   private val blacklistFile = getClass.getResource("/scenario_blacklist").getFile
   private val scenarios = ScenariosFor(blacklistFile)
+
+  PrintPhysicalPlan.set()
 
   forAll(factories) { (factory, additional_blacklist) =>
     forAll(scenarios.whiteList) { scenario =>
@@ -60,7 +63,7 @@ class TckFlinkCypherTest extends CAPFTestSuite {
   }
 
   it("run Single Scenario") {
-    scenarios.get("Handling triadic friend of a friend that is not a friend with explicit subset of relationship type")
+    scenarios.get("OPTIONAL MATCH with previously bound nodes")
       .foreach(scenario => scenario(TCKGraph(defaultFactory, CAPFGraph.empty)).execute())
   }
 

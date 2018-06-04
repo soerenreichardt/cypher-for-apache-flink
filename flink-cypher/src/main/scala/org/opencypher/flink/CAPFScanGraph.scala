@@ -42,7 +42,7 @@ class CAPFScanGraph(val scans: Seq[CAPFEntityTable], val schema: CAPFSchema, val
     val schema = selectedScans.map(_.schema).foldLeft(Schema.empty)(_ ++ _)
     val targetRelHeader = RecordHeader.relationshipFromSchema(rel, schema)
 
-    val scanRecords = selectedScans.map(_.records)
+    val scanRecords: Seq[CAPFRecords] = selectedScans.map(_.records)
     val alignedRecords = scanRecords.map(_.alignWith(rel, targetRelHeader))
     alignedRecords.reduceOption(_ unionAll(targetRelHeader, _)).getOrElse(CAPFRecords.empty(targetRelHeader))
   }

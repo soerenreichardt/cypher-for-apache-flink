@@ -29,6 +29,7 @@ object CAPFRecordHeader {
   implicit class CAPFRecordHeader(header: RecordHeader)(implicit capf: CAPFSession) extends Serializable {
     def asFlinkTableSchema: TableSchema = ???
 
+    def columns = header.slots.map(ColumnName.of)
   }
 
 }

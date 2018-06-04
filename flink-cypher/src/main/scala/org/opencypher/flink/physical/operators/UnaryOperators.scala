@@ -133,21 +133,6 @@ final case class Select(in: CAPFPhysicalOperator, exprs: Seq[Expr], header: Reco
 
   override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
     prev.mapRecordsWithDetails { records =>
-//      val propertyFields = exprs.flatMap {
-//        _ match {
-//          case v: Var =>
-//            header.slotFor(v).content match {
-//              case _: OpaqueField => header.childSlots(v).map(slot => slot.content.key)
-//              case _ => Seq()
-//            }
-//          case other => Seq()
-//        }
-//      }
-//
-//      val alignedWithHeader = exprs ++ propertyFields
-//
-//      val asFlinkExpression = alignedWithHeader.distinct.map(_.asFlinkSQLExpr(header, records.data, context))
-//      val newData = records.data.select(asFlinkExpression: _*)
 
       val data = records.data
 
