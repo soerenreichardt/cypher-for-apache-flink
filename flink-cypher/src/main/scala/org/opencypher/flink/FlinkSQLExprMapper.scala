@@ -2,8 +2,11 @@ package org.opencypher.flink
 
 import org.apache.flink.api.common.typeinfo.TypeInformation
 import org.apache.flink.table.api.scala._
+import org.apache.flink.api.scala._
 import org.apache.flink.table.api.{Table, Types}
 import org.apache.flink.table.expressions.{Expression, Literal, Null, UnresolvedFieldReference}
+import org.apache.flink.table.functions.ScalarFunction
+import org.apache.flink.types.Row
 import org.opencypher.flink.FlinkUtils._
 import org.opencypher.flink.physical.CAPFRuntimeContext
 import org.opencypher.okapi.api.types._
@@ -122,7 +125,7 @@ object FlinkSQLExprMapper {
 
         case Exists(e) => e.asFlinkSQLExpr.isNotNull
         case Id(e) => e.asFlinkSQLExpr
-//        case Labels(e) =>
+//        case Labels(e)=>
 //          val node = Var(ColumnName.of(header.slotsFor(e).head))(CTNode)
 //          val labelExprs = header.labels(node)
 //          val labelColumns = labelExprs.map(_.asFlinkSQLExpr)
@@ -178,6 +181,18 @@ object FlinkSQLExprMapper {
       }
 
     }
+  }
+
+}
+
+@scala.annotation.varargs
+class GetKeys(propertyKeys: String*) extends ScalarFunction {
+
+  @scala.annotation.varargs
+  def eval(properties: AnyRef*): Array[String] = {
+    propertyKeys.zip(properties).collect {
+      case (key, value) if value != null => key
+    }.toArray
   }
 
 }

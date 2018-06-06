@@ -175,19 +175,117 @@ class PhysicalPlanner[P <: PhysicalOperator[R, G, C], R <: CypherRecords, G <: P
         producer.planInitVarExpand(process(in), source, edgeList, endNode, header)
 
       case flat.BoundedVarExpand(
-      source, rel, target, direction,
-      lower, upper,
+      source, rel, target, allNodes,
+      direction, lower, upper,
       sourceOp, relOp, targetOp,
+      allNodesOp,
       header, isExpandInto) =>
-        val first = process(sourceOp)
-        val second = process(relOp)
-        val third = process(targetOp)
 
         if (upper.isInfinity || upper < lower) {
           throw new NotImplementedException("unbounded var expand")
         }
-        ???
-//
+
+        val first = process(sourceOp)
+        val second = process(relOp)
+        val third = process(targetOp)
+
+        val allNodesScan = process(allNodesOp)
+
+        val allNodesWithRel = producer.planJoin(
+          allNodesScan,
+          second,
+          Seq((allNodesScan.header.slotFor(allNodes).content.key, second.header.sourceNodeSlot(rel).content.key)),
+          allNodesScan.header ++ second.header
+        )
+
+        val sourceAndRel = producer.planJoin(
+          first,
+          second,
+          Seq((first.header.slotFor(source).content.key, second.header.sourceNodeSlot(rel).content.key)),
+          first.header ++ second.header
+        )
+
+        val expand = producer.planJoin(
+          sourceAndRel,
+          third,
+          Seq((sourceAndRel.header.targetNodeSlot(rel).content.key, third.header.slotFor(target).content.key)),
+          sourceAndRel.header ++ third.header
+        )
+
+        def iterate(i: Int, iterationTable: P, resultTable: P, edgeVars: Set[Var]): P = {
+
+          val alignedToIterationTable = producer.planSelect(
+            resultTable,
+            (resultTable.header.slots.map(_.content.key) ++
+              (iterationTable.header -- resultTable.header).slots.map { slot =>
+                As(NullLit()(slot.content.cypherType), slot.content.key)(CTWildcard)
+              }).toList,
+            resultTable.header ++ (iterationTable.header -- resultTable.header)
+          )
+
+          val withTargetNode = producer.planJoin(
+            iterationTable,
+            third,
+            Seq((iterationTable.header.targetNodeSlot(edgeVars.last).content.key, third.header.slotFor(target).content.key)),
+            iterationTable.header ++ third.header
+          )
+
+          val unionResultTable = producer.planTabularUnionAll(
+            withTargetNode,
+            alignedToIterationTable
+          )
+
+          if (i == upper) return unionResultTable
+
+          val newRelVar = Var(rel.name + "_" + i)(rel.cypherType)
+          val newAllNodesVar = Var(allNodes.name + "_" + i)(allNodes.cypherType)
+
+          val renamedAllNodesVars = allNodesScan.header.selfWithChildren(allNodes).map(_.withOwner(newAllNodesVar))
+          val renamedRelVars = second.header.selfWithChildren(rel).map(_.withOwner(newRelVar))
+
+          val renamedAllNodesAndRelHeader = RecordHeader.from((renamedAllNodesVars ++ renamedRelVars).map(_.content): _*)
+
+          val renamingsMapping = allNodesWithRel.header.slots.zip(renamedAllNodesAndRelHeader.slots)
+          val renamedAllNodesWithRel = producer.planSelect(
+            allNodesWithRel,
+            renamingsMapping.map(m => As(m._1.content.key, m._2.content.key)(CTWildcard)).toList,
+            renamedAllNodesAndRelHeader
+          )
+
+          val iterationSelfJoin = producer.planJoin(
+            iterationTable,
+            renamedAllNodesWithRel,
+            Seq((iterationTable.header.targetNodeSlot(edgeVars.last).content.key, renamedAllNodesWithRel.header.slotFor(newAllNodesVar).content.key)),
+            iterationTable.header ++ renamedAllNodesWithRel.header
+          )
+
+          val withRelIsomorphism = producer.planFilter(
+            iterationSelfJoin,
+            Ands(edgeVars.map { edge =>
+              Not(Equals(iterationTable.header.slotFor(edge).content.key, renamedAllNodesWithRel.header.slotFor(newRelVar).content.key)(CTWildcard))(CTWildcard)
+            }),
+            iterationSelfJoin.header
+          )
+
+          val withAlignedColumns = producer.planSelect(
+            iterationTable,
+            (iterationTable.header.slots.map(_.content.key) ++
+              renamedAllNodesAndRelHeader.slots.map { slot =>
+                As(NullLit()(slot.content.cypherType), slot.content.key)(CTWildcard)
+              }).toList,
+            iterationSelfJoin.header
+          )
+
+          val unionIterationTables = producer.planTabularUnionAll(
+            withRelIsomorphism,
+            withAlignedColumns
+          )
+
+          iterate(i+1, unionIterationTables, unionResultTable, edgeVars + newRelVar)
+        }
+
+        iterate(1, sourceAndRel, expand, Set(rel))
+
 //        val expandHeader = RecordHeader.from(
 //          header.selfWithChildren(source).map(_.content) ++
 //          header.selfWithChildren(rel).map(_.content) ++

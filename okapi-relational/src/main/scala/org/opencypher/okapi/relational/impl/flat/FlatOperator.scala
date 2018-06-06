@@ -144,14 +144,15 @@ final case class InitVarExpand(source: Var, edgeList: Var, endNode: Var, in: Fla
 final case class BoundedVarExpand(
     source: Var,
     rel: Var,
-//    edgeList: Var,
     target: Var,
+    allNodes: Var,
     direction: Direction,
     lower: Int,
     upper: Int,
     sourceOp: FlatOperator,
     relOp: FlatOperator,
     targetOp: FlatOperator,
+    allNodesOp: FlatOperator,
     header: RecordHeader,
     isExpandInto: Boolean)
     extends TernaryFlatOperator {

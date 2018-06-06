@@ -39,6 +39,17 @@ object CAPFCypherType {
     def isFlinkCompatible: Boolean = toFlinkType.isDefined
   }
 
+  val supportedTypes = Seq(
+    Types.BYTE,
+    Types.SHORT,
+    Types.INT,
+    Types.LONG,
+    Types.FLOAT,
+    Types.DOUBLE,
+    Types.STRING,
+    Types.BOOLEAN
+  )
+
   implicit class RichDataType(val tpe: TypeInformation[_]) extends AnyVal {
     def toCypherType(): Option[CypherType] = {
       val result = tpe match {

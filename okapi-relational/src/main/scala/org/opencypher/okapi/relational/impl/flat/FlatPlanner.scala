@@ -26,9 +26,10 @@
  */
 package org.opencypher.okapi.relational.impl.flat
 
+import org.opencypher.okapi.api.types.CTNode
 import org.opencypher.okapi.api.value.CypherValue._
 import org.opencypher.okapi.impl.exception.NotImplementedException
-import org.opencypher.okapi.ir.api.util.DirectCompilationStage
+import org.opencypher.okapi.ir.api.util.{DirectCompilationStage, FreshVariableNamer}
 import org.opencypher.okapi.logical.impl.LogicalOperator
 import org.opencypher.okapi.logical.{impl => logical}
 import org.opencypher.okapi.relational.impl.table.{ProjectedExpr, ProjectedField}
@@ -91,18 +92,21 @@ class FlatPlanner extends DirectCompilationStage[LogicalOperator, FlatOperator, 
         producer.planFromGraph(graph, process(in))
 
       case logical.BoundedVarLengthExpand(source, edgeList, target, direction, lower, upper, sourceOp, targetOp, _) =>
-        val initVarExpand = producer.initVarExpand(source, edgeList, process(sourceOp))
         val edgeScan = producer.varLengthEdgeScan(edgeList, producer.planStart(input.graph, Set.empty))
+        val allNodesVar = FreshVariableNamer("allNodes", CTNode)
+        val allNodesScan = producer.nodeScan(allNodesVar, producer.planStart(input.graph, Set.empty))
         producer.boundedVarExpand(
+          source,
           edgeScan.edge,
-          edgeList,
           target,
+          allNodesVar,
           direction,
           lower,
           upper,
-          initVarExpand,
+          process(sourceOp),
           edgeScan,
           process(targetOp),
+          allNodesScan,
           isExpandInto = sourceOp == targetOp)
 
       case logical.Optional(lhs, rhs, _) =>

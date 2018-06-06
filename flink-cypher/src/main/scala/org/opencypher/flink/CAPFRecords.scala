@@ -4,7 +4,7 @@ import org.apache.flink.api.java.typeutils.RowTypeInfo
 import org.apache.flink.api.scala._
 import org.apache.flink.table.api.{Table, Types}
 import org.apache.flink.table.api.scala._
-import org.apache.flink.table.expressions.{Expression, Null, UnresolvedFieldReference}
+import org.apache.flink.table.expressions.{Expression, Literal, Null, UnresolvedFieldReference}
 import org.apache.flink.types.Row
 import org.opencypher.flink.CAPFRecordHeader._
 import org.opencypher.flink.FlinkUtils._
@@ -16,7 +16,7 @@ import org.opencypher.okapi.api.io.conversion.{NodeMapping, RelationshipMapping}
 import org.opencypher.okapi.api.table.{CypherRecords, CypherRecordsCompanion}
 import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.api.value.CypherValue.{CypherMap, CypherValue}
-import org.opencypher.okapi.impl.exception.{IllegalArgumentException, IllegalStateException}
+import org.opencypher.okapi.impl.exception.{IllegalArgumentException, IllegalStateException, UnsupportedOperationException}
 import org.opencypher.okapi.impl.table.RecordsPrinter
 import org.opencypher.okapi.impl.util.PrintOptions
 import org.opencypher.okapi.ir.api.expr._
@@ -170,51 +170,122 @@ sealed abstract class CAPFRecords(val header: RecordHeader, val data: Table)(imp
 
   def alignWith(v: Var, targetHeader: RecordHeader): CAPFRecords = {
     val oldEntity = this.header.fieldsAsVar.headOption
-        .getOrElse(throw IllegalStateException("GraphScan table did not contain any fields"))
+      .getOrElse(throw IllegalStateException("GraphScan table did not contain any fields"))
 
     val entityLabels: Set[String] = oldEntity.cypherType match {
-      case CTNode(labels,  _) => labels
+      case CTNode(labels, _) => labels
       case CTRelationship(typ, _) => typ
       case _ => throw IllegalArgumentException("CTNode or CTRelationship", oldEntity.cypherType)
     }
 
-    val slots = this.header.slots
-    val renamedSlotMapping = slots.map { slot =>
-      slot -> slot.withOwner(v)
+    val renamedSlotMaping = this.header.slots.map { slot =>
+      val withNewOwner = slot.withOwner(v).content
+      slot -> targetHeader.slots.find(slot => slot.content == withNewOwner).get
     }
 
-    val renames = renamedSlotMapping.map { mapping =>
-      ColumnName.of(mapping._1) -> ColumnName.of(mapping._2)
-    }.map { mapping =>
-      Symbol(mapping._1) as Symbol(mapping._2)
+    val withRenamedColumns = renamedSlotMaping.foldLeft(data) {
+      case (acc, (oldCol, newCol)) =>
+        val oldColName =ColumnName.of(oldCol)
+        val newColName = ColumnName.of(newCol)
+        if (oldColName != newColName) {
+          acc
+            .safeReplaceColumn(oldColName, UnresolvedFieldReference(oldColName).cast(newCol.content.cypherType.toFlinkType.get))
+            .safeRenameColumn(oldColName, newColName)
+        } else {
+          acc
+        }
     }
 
-    val renamedTable = this.data.select(renames:_ *)
+    val renamedSlots = renamedSlotMaping.map(_._2)
 
-    val renamedSlots = renamedSlotMapping.map(_._2)
+    def typeAlignmentError(alignedWithSlot: RecordSlot, varToAlign: Var, typeToAlign: CypherType) = {
+      val varToAlignName = varToAlign.name
+      val varToAlignString = if (varToAlignName.isEmpty) "table" else s"variable '$varToAlignName'"
 
-    val withMissingColumns: Seq[Expression] = targetHeader.slots.map { targetSlot =>
+      throw UnsupportedOperationException(
+        s"""
+           |Cannot align $varToAlignString with '${v.name}' due the alignment target type for ${alignedWithSlot.content.key.withoutType}:
+           |  The target type on '${v.name}' is ${alignedWithSlot.content.cypherType}, whilst the $varToAlignString type is $typeToAlign
+         """.stripMargin
+      )
+    }
+
+    val relevantColumns = targetHeader.slots.map { targetSlot =>
       val targetColName = ColumnName.of(targetSlot)
 
-      renamedSlots.find(_.content.key.withoutType == targetSlot.content.key.withoutType) match {
+      renamedSlots.find(_.content == targetSlot.content) match {
         case Some(sourceSlot) =>
           val sourceColName = ColumnName.of(sourceSlot)
 
           // the column exists in the source data
-//          if (sourceColName == targetColName) {
-//            sourceColName as Symbol(targetColName)
-//          }
-          Symbol(ColumnName.of(targetSlot)) as Symbol(ColumnName.of(targetSlot)) // TODO: check for name equality
-        case None => targetSlot.content.key match {
-          case HasLabel(_, l: Label) => entityLabels(l.name) as Symbol(ColumnName.of(targetSlot))
-          case _: Type if entityLabels.size == 1 => entityLabels.head as Symbol(ColumnName.of(targetSlot))
-          case _ => Null(toFlinkType(targetSlot.content.cypherType)) as Symbol(ColumnName.of(targetSlot))
-        }
+          if (sourceColName == targetColName) {
+            UnresolvedFieldReference(targetColName)
+          } else {
+            val slotType = targetSlot.content.cypherType
+            val flinkTypeOpt = slotType.toFlinkType
+            flinkTypeOpt match {
+              case Some(flinkType) =>
+                sourceColName.cast(flinkType) as Symbol(targetColName)
+              case None => typeAlignmentError(targetSlot, oldEntity, sourceSlot.content.cypherType)
+            }
+          }
+
+        case None =>
+          val content = targetSlot.content.key match {
+            case HasLabel(_, label) if entityLabels.contains(label.name) => Literal(true, Types.BOOLEAN)
+            case _: HasLabel => Literal(false, Types.BOOLEAN)
+            case _: Type if entityLabels.size == 1 => Literal(entityLabels.head, Types.STRING)
+            case _ => Null(targetSlot.content.cypherType.getFlinkType)
+          }
+          content as Symbol(targetColName)
       }
     }
 
-    val renamedTableWithMissingColumns = renamedTable.select(withMissingColumns: _*)
-    CAPFRecords.verifyAndCreate(targetHeader, renamedTableWithMissingColumns)
+    val withRelevantColumns = withRenamedColumns.select(relevantColumns: _*)
+    CAPFRecords.verifyAndCreate(targetHeader, withRelevantColumns)
+
+//    val oldEntity = this.header.fieldsAsVar.headOption
+//        .getOrElse(throw IllegalStateException("GraphScan table did not contain any fields"))
+//
+//    val entityLabels: Set[String] = oldEntity.cypherType match {
+//      case CTNode(labels,  _) => labels
+//      case CTRelationship(typ, _) => typ
+//      case _ => throw IllegalArgumentException("CTNode or CTRelationship", oldEntity.cypherType)
+//    }
+//
+//    val slots = this.header.slots
+//    val renamedSlotMapping = slots.map { slot =>
+//      slot -> slot.withOwner(v)
+//    }
+//
+//    val renames = renamedSlotMapping.map { mapping =>
+//      ColumnName.of(mapping._1) -> ColumnName.of(mapping._2)
+//    }.map { mapping =>
+//      Symbol(mapping._1) as Symbol(mapping._2)
+//    }
+//
+//    val renamedTable = this.data.select(renames:_ *)
+//
+//    val renamedSlots = renamedSlotMapping.map(_._2)
+//
+//    val withMissingColumns: Seq[Expression] = targetHeader.slots.map { targetSlot =>
+//      val targetColName = ColumnName.of(targetSlot)
+//
+//      renamedSlots.find(_.content.key.withoutType == targetSlot.content.key.withoutType) match {
+//        case Some(sourceSlot) =>
+//          val sourceColName = ColumnName.of(sourceSlot)
+//
+//          Symbol(ColumnName.of(targetSlot)) as Symbol(ColumnName.of(targetSlot)) // TODO: check for name equality
+//        case None => targetSlot.content.key match {
+//          case HasLabel(_, l: Label) => entityLabels(l.name) as Symbol(ColumnName.of(targetSlot))
+//          case _: Type if entityLabels.size == 1 => entityLabels.head as Symbol(ColumnName.of(targetSlot))
+//          case _ => Null(toFlinkType(targetSlot.content.cypherType)) as Symbol(ColumnName.of(targetSlot))
+//        }
+//      }
+//    }
+//
+//    val renamedTableWithMissingColumns = renamedTable.select(withMissingColumns: _*)
+//    CAPFRecords.verifyAndCreate(targetHeader, renamedTableWithMissingColumns)
   }
 
   def toTable(): Table = data
@@ -312,10 +383,25 @@ object CAPFRecords extends CypherRecordsCompanion[CAPFRecords, CAPFSession] {
     verifyAndCreate(prepareTable(table))
 
   private def prepareTable(initialTable: Table)(implicit capf: CAPFSession): (RecordHeader, Table) = {
-    // TODO: cast to compatible types
-    val initialHeader = CAPFRecordHeader.fromFlinkTableSchema(initialTable.getSchema)
+    val withCompatibleTypes = generalizeColumnTypes(initialTable)
+    val initialHeader = CAPFRecordHeader.fromFlinkTableSchema(withCompatibleTypes.getSchema)
     val withRenamedColumns = initialTable.as(initialHeader.slots.map(ColumnName.of).mkString(","))
     (initialHeader, withRenamedColumns)
+  }
+
+  private def generalizeColumnTypes(initialTable: Table): Table = {
+    val castExprs = initialTable.getSchema.getColumnNames.zip(initialTable.getSchema.getTypes).map {
+      case (fieldName, fieldType) =>
+        Seq(
+          UnresolvedFieldReference(fieldName).cast(fieldType.cypherCompatibleDataType.getOrElse(
+            throw IllegalArgumentException(
+              s"a Flink type supported by Cypher: ${supportedTypes.mkString("[", ", ", "]")}",
+              s"type $fieldType of field $fieldName"
+            )
+          )) as Symbol(fieldName))
+    }.reduce(_ ++ _)
+
+    initialTable.select(castExprs: _*)
   }
 
   def empty(initialHeader: RecordHeader = RecordHeader.empty)(implicit capf: CAPFSession): CAPFRecords = {
@@ -323,7 +409,6 @@ object CAPFRecords extends CypherRecordsCompanion[CAPFRecords, CAPFSession] {
 
     implicit val rowTypeInfo = new RowTypeInfo(nameToFlinkTypeMapping.map(_._2): _*)
 
-    //    TODO: rename columns and set correct datatypes
     val emptyDataSet = capf.env.fromCollection(Seq.empty[Row])
     val initialTable = capf.tableEnv.fromDataSet(emptyDataSet, nameToFlinkTypeMapping.map(_._1): _*)
     createInternal(initialHeader, initialTable)

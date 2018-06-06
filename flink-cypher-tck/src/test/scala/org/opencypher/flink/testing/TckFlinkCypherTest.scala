@@ -63,7 +63,7 @@ class TckFlinkCypherTest extends CAPFTestSuite {
   }
 
   it("run Single Scenario") {
-    scenarios.get("OPTIONAL MATCH with previously bound nodes")
+    scenarios.get("Using `keys()` on a single node, non-empty result")
       .foreach(scenario => scenario(TCKGraph(defaultFactory, CAPFGraph.empty)).execute())
   }
 

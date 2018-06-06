@@ -57,20 +57,6 @@ final case class Join(
 
 }
 
-//final case class Union(lhs: CAPFPhysicalOperator, rhs: CAPFPhysicalOperator)
-//  extends BinaryPhysicalOperator with InheritedHeader {
-//
-//  override def executeBinary(left: CAPFPhysicalResult, right: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
-//    val leftData = left.records.data
-//    val rightData = right.records.data.select(lhs.header.slots.map(slot => UnresolvedFieldReference(ColumnName.of(slot.content))): _*)
-//
-//    val unionedData = leftData.union(rightData)
-//    val records = CAPFRecords.verifyAndCreate(header, unionedData)(left.records.capf)
-//
-//    CAPFPhysicalResult(records, left.graphs ++ right.graphs)
-//  }
-//}
-
 final case class CartesianProduct(lhs: CAPFPhysicalOperator, rhs: CAPFPhysicalOperator, header: RecordHeader)
   extends BinaryPhysicalOperator {
 
