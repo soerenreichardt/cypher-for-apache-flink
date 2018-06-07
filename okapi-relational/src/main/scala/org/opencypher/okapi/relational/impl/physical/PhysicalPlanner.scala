@@ -240,8 +240,8 @@ class PhysicalPlanner[P <: PhysicalOperator[R, G, C], R <: CypherRecords, G <: P
           val newRelVar = Var(rel.name + "_" + i)(rel.cypherType)
           val newAllNodesVar = Var(allNodes.name + "_" + i)(allNodes.cypherType)
 
-          val renamedAllNodesVars = allNodesScan.header.selfWithChildren(allNodes).map(_.withOwner(newAllNodesVar))
-          val renamedRelVars = second.header.selfWithChildren(rel).map(_.withOwner(newRelVar))
+          val renamedAllNodesVars = allNodesScan.header.slots.map(_.withOwner(newAllNodesVar))
+          val renamedRelVars = second.header.slots.map(_.withOwner(newRelVar))
 
           val renamedAllNodesAndRelHeader = RecordHeader.from((renamedAllNodesVars ++ renamedRelVars).map(_.content): _*)
 
@@ -262,7 +262,7 @@ class PhysicalPlanner[P <: PhysicalOperator[R, G, C], R <: CypherRecords, G <: P
           val withRelIsomorphism = producer.planFilter(
             iterationSelfJoin,
             Ands(edgeVars.map { edge =>
-              Not(Equals(iterationTable.header.slotFor(edge).content.key, renamedAllNodesWithRel.header.slotFor(newRelVar).content.key)(CTWildcard))(CTWildcard)
+              Not(Equals(iterationSelfJoin.header.slotFor(edge).content.key, iterationSelfJoin.header.slotFor(newRelVar).content.key)(CTNode))(CTNode)
             }),
             iterationSelfJoin.header
           )
