@@ -6,11 +6,12 @@ import org.apache.flink.api.scala._
 import org.apache.flink.table.api.scala._
 import org.opencypher.flink.io.FileCsvPropertyGraphDataSource
 import org.opencypher.flink.schema.{CAPFNodeTable, CAPFRelationshipTable}
-import org.opencypher.okapi.api.graph.GraphName
+import org.opencypher.okapi.api.graph.{GraphName, Namespace}
 import org.opencypher.okapi.api.io.conversion.{NodeMapping, RelationshipMapping}
 import org.opencypher.okapi.relational.api.configuration.CoraConfiguration.PrintPhysicalPlan
 import java.sql._
 
+import org.opencypher.flink.api.io.CsvDataSource
 import org.opencypher.okapi.api.configuration.Configuration.PrintTimings
 
 object Demo extends App {
@@ -90,9 +91,9 @@ object DemoData {
   )
 }
 
-object CsvDemo extends App {
+object Csv2Demo extends App {
 
-  private val resourcesPath = getClass.getResource("/csv").getPath.substring(1)
+  private val resourcesPath = getClass.getResource("/csv2").getPath
   implicit val session = CAPFSession.create()
 
   val dataSource = new FileCsvPropertyGraphDataSource(rootPath = resourcesPath)
@@ -100,4 +101,22 @@ object CsvDemo extends App {
 
   graph.cypher("MATCH (n:Person)-[r:KNOWS]-(m:Person) RETURN n.languages, m.languages").getRecords.show
 
+}
+
+object CsvDemo extends App {
+
+  implicit val session: CAPFSession = CAPFSession.local()
+
+  val csvFolder = getClass.getResource("/csv").getFile
+  session.registerSource(Namespace("csv"), CsvDataSource(rootPath = csvFolder))
+
+  val purchaseNetwork = session.catalog.graph("csv.products")
+
+  session.cypher(
+    """
+      |FROM GRAPH csv.products
+      |MATCH (c:Customer)
+      |RETURN *
+    """.stripMargin
+  ).getRecords.show
 }

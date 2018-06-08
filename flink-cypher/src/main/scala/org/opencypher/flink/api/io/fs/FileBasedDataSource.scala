@@ -38,8 +38,9 @@ class FileBasedDataSource(
     tableStorageFormat match {
       case "csv" =>
         val csvSource = new CsvTableSource(path, schema.map(_.name).toArray, schema.map(_.resultType).toArray)
-        session.tableEnv.registerTableSource(tableStorageFormat, csvSource)
-        session.tableEnv.scan(tableStorageFormat)
+        val tableSourceName = path + "/tmp"
+        session.tableEnv.registerTableSource(tableSourceName, csvSource)
+        session.tableEnv.scan(tableSourceName)
     }
   }
 

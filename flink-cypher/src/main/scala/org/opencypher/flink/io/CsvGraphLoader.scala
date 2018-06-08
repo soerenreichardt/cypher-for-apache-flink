@@ -80,7 +80,7 @@ class CsvGraphLoader(fileHandler: CsvGraphLoaderFileHandler)(implicit capf: CAPF
         optionalLabels = schema.optionalLabels.map(_.name).toSet,
         propertyKeys = schema.propertyFields.map(_.name).toSet)
 
-      CAPFNodeTable(nodeMapping, table)
+      CAPFNodeTable.fromMapping(nodeMapping, table)
     }
   }
 
@@ -105,7 +105,7 @@ class CsvGraphLoader(fileHandler: CsvGraphLoaderFileHandler)(implicit capf: CAPF
         schema.propertyFields.map(_.name).toSet
       )
 
-      CAPFRelationshipTable(relMapping, table)
+      CAPFRelationshipTable.fromMapping(relMapping, table)
     })
   }
 

@@ -100,7 +100,7 @@ object CAPFRelationshipTable {
     val propertyColumnNames = properties(relationshipTable.columns)
 
     val baseMapping = RelationshipMapping.create(GraphEntity.sourceIdKey,
-      Relationship.sourceEndNodeKey,
+      Relationship.sourceStartNodeKey,
       Relationship.sourceEndNodeKey,
       relationshipType)
 

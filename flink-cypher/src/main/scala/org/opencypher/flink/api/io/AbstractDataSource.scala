@@ -72,7 +72,6 @@ abstract class AbstractDataSource(implicit val session: CAPFSession) extends CAP
           case (key, cypherType) => key.toPropertyColumnName -> cypherType
         }
 
-        val columnsWithCypherType = propertyColsWithCypherType ++  Relationship.nonPropertyAttributes.map(_ -> CTInteger)
         val table = readRelationshipTable(graphName, relType, capfSchema.canonicalRelTableSchema(relType))
         CAPFRelationshipTable(relType, table)
       }
