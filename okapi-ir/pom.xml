@@ -48,7 +48,7 @@
       <groupId>org.opencypher</groupId>
       <artifactId>okapi-testing</artifactId>
       <version>${project.parent.version}</version>
-      <scope>test</scope>
+      <!--<scope>test</scope>-->
     </dependency>
 
     <!-- Workarounds for https://youtrack.jetbrains.com/issue/SCL-13184 -->

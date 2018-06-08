@@ -1,12 +1,10 @@
 package org.opencypher.flink.api.io.util
 
 import org.apache.flink.table.api.scala._
-import org.apache.flink.api.scala._
-import org.apache.flink.api.common.typeinfo.TypeInformation
-import org.apache.flink.table.api.{Table, TableSchema, Types}
-import org.apache.flink.table.expressions.{Expression, ResolvedFieldReference, UnresolvedFieldReference}
-import org.opencypher.flink._
+import org.apache.flink.table.api.{Table, Types}
+import org.apache.flink.table.expressions.{ResolvedFieldReference, UnresolvedFieldReference}
 import org.opencypher.flink.CAPFCypherType._
+import org.opencypher.flink._
 import org.opencypher.okapi.api.schema.Schema
 import org.opencypher.okapi.api.types.CTRelationship
 import org.opencypher.okapi.ir.api.expr.Var

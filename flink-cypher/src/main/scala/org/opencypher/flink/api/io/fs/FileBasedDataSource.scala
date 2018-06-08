@@ -1,5 +1,7 @@
 package org.opencypher.flink.api.io.fs
 
+import java.util.UUID
+
 import org.apache.flink.core.fs.FileSystem
 import org.apache.flink.table.api.{Table, TableSchema}
 import org.apache.flink.table.expressions.ResolvedFieldReference
@@ -38,7 +40,7 @@ class FileBasedDataSource(
     tableStorageFormat match {
       case "csv" =>
         val csvSource = new CsvTableSource(path, schema.map(_.name).toArray, schema.map(_.resultType).toArray)
-        val tableSourceName = path + "/tmp"
+        val tableSourceName = path + UUID.randomUUID()
         session.tableEnv.registerTableSource(tableSourceName, csvSource)
         session.tableEnv.scan(tableSourceName)
     }

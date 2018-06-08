@@ -9,7 +9,6 @@ import org.apache.flink.table.expressions.UnresolvedFieldReference
 import org.opencypher.flink.{CAPFRecords, CAPFSchema, CAPFSession, GraphEntity}
 import org.opencypher.flink.TableOps._
 import org.opencypher.flink.CAPFSchema._
-import org.opencypher.flink.StringEncodingUtilities._
 import org.opencypher.flink.schema.EntityTable.FlinkTable
 import org.opencypher.okapi.api.io.conversion.{EntityMapping, NodeMapping, RelationshipMapping}
 import org.opencypher.okapi.api.schema.Schema
@@ -18,6 +17,7 @@ import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.api.value.CypherValue
 import org.opencypher.okapi.api.value.CypherValue.CypherValue
 import org.opencypher.okapi.impl.exception.IllegalArgumentException
+import org.opencypher.okapi.relational.impl.util.StringEncodingUtilities._
 
 sealed trait EntityTable[T <: CypherTable[String]] {
 
