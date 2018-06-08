@@ -34,7 +34,7 @@ sealed trait EntityTable[T <: CypherTable[String]] {
     if (table.columns != mapping.allSourceKeys) throw IllegalArgumentException(
       s"Columns: ${mapping.allSourceKeys.mkString(", ")}",
       s"Columns: ${table.columns.mkString(", ")}",
-      s"Use [Node|Relationship]Mapping#fromMapping to create a valid EntityTable")
+      s"Use CAPF[Node|Relationship]Mapping#fromMapping to create a valid EntityTable")
   }
 }
 

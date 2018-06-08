@@ -1,8 +1,11 @@
 package org.opencypher.flink
 
+import org.apache.flink.table.api.Types
+import org.apache.flink.table.api.scala._
+import org.apache.flink.table.expressions.{Expression, Literal, UnresolvedFieldReference}
 import org.opencypher.flink.CAPFConverters._
-import org.opencypher.flink.schema.{CAPFEntityTable, CAPFNodeTable}
 import org.opencypher.flink.CAPFSchema._
+import org.opencypher.flink.schema.{CAPFEntityTable, CAPFNodeTable}
 import org.opencypher.okapi.api.graph.{GraphOperations, PropertyGraph}
 import org.opencypher.okapi.api.schema.Schema
 import org.opencypher.okapi.api.table.CypherRecords
@@ -51,14 +54,14 @@ trait CAPFGraph extends PropertyGraph with GraphOperations with Serializable {
     val keepSlots = (Seq(idSlot) ++ labelSlots ++ propertySlots).map(_.content)
     val keepCols = keepSlots.map(ColumnName.of)
 
-    ???
-//    val predicate = records.header.labelSlots(nodeVar)
-//      .filterNot(slot => labels.contains(slot._1.label.name))
-//      .values
-//      .map(c => UnresolvedFieldReference(ColumnName.of(c)))
-//      .map(_ === false)
-//      .reduceOption(_ && _)
-//
+    val predicate = records.header.labelSlots(nodeVar)
+      .filterNot(slot => labels.contains(slot._1.label.name))
+      .values
+      .foldLeft(Literal(true, Types.BOOLEAN): Expression) { (acc, slot) =>
+          acc && (UnresolvedFieldReference(ColumnName.of(slot)) === false)
+      }
+
+    val updatedData = records.data.filter(predicate).select(keepCols.map(UnresolvedFieldReference): _*)
 //    val updatedData = predicate match {
 //
 //      case Some(filter) =>
@@ -69,10 +72,10 @@ trait CAPFGraph extends PropertyGraph with GraphOperations with Serializable {
 //      case None =>
 //        records.data.select(keepCols.map(UnresolvedFieldReference): _*)
 //    }
-//
-//    val updatedHeader = RecordHeader.from(keepSlots: _*)
-//
-//    CAPFRecords.verifyAndCreate(updatedHeader, updatedData)(session)
+
+    val updatedHeader = RecordHeader.from(keepSlots: _*)
+
+    CAPFRecords.verifyAndCreate(updatedHeader, updatedData)(session)
   }
 
 }

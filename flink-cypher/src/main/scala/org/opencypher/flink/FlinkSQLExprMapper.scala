@@ -163,7 +163,9 @@ object FlinkSQLExprMapper {
         case ToFloat(e) => e.asFlinkSQLExpr.cast(Types.DOUBLE)
 
         case Explode(list) => list.cypherType match {
-          case CTList(_) | CTListOrNull(_) => list.asFlinkSQLExpr.flatten()
+          case CTList(_) | CTListOrNull(_) =>
+            val listElements = list.children.map(_.asFlinkSQLExpr)
+            array(listElements.head, listElements.tail: _*).flatten()
           case other => throw IllegalArgumentException("CTList", other)
         }
 

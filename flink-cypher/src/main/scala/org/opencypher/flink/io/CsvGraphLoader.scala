@@ -38,7 +38,7 @@ final class LocalFileHandler(override val location: String) extends CsvGraphLoad
 
   override def listDataFiles(directory: String): Array[URI] = {
     Files
-      .list(Paths.get(s"$location${File.separator}$directory"))
+      .list(Paths.get(s"$location${File.separator}$directory".substring(1)))
       .collect(Collectors.toList())
       .asScala
       .filter(p => p.toString.endsWith(".csv") | p.toString.endsWith(".CSV"))
