@@ -235,7 +235,9 @@ class PhysicalPlanner[P <: PhysicalOperator[R, G, C], R <: CypherRecords, G <: P
             alignedToIterationTable
           )
 
-          if (i == upper) return unionResultTable
+          if (i >= upper) {
+            return unionResultTable
+          }
 
           val newRelVar = Var(rel.name + "_" + i)(rel.cypherType)
           val newAllNodesVar = Var(allNodes.name + "_" + i)(allNodes.cypherType)
@@ -281,7 +283,11 @@ class PhysicalPlanner[P <: PhysicalOperator[R, G, C], R <: CypherRecords, G <: P
             withAlignedColumns
           )
 
-          iterate(i+1, unionIterationTables, unionResultTable, edgeVars + newRelVar)
+          if (i > lower) {
+            iterate(i+1, unionIterationTables, unionResultTable, edgeVars + newRelVar)
+          } else {
+            iterate(i+1, unionIterationTables, resultTable, edgeVars + newRelVar)
+          }
         }
 
         iterate(1, sourceAndRel, expand, Set(rel))
