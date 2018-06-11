@@ -1,6 +1,7 @@
 package org.opencypher.flink
 
 import org.apache.flink.api.common.typeinfo.TypeInformation
+import org.apache.flink.api.java.typeutils.RowTypeInfo
 import org.apache.flink.table.api.scala._
 import org.apache.flink.api.scala._
 import org.apache.flink.table.api.{Table, Types}
@@ -9,6 +10,7 @@ import org.apache.flink.table.functions.ScalarFunction
 import org.apache.flink.types.Row
 import org.opencypher.flink.FlinkUtils._
 import org.opencypher.flink.physical.CAPFRuntimeContext
+import org.opencypher.flink.CAPFCypherType._
 import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.api.value.CypherValue.CypherList
 import org.opencypher.okapi.impl.exception.{IllegalArgumentException, IllegalStateException, NotImplementedException}
@@ -162,11 +164,24 @@ object FlinkSQLExprMapper {
 
         case ToFloat(e) => e.asFlinkSQLExpr.cast(Types.DOUBLE)
 
-        case Explode(list) => list.cypherType match {
-          case CTList(_) | CTListOrNull(_) =>
-            val listElements = list.children.map(_.asFlinkSQLExpr)
-            array(listElements.head, listElements.tail: _*).flatten()
-          case other => throw IllegalArgumentException("CTList", other)
+        case Explode(list) => list match {
+          case p@Param(name) if p.cypherType.subTypeOf(CTList(CTAny)).maybeTrue =>
+            context.parameters(name) match {
+              case CypherList(l) =>
+                implicit val rowTypeInfo = new RowTypeInfo(list.cypherType.toFlinkType.getOrElse(
+                  throw IllegalArgumentException(s"a valid flink type")
+                ))
+                val elements = l.unwrap.map(v => Row.of(v.asInstanceOf[AnyRef]))
+                ???
+              case notAList => throw IllegalArgumentException("a Cypher list", notAList)
+            }
+
+//          list.cypherType match {
+//          case CTList(_) | CTListOrNull(_) =>
+//            val listElements = list.asFlinkSQLExpr
+//            val listCard = listElements.cardinality()
+//            ???
+//          case other => throw IllegalArgumentException("CTList", other)
         }
 
         case ep: ExistsPatternExpr => ep.targetField.asFlinkSQLExpr

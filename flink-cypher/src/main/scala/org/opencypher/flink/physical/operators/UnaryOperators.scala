@@ -1,12 +1,14 @@
 package org.opencypher.flink.physical.operators
 
 import org.apache.flink.api.java.typeutils.RowTypeInfo
+import org.apache.flink.table.api.Table
 import org.apache.flink.table.api.scala._
-import org.apache.flink.table.expressions.{Expression, UnresolvedFieldReference}
+import org.apache.flink.table.expressions.{Expression, ResolvedFieldReference, UnresolvedFieldReference}
 import org.apache.flink.types.Row
 import org.opencypher.flink.FlinkSQLExprMapper._
 import org.opencypher.flink.FlinkUtils._
 import org.opencypher.flink.TableOps._
+import org.opencypher.flink.CAPFCypherType._
 import org.opencypher.flink.physical.{CAPFPhysicalResult, CAPFRuntimeContext}
 import org.opencypher.flink.schema.EntityTable._
 import org.opencypher.flink.{CAPFRecords, CAPFSession, ColumnName}
@@ -211,15 +213,38 @@ final case class Project(in: CAPFPhysicalOperator, expr: Expr, header: RecordHea
 
       val newData = headerNames.diff(dataNames) match {
         case Seq(one) =>
-          val newCol: Expression = expr.asFlinkSQLExpr(header, records.data, context) as Symbol(one)
-          val columnsToSelect = records.data.columns.map(UnresolvedFieldReference(_)) :+ newCol // TODO: missmatch between expression and column/table
+          expr match {
+            case Explode(list) =>
+              implicit val session = records.capf
+              val listColumn = ResolvedFieldReference(one, expr.cypherType.getFlinkType)
+              val listAsColumn = unwind(records, list, listColumn)
+              records.data.cross(listAsColumn)
+            case other =>
+              val newCol: Expression = expr.asFlinkSQLExpr(header, records.data, context) as Symbol(one)
+              val columnsToSelect = records.data.columns.map(UnresolvedFieldReference(_)) :+ newCol // TODO: missmatch between expression and column/table
 
-          records.data.select(columnsToSelect: _*)
+              records.data.select(columnsToSelect: _*)
+          }
+
         case seq if seq.isEmpty => throw IllegalStateException(s"Did not find a slot for expression $expr in $headerNames")
         case seq => throw IllegalStateException(s"Got multiple slots for expression $expr: $seq")
       }
 
       CAPFRecords.verifyAndCreate(header, newData)(records.capf)
+    }
+  }
+
+  private def unwind(records: CAPFRecords, list: Expr, column: ResolvedFieldReference)(implicit context: CAPFRuntimeContext): Table = {
+    list match {
+      case p@Param(name) if p.cypherType.subTypeOf(CTList(CTAny)).maybeTrue =>
+        context.parameters(name) match {
+          case CypherList(l) =>
+            val session = records.capf
+            implicit val typeInfo = new RowTypeInfo(column.resultType)
+            val listDS = session.env.fromCollection(l.unwrap.map(v => Row.of(v.asInstanceOf[AnyRef])))
+            session.tableEnv.fromDataSet(listDS, Symbol(column.name))
+        }
+      case notAList => throw IllegalArgumentException("a Cypher list", notAList)
     }
   }
 }

@@ -113,7 +113,7 @@ sealed abstract class CAPFRecords(val header: RecordHeader, val data: Table)(imp
     val slotsToRetag = v.cypherType match {
       case _: CTNode => Set(header.slotFor(v))
       case _: CTRelationship =>
-        val idSlot = header. slotFor(v)
+        val idSlot = header.slotFor(v)
         val sourceSlot = header.sourceNodeSlot(v)
         val targetSlot = header.targetNodeSlot(v)
         Set(idSlot, sourceSlot, targetSlot)
@@ -161,10 +161,6 @@ sealed abstract class CAPFRecords(val header: RecordHeader, val data: Table)(imp
     CAPFRecords.verifyAndCreate(header, data.distinct())
   }
 
-//  def distinct(fields: Var*): CAPFRecords = {
-//
-//  }
-
   override def collect: Array[CypherMap] =
     toCypherMaps.collect().toArray
 
@@ -185,7 +181,7 @@ sealed abstract class CAPFRecords(val header: RecordHeader, val data: Table)(imp
 
     val withRenamedColumns = renamedSlotMaping.foldLeft(data) {
       case (acc, (oldCol, newCol)) =>
-        val oldColName =ColumnName.of(oldCol)
+        val oldColName = ColumnName.of(oldCol)
         val newColName = ColumnName.of(newCol)
         if (oldColName != newColName) {
           acc
@@ -243,49 +239,6 @@ sealed abstract class CAPFRecords(val header: RecordHeader, val data: Table)(imp
 
     val withRelevantColumns = withRenamedColumns.select(relevantColumns: _*)
     CAPFRecords.verifyAndCreate(targetHeader, withRelevantColumns)
-
-//    val oldEntity = this.header.fieldsAsVar.headOption
-//        .getOrElse(throw IllegalStateException("GraphScan table did not contain any fields"))
-//
-//    val entityLabels: Set[String] = oldEntity.cypherType match {
-//      case CTNode(labels,  _) => labels
-//      case CTRelationship(typ, _) => typ
-//      case _ => throw IllegalArgumentException("CTNode or CTRelationship", oldEntity.cypherType)
-//    }
-//
-//    val slots = this.header.slots
-//    val renamedSlotMapping = slots.map { slot =>
-//      slot -> slot.withOwner(v)
-//    }
-//
-//    val renames = renamedSlotMapping.map { mapping =>
-//      ColumnName.of(mapping._1) -> ColumnName.of(mapping._2)
-//    }.map { mapping =>
-//      Symbol(mapping._1) as Symbol(mapping._2)
-//    }
-//
-//    val renamedTable = this.data.select(renames:_ *)
-//
-//    val renamedSlots = renamedSlotMapping.map(_._2)
-//
-//    val withMissingColumns: Seq[Expression] = targetHeader.slots.map { targetSlot =>
-//      val targetColName = ColumnName.of(targetSlot)
-//
-//      renamedSlots.find(_.content.key.withoutType == targetSlot.content.key.withoutType) match {
-//        case Some(sourceSlot) =>
-//          val sourceColName = ColumnName.of(sourceSlot)
-//
-//          Symbol(ColumnName.of(targetSlot)) as Symbol(ColumnName.of(targetSlot)) // TODO: check for name equality
-//        case None => targetSlot.content.key match {
-//          case HasLabel(_, l: Label) => entityLabels(l.name) as Symbol(ColumnName.of(targetSlot))
-//          case _: Type if entityLabels.size == 1 => entityLabels.head as Symbol(ColumnName.of(targetSlot))
-//          case _ => Null(toFlinkType(targetSlot.content.cypherType)) as Symbol(ColumnName.of(targetSlot))
-//        }
-//      }
-//    }
-//
-//    val renamedTableWithMissingColumns = renamedTable.select(withMissingColumns: _*)
-//    CAPFRecords.verifyAndCreate(targetHeader, renamedTableWithMissingColumns)
   }
 
   def toTable(): Table = data
