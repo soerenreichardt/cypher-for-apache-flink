@@ -63,7 +63,7 @@ class TckFlinkCypherTest extends CAPFTestSuite {
   }
 
   it("run Single Scenario") {
-    scenarios.get("Handling single bounded variable length match 3")
+    scenarios.get("`type()` on null relationship")
       .foreach(scenario => scenario(TCKGraph(defaultFactory, CAPFGraph.empty)).execute())
   }
 

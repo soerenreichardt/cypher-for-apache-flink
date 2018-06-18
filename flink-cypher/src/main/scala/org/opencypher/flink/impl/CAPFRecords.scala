@@ -1,5 +1,6 @@
 package org.opencypher.flink.impl
 
+import org.apache.flink.api.java.typeutils.RowTypeInfo
 import org.apache.flink.api.scala._
 import org.apache.flink.table.api.scala._
 import org.apache.flink.table.api.{Table, Types}
@@ -25,10 +26,12 @@ object CAPFRecords {
 
   def empty(initialHeader: RecordHeader = RecordHeader.empty)(implicit capf: CAPFSession): CAPFRecords = {
     val initialTableSchema = initialHeader.toResolvedFieldReference
+
+    implicit val rowTypeInfo = new RowTypeInfo(initialTableSchema.map(_.resultType).toArray, initialTableSchema.map(_.name).toArray)
     // TODO: resolved fields are not enough :P -> RowTypeInfo
     val initialTable = capf.tableEnv.fromDataSet(
       capf.env.fromCollection(List.empty[Row]),
-      initialTableSchema: _*
+      initialTableSchema.map(field => UnresolvedFieldReference(field.name)): _*
     )
     CAPFRecords(initialHeader, initialTable)
   }
