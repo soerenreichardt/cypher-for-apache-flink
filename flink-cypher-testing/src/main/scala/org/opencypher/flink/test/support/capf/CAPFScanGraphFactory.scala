@@ -54,7 +54,7 @@ object CAPFScanGraphFactory extends CAPFTestGraphFactory {
         .filter(_.relType == relType)
         .map { rel =>
           val propertyValues = propKeys.map(key => rel.properties.unwrap.getOrElse(key._1, null))
-          Row.of((Seq(rel.id, rel.source, rel.target) ++ propertyValues).map(v => v.asInstanceOf[AnyRef]): _*)
+          Row.of((Seq(rel.id, rel.startId, rel.endId) ++ propertyValues).map(v => v.asInstanceOf[AnyRef]): _*)
         }
 
       implicit val relTypeInfo = new RowTypeInfo(

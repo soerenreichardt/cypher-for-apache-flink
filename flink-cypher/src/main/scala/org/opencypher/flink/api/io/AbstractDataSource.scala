@@ -64,7 +64,7 @@ abstract class AbstractDataSource(implicit val session: CAPFSession) extends CAP
         }
 
         val columnsWithCypherType = propertyColsWithCypherType + (GraphEntity.sourceIdKey -> CTInteger)
-        val table = readNodeTable(graphName, capfMetaData.tableStorageFormat, combo, capfSchema.canonicalNodeTableSchema(combo))
+        val table = readNodeTable(graphName, capfMetaData.tableStorageFormat, combo, capfSchema.canonicalNodeFieldReference(combo))
         CAPFNodeTable(combo, table)
       }
 
@@ -73,7 +73,7 @@ abstract class AbstractDataSource(implicit val session: CAPFSession) extends CAP
           case (key, cypherType) => key.toPropertyColumnName -> cypherType
         }
 
-        val table = readRelationshipTable(graphName, relType, capfSchema.canonicalRelTableSchema(relType))
+        val table = readRelationshipTable(graphName, relType, capfSchema.canonicalRelFieldReference(relType))
         CAPFRelationshipTable(relType, table)
       }
       CAPFGraph.create(capfMetaData.tags, nodeTables.head, (nodeTables.tail ++ relTables).toSeq: _*)

@@ -34,6 +34,8 @@ import org.opencypher.okapi.ir.api.expr._
 
 object RecordHeader {
 
+  val PREFIX = "_"
+
   def empty: RecordHeader = RecordHeader(Map.empty)
 
   def from[T <: Expr](expr: T, exprs: T*): RecordHeader = empty.withExprs(expr, exprs: _*)
@@ -231,7 +233,7 @@ case class RecordHeader(exprToColumn: Map[Expr, String]) {
       case Some(_) => this
 
       case None =>
-        val newColumnName = (expr.toString.hashCode & Int.MaxValue).toString
+        val newColumnName = s"${RecordHeader.PREFIX}${(expr.toString.hashCode & Int.MaxValue).toString}"
 
         // Aliases for (possible) owner of expr need to be updated as well
         val exprsToAdd: Set[Expr] = expr.owner match {

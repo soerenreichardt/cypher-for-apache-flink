@@ -159,7 +159,7 @@ trait RelationalCypherRecords[T <: FlatRelationalTable[T]] extends CypherRecords
       val renameColumns = other.header.expressions
         .filter(expr => other.header.column(expr) != joinHeader.column(expr))
         .map { expr => expr -> joinHeader.column(expr) }.toSeq
-      other.withColumnsRenamed(renameColumns: _*)().asInstanceOf[R]
+      other.withColumnsRenamed(renameColumns: _*)()
     } else other
 
     val joinCols = joinExprs.map { case (l, r) => header.column(l) -> cleanOther.header.column(r) }

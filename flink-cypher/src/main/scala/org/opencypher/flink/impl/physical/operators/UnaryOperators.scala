@@ -85,7 +85,7 @@ final case class Alias(in: CAPFPhysicalOperator, aliases: Seq[(Expr,  Var)], hea
   }
 }
 
-final case class Project(in: CAPFPhysicalOperator, expr: Expr, alias: Option[Var], header: RecordHeader) extends UnaryPhysicalOperator {
+final case class Project(in: CAPFPhysicalOperator, expr: Expr, alias: Option[Expr], header: RecordHeader) extends UnaryPhysicalOperator {
 
   override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
     prev.mapRecordsWithDetails { records: CAPFRecords =>
@@ -131,7 +131,7 @@ final case class Drop(in: CAPFPhysicalOperator, dropFields: Set[Expr], header: R
 
 final case class RenameColumns(in: CAPFPhysicalOperator, renameExprs: Map[Expr, String], header: RecordHeader) extends UnaryPhysicalOperator {
   override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
-    prev.mapRecordsWithDetails { records => records.withColumnsRenamed(renameExprs.toSeq: _*) }
+    prev.mapRecordsWithDetails { records => records.withColumnsRenamed(renameExprs.toSeq: _*)(Some(header)) }
   }
 }
 

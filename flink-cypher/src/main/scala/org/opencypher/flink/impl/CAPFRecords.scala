@@ -132,8 +132,8 @@ case class CAPFRecords(header: RecordHeader, table: Table, override val logicalC
         }
     }
 
-    val (dataWithMissingColumns, _) = missingExpressions.foldLeft(dataWithColumnsRenamed -> updatedHeader) {
-      case ((currentTable, currentHeader), expr) =>
+    val dataWithMissingColumns = missingExpressions.foldLeft(dataWithColumnsRenamed) {
+      case (currentTable, expr) =>
         val newColumn = expr match {
           case HasLabel(_, label) => if (entityLabels.contains(label.name)) TRUE_LIT else FALSE_LIT
           case HasType(_, relType) => if (entityLabels.contains(relType.name)) TRUE_LIT else FALSE_LIT
@@ -145,12 +145,11 @@ case class CAPFRecords(header: RecordHeader, table: Table, override val logicalC
             }
             NULL_LIT.cast(expr.cypherType.getFlinkType)
         }
-        val headerWithColumn = currentHeader.withExpr(expr)
 
         currentTable.safeUpsertColumn(
-          headerWithColumn.column(expr),
+          targetHeader.column(expr),
           newColumn.as(Symbol(targetHeader.column(expr)))
-        ) -> headerWithColumn
+        )
     }
     copy(targetHeader, dataWithMissingColumns)
   }

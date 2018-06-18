@@ -107,6 +107,7 @@ object SparkCypherTable {
         case FullOuterJoin => "full_outer"
       }
 
+
       val overlap = this.physicalColumns.toSet.intersect(other.physicalColumns.toSet)
       assert(overlap.isEmpty, s"overlapping columns: $overlap")
 

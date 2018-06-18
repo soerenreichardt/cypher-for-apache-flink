@@ -35,6 +35,7 @@ final case class Join(
 
   override def executeBinary(left: CAPFPhysicalResult, right: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
 
+    left.records.collect
     val joinedRecords = left.records.join(right.records, joinType, joinExprs: _*)
     CAPFPhysicalResult(joinedRecords, left.workingGraph, left.workingGraphName)
   }

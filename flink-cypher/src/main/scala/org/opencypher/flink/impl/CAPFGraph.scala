@@ -39,22 +39,26 @@ trait CAPFGraph extends PropertyGraph with GraphOperations with Serializable {
     val nodeVar = Var(name)(nodeType)
     val records = nodes(name, nodeType)
 
-    val idSlot = records.header.column(nodeVar)
+    val header = records.header
+
+    val idColumn = records.header.column(nodeVar)
 
     val labelExprs = records.header.labelsFor(nodeVar)
+
+    val labelColumns = labelExprs.map(header.column)
 
     val propertyExprs = schema.nodeKeys(labels).flatMap {
       case (key, cypherType) => Property(nodeVar, PropertyKey(key))(cypherType)
     }.toSet
-    val headerPropertyExprs = records.header.propertiesFor(nodeVar).filter(propertyExprs.contains)
+    val headerPropertyExprs = header.propertiesFor(nodeVar).filter(propertyExprs.contains)
 
     val keepExprs: Seq[Expr] = Seq(nodeVar) ++ labelExprs ++ headerPropertyExprs
 
-    val keepColumns = keepExprs.map(records.header.column)
+    val keepColumns = keepExprs.map(header.column)
 
     val predicate = labelExprs
       .filterNot(l => labels.contains(l.label.name))
-        .map(records.header.column)
+      .map(header.column)
       .foldLeft(Literal(true, Types.BOOLEAN): Expression) { (acc, columnName) =>
           acc && (UnresolvedFieldReference(columnName) === false)
       }
@@ -99,9 +103,6 @@ object CAPFGraph {
     ???
 //    new CAPFPatternGraph(capfRecords, schema, tags)
   }
-
-  def createLazy(theSchema: CAPFSchema, loadGraph: => CAPFGraph)(implicit capf: CAPFSession): CAPFGraph =
-    new LazyGraph(theSchema, loadGraph) {}
 
   sealed abstract class LazyGraph(override val schema: CAPFSchema, loadGraph: => CAPFGraph)(implicit CAPF: CAPFSession)
     extends CAPFGraph {

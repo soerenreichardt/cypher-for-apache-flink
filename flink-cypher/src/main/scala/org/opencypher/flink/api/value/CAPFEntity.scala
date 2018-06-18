@@ -16,14 +16,14 @@ case class CAPFNode(
 
 case class CAPFRelationship (
    override val id: Long,
-   override val source: Long,
-   override val target: Long,
+   override val startId: Long,
+   override val endId: Long,
    override val relType: String,
    override val properties: CypherMap = CypherMap.empty) extends CypherRelationship[Long] {
 
   override type I = CAPFRelationship
 
-  override def copy(id: Long = id, source: Long = source, target: Long = target, relType: String = relType, properties: CypherMap = properties) = {
+  override def copy(id: Long = id, source: Long = startId, target: Long = endId, relType: String = relType, properties: CypherMap = properties) = {
     CAPFRelationship(id, source, target, relType, properties).asInstanceOf[this.type]
   }
 }

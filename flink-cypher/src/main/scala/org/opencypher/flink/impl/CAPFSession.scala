@@ -14,14 +14,14 @@ import org.opencypher.okapi.api.table.CypherRecords
 import org.opencypher.okapi.api.value.CypherValue._
 import org.opencypher.okapi.api.value._
 import org.opencypher.okapi.impl.exception.IllegalArgumentException
-import org.opencypher.okapi.impl.graph.CypherCatalog
+import org.opencypher.okapi.impl.graph.{CypherCatalog, QGNGenerator}
 import org.opencypher.okapi.impl.io.SessionGraphDataSource
 import org.opencypher.okapi.impl.util.Measurement._
 import org.opencypher.okapi.ir.api._
 import org.opencypher.okapi.ir.api.configuration.IrConfiguration.PrintIr
 import org.opencypher.okapi.ir.api.expr.{Expr, Var}
 import org.opencypher.okapi.ir.impl.parse.CypherParser
-import org.opencypher.okapi.ir.impl.{IRBuilder, IRBuilderContext, QGNGenerator, QueryCatalog}
+import org.opencypher.okapi.ir.impl.{IRBuilder, IRBuilderContext, QueryCatalog}
 import org.opencypher.okapi.logical.api.configuration.LogicalConfiguration.PrintLogicalPlan
 import org.opencypher.okapi.logical.impl._
 import org.opencypher.okapi.relational.api.configuration.CoraConfiguration.{PrintFlatPlan, PrintOptimizedPhysicalPlan, PrintPhysicalPlan, PrintQueryExecutionStages}
@@ -214,7 +214,7 @@ sealed class CAPFSessionImpl(
     logStageProgress("Done!")
     if (PrintLogicalPlan.isSet) {
       println("Optimized logical plan:")
-      println(optimizedLogicalPlan.pretty())
+      optimizedLogicalPlan.show()
     }
     optimizedLogicalPlan
   }
@@ -226,12 +226,12 @@ sealed class CAPFSessionImpl(
     queryCatalog: QueryCatalog = QueryCatalog(catalog.listSources)
   ): CAPFResult = {
     logStageProgress("Flat planning ... ", newLine = false)
-    val flatPlannerContext = FlatPlannerContext(parameters)
+    val flatPlannerContext = FlatPlannerContext(parameters, records.asCapf.header)
     val flatPlan = time("Flat planning")(flatPlanner(logicalPlan)(flatPlannerContext))
     logStageProgress("Done!")
     if (PrintFlatPlan.isSet) {
       println("Flat plan:")
-      println(flatPlan.pretty())
+      flatPlan.show()
     }
 
     logStageProgress("Physical planning ... ", newLine = false)
@@ -240,7 +240,7 @@ sealed class CAPFSessionImpl(
     logStageProgress("Done!")
     if (PrintPhysicalPlan.isSet) {
       println("Physical plan:")
-      println(physicalPlan.pretty())
+      physicalPlan.show()
     }
 
 
@@ -249,7 +249,7 @@ sealed class CAPFSessionImpl(
     logStageProgress("Done!")
     if (PrintOptimizedPhysicalPlan.isSet) {
       println("Optimized physical plan:")
-      println(optimizedPhysicalPlan.pretty())
+      optimizedPhysicalPlan.show()
     }
 
     val graphAt = (qgn: QualifiedGraphName) => Some(catalog.graph(qgn).asCapf)

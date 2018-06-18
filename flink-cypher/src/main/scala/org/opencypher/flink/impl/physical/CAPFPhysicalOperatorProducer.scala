@@ -1,6 +1,7 @@
 package org.opencypher.flink.impl.physical
 
 import org.opencypher.flink._
+import org.opencypher.flink.api.io.FlinkCypherTable.FlinkTable
 import org.opencypher.flink.impl.{CAPFGraph, CAPFRecords, CAPFSession}
 import org.opencypher.flink.impl.physical.operators.CAPFPhysicalOperator
 import org.opencypher.okapi.api.graph.QualifiedGraphName
@@ -31,7 +32,7 @@ object CAPFPhysicalPlannerContext {
 }
 
 final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
-  extends PhysicalOperatorProducer[CAPFPhysicalOperator, CAPFRecords, CAPFGraph, CAPFRuntimeContext] {
+  extends PhysicalOperatorProducer[FlinkTable, CAPFPhysicalOperator, CAPFRecords, CAPFGraph, CAPFRuntimeContext] {
 
 
   override def planCartesianProduct(
@@ -60,7 +61,10 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
   override def planEmptyRecords(in: CAPFPhysicalOperator, header: RecordHeader): CAPFPhysicalOperator =
     operators.EmptyRecords(in, header)
 
-  override def planStart(qgnOpt: Option[QualifiedGraphName] = None, in: Option[CAPFRecords] = None): CAPFPhysicalOperator =
+  override def planStart(
+    qgnOpt: Option[QualifiedGraphName] = None,
+    in: Option[CAPFRecords] = None,
+    header: RecordHeader): CAPFPhysicalOperator =
     operators.Start(qgnOpt.getOrElse(capf.emptyGraphQgn), in)
 
   // TODO: Make catalog usage consistent between Start/FROM GRAPH
@@ -82,8 +86,8 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
   override def planAlias(in: CAPFPhysicalOperator, aliases: Seq[(Expr, Var)], header: RecordHeader): CAPFPhysicalOperator =
     operators.Alias(in, aliases, header)
 
-  override def planProject(in: CAPFPhysicalOperator, expr: Expr, alias: Option[Var], header: RecordHeader): CAPFPhysicalOperator =
-    operators.Project(in, expr, alias, header)
+  override def planProject(in: CAPFPhysicalOperator, expr: Expr, to: Option[Expr], header: RecordHeader): CAPFPhysicalOperator =
+    operators.Project(in, expr, to, header)
 
   override def planConstructGraph(
     in: CAPFPhysicalOperator,
@@ -112,27 +116,6 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
 
   override def planTabularUnionAll(lhs: CAPFPhysicalOperator, rhs: CAPFPhysicalOperator): CAPFPhysicalOperator =
     operators.TabularUnionAll(lhs, rhs)
-
-  override def planInitVarExpand(
-    in: CAPFPhysicalOperator,
-    source: Var,
-    edgeList: Var,
-    target: Var,
-    header: RecordHeader): CAPFPhysicalOperator = ???
-
-  override def planBoundedVarExpand(
-    first: CAPFPhysicalOperator,
-    second: CAPFPhysicalOperator,
-    third: CAPFPhysicalOperator,
-    rel: Var,
-    edgeList: Var,
-    target: Var,
-    initialEndNode: Var,
-    lower: Int,
-    upper: Int,
-    direction: Direction,
-    header: RecordHeader,
-    isExpandInto: Boolean): CAPFPhysicalOperator = ???
 
   override def planExistsSubQuery(
     lhs: CAPFPhysicalOperator,

@@ -444,8 +444,6 @@ case class NullLit(cypherType: CypherType = CTNull) extends Lit[Null] {
   override def v: Null = null
 }
 
-final case class NullLit(v: Null = null)(val cypherType: CypherType = CTNull) extends Lit[Any]
-
 // Pattern Predicate Expression
 
 final case class ExistsPatternExpr(targetField: Var, ir: CypherQuery[Expr])(val cypherType: CypherType = CTBoolean)
