@@ -26,8 +26,9 @@
  */
 package org.opencypher.okapi.relational.impl.table
 
-import org.opencypher.okapi.api.types.{CTNode, CTRelationship}
+import org.opencypher.okapi.api.types.{CTNode, CTNodeOrNull, CTRelationship, CTRelationshipOrNull}
 import org.opencypher.okapi.impl.exception.IllegalArgumentException
+import org.opencypher.okapi.impl.util.TablePrinter
 import org.opencypher.okapi.ir.api.RelType
 import org.opencypher.okapi.ir.api.expr._
 
@@ -153,13 +154,13 @@ case class RecordHeader(exprToColumn: Map[Expr, String]) {
 
   def nodeVars: Set[Var] = {
     exprToColumn.keySet.collect {
-      case v: Var if v.cypherType.subTypeOf(CTNode).isTrue => v
+      case v: Var if v.cypherType.subTypeOf(CTNodeOrNull).isTrue => v
     }
   }
 
   def relationshipVars: Set[Var] = {
     exprToColumn.keySet.collect {
-      case v: Var if v.cypherType.subTypeOf(CTRelationship).isTrue => v
+      case v: Var if v.cypherType.subTypeOf(CTRelationshipOrNull).isTrue => v
     }
   }
 
@@ -230,7 +231,7 @@ case class RecordHeader(exprToColumn: Map[Expr, String]) {
       case Some(_) => this
 
       case None =>
-        val newColumnName = ColumnNamer.of(expr)
+        val newColumnName = (expr.toString.hashCode & Int.MaxValue).toString
 
         // Aliases for (possible) owner of expr need to be updated as well
         val exprsToAdd: Set[Expr] = expr.owner match {
@@ -275,6 +276,31 @@ case class RecordHeader(exprToColumn: Map[Expr, String]) {
     }
   }
 
+  def join(other: RecordHeader): RecordHeader = {
+    val expressionOverlap = expressions.intersect(other.expressions)
+    if(expressionOverlap.nonEmpty) {
+      throw IllegalArgumentException("two headers with non overlapping expressions", s"overlapping expressions: $expressionOverlap")
+    }
+
+    val cleanOther = if (columns.intersect(other.columns).nonEmpty) {
+      val (rename, keep) = other.expressions.partition(e => this.columns.contains(other.column(e)))
+      val withKept = keep.foldLeft(RecordHeader.empty){
+        case (acc, next) => acc.addExprToColumn(next, other.column(next))
+      }
+
+      rename.groupBy(other.column).mapValues(_.toSeq.sorted).foldLeft(withKept) {
+        case (acc, (_, exprs)) =>
+          val add = acc.withExpr(exprs.head)
+          val newColumn = add.column(exprs.head)
+          exprs.tail.foldLeft(add) {
+            case (acc2, expr) => acc2.addExprToColumn(expr, newColumn)
+          }
+      }
+    } else other
+
+    this ++ cleanOther
+  }
+
   def ++(other: RecordHeader): RecordHeader = copy(exprToColumn = exprToColumn ++ other.exprToColumn)
 
   def --[T <: Expr](expressions: Set[T]): RecordHeader = {
@@ -283,15 +309,19 @@ case class RecordHeader(exprToColumn: Map[Expr, String]) {
     copy(exprToColumn = updatedExprToColumn)
   }
 
-  protected def addExprToColumn(expr: Expr, columnName: String): RecordHeader = {
+  def addExprToColumn(expr: Expr, columnName: String): RecordHeader = {
     copy(exprToColumn = exprToColumn + (expr -> columnName))
   }
 
-  def pretty: String = exprToColumn
-    .toSeq
-    .sortBy(_._2)
-    .map { case (expr, column) => s"Expr: $expr ===> $column" }
-    .mkString("\n")
+  def pretty: String = {
+    val formatCell: String => String = s => s"'$s'"
+    val (header, row) = exprToColumn
+      .toSeq
+      .sortBy(_._2)
+      .map { case (expr, column) => expr.toString -> column }
+      .unzip
+    TablePrinter.toTable(header, Seq(row))(formatCell)
+  }
 
 }
 

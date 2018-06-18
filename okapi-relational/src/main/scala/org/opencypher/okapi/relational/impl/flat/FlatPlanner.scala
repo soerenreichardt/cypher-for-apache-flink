@@ -26,14 +26,18 @@
  */
 package org.opencypher.okapi.relational.impl.flat
 
-import org.opencypher.okapi.api.types.CTNode
+import org.opencypher.okapi.api.types.{CTList, CTNode, CTRelationship, CypherType}
 import org.opencypher.okapi.api.value.CypherValue._
-import org.opencypher.okapi.impl.exception.NotImplementedException
+import org.opencypher.okapi.impl.exception.{IllegalStateException, NotImplementedException}
+import org.opencypher.okapi.ir.api.expr.Var
 import org.opencypher.okapi.ir.api.util.{DirectCompilationStage, FreshVariableNamer}
 import org.opencypher.okapi.logical.impl.LogicalOperator
 import org.opencypher.okapi.logical.{impl => logical}
+import org.opencypher.okapi.relational.impl.table.RecordHeader
 
-final case class FlatPlannerContext(parameters: CypherMap)
+import scala.annotation.tailrec
+
+final case class FlatPlannerContext(parameters: CypherMap, drivingTableHeader: RecordHeader)
 
 class FlatPlanner extends DirectCompilationStage[LogicalOperator, FlatOperator, FlatPlannerContext] {
 
@@ -78,14 +82,29 @@ class FlatPlanner extends DirectCompilationStage[LogicalOperator, FlatOperator, 
       case logical.EmptyRecords(fields, in, _) =>
         producer.planEmptyRecords(fields, process(in))
 
-      case logical.Start(graph, fields, _) =>
-        producer.planStart(graph, fields)
+      case logical.Start(graph, _) =>
+        producer.planStart(graph, context.drivingTableHeader)
 
       case logical.FromGraph(graph, in, _) =>
         producer.planFromGraph(graph, process(in))
 
-      case logical.BoundedVarLengthExpand(source, edgeList, target, direction, lower, upper, sourceOp, targetOp, _) =>
-        ???
+      case logical.BoundedVarLengthExpand(source, edge, target, direction, lower, upper, sourceOp, targetOp, _) =>
+        val flatSourceOp = process(sourceOp)
+        val flatTargetOp = process(targetOp)
+
+        val edgeScanType = CTRelationship(relTypeFromList(edge.cypherType), edge.cypherType.graph)
+        val edgeScan = Var(edge.name)(edgeScanType)
+        val edgeScanOp = producer.relationshipScan(edgeScan, producer.planStart(input.graph, RecordHeader.empty))
+
+        val innerNode = FreshVariableNamer(s"innerNode($edgeScan)", CTNode)
+        val innerNodeScan = producer.nodeScan(innerNode, producer.planStart(input.graph, RecordHeader.empty))
+
+        producer.boundedVarExpand(
+          source, edgeScan, innerNode, target,
+          direction, lower, upper,
+          flatSourceOp, edgeScanOp, innerNodeScan, flatTargetOp,
+          sourceOp == targetOp
+        )
 
       case logical.Optional(lhs, rhs, _) =>
         producer.planOptional(process(lhs), process(rhs))
@@ -107,6 +126,15 @@ class FlatPlanner extends DirectCompilationStage[LogicalOperator, FlatOperator, 
 
       case x =>
         throw NotImplementedException(s"Flat planning not implemented for $x")
+    }
+  }
+
+  @tailrec
+  private def relTypeFromList(t: CypherType): Set[String] = {
+    t match {
+      case l: CTList => relTypeFromList(l.elementType)
+      case r: CTRelationship => r.types
+      case _ => throw IllegalStateException(s"Required CTList or CTRelationship, but got $t")
     }
   }
 }

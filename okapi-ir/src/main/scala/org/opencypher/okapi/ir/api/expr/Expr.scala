@@ -436,9 +436,13 @@ final case class StringLit(v: String)(val cypherType: CypherType = CTString) ext
 
 sealed abstract class BoolLit(val v: Boolean)(val cypherType: CypherType = CTBoolean) extends Lit[Boolean]
 
-final case class TrueLit() extends BoolLit(true)()
+case object TrueLit extends BoolLit(true)()
 
-final case class FalseLit() extends BoolLit(false)()
+case object FalseLit extends BoolLit(false)()
+
+case class NullLit(cypherType: CypherType = CTNull) extends Lit[Null] {
+  override def v: Null = null
+}
 
 final case class NullLit(v: Null = null)(val cypherType: CypherType = CTNull) extends Lit[Any]
 

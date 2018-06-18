@@ -30,13 +30,13 @@ import org.opencypher.okapi.api.schema.Schema
 import org.opencypher.okapi.api.types.{CTNode, _}
 import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.ir.api.{Label, _}
-import org.opencypher.okapi.ir.impl.IrTestSuite
-import org.opencypher.okapi.ir.test.support.MatchHelper._
+import org.opencypher.okapi.testing.MatchHelper._
 import org.opencypher.okapi.logical.impl._
+import org.opencypher.okapi.testing.BaseTestSuite
 
 import scala.language.implicitConversions
 
-class LogicalOptimizerTest extends IrTestSuite {
+class LogicalOptimizerTest extends BaseTestSuite with IrConstruction {
 
   val emptySqm = SolvedQueryModel.empty
   val logicalGraph = LogicalCatalogGraph(testQualifiedGraphName, Schema.empty)
@@ -70,7 +70,6 @@ class LogicalOptimizerTest extends IrTestSuite {
         Var("a")(CTNode(Set("Animal"))),
         Start(
           animalGraph,
-          Set(),
           emptySqm
         ),
         SolvedQueryModel(Set(), Set(HasLabel(Var("a")(CTNode(Set("Animal"))), Label("Animal"))(CTBoolean)))
@@ -92,7 +91,7 @@ class LogicalOptimizerTest extends IrTestSuite {
       List(Var("a")(CTNode(Set("Animal")))),
       EmptyRecords(
         Set(Var("a")(CTNode(Set("Animal")))),
-        Start(logicalGraph, Set(), emptySqm),
+        Start(logicalGraph, emptySqm),
         SolvedQueryModel(Set(), Set(HasLabel(Var("a")(CTNode(Set("Animal"))), Label("Animal"))(CTBoolean)))
       ),
       SolvedQueryModel(Set(IRField("a")(CTNode)), Set(HasLabel(Var("a")(CTNode), Label("Animal"))(CTBoolean)))
@@ -115,7 +114,7 @@ class LogicalOptimizerTest extends IrTestSuite {
       List(Var("a")(CTNode(Set("Animal", "Astronaut")))),
       EmptyRecords(
         Set(Var("a")(CTNode(Set("Astronaut", "Animal")))),
-        Start(logicalGraph, Set(), emptySqm),
+        Start(logicalGraph, emptySqm),
         SolvedQueryModel(
           Set(),
           Set(

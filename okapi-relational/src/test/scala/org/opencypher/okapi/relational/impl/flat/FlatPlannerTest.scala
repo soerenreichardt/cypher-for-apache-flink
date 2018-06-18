@@ -31,12 +31,11 @@ import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.api.value.CypherValue.CypherMap
 import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.ir.api.{IRField, Label, PropertyKey, RelType}
-import org.opencypher.okapi.ir.api.util.FreshVariableNamer
-import org.opencypher.okapi.ir.api.{IRField, Label, PropertyKey}
-import org.opencypher.okapi.ir.test._
-import org.opencypher.okapi.ir.test.support.MatchHelper._
+import org.opencypher.okapi.ir.impl.util.VarConverters._
 import org.opencypher.okapi.logical.impl.{Directed, LogicalGraph, LogicalOperatorProducer, Undirected}
+import org.opencypher.okapi.relational.impl.table.RecordHeader
 import org.opencypher.okapi.testing.BaseTestSuite
+import org.opencypher.okapi.testing.MatchHelper._
 
 import scala.language.implicitConversions
 
@@ -52,14 +51,14 @@ class FlatPlannerTest extends BaseTestSuite {
     .withRelationshipPropertyKeys("KNOWS")("since" -> CTString)
     .withRelationshipPropertyKeys("FOO")("bar" -> CTBoolean)
 
-  implicit val flatContext: FlatPlannerContext = FlatPlannerContext(CypherMap.empty)
+  implicit val flatContext: FlatPlannerContext = FlatPlannerContext(CypherMap.empty, RecordHeader.empty)
 
   val mkLogical = new LogicalOperatorProducer
   val mkFlat = new FlatOperatorProducer()
   val flatPlanner = new FlatPlanner
 
   val logicalStartOperator = mkLogical.planStart(TestGraph(schema), Set.empty)
-  val flatStartOperator = mkFlat.planStart(TestGraph(schema), logicalStartOperator.fields)
+  val flatStartOperator = mkFlat.planStart(TestGraph(schema), RecordHeader.empty)
 
   test("projecting a new expression") {
     val expr = Subtract('a, 'b)()
@@ -110,7 +109,7 @@ class FlatPlannerTest extends BaseTestSuite {
 
   test("Construct simple filtered node scan") {
     val result = flatPlanner.process(
-      mkLogical.planFilter(TrueLit(), logicalNodeScan("n"))
+      mkLogical.planFilter(TrueLit, logicalNodeScan("n"))
     )
     val headerExpressions = result.header.expressions
 
@@ -118,7 +117,7 @@ class FlatPlannerTest extends BaseTestSuite {
 
     result should equalWithTracing(
       mkFlat.filter(
-        TrueLit(),
+        TrueLit,
         flatNodeScan(nodeVar)
       )
     )
@@ -295,30 +294,29 @@ class FlatPlannerTest extends BaseTestSuite {
       ))
   }
 
-//  it("Construct selection") {
-//    val result = flatPlanner.process(
-//      mkLogical.planSelect(
-//        List(Var("foo")(CTString)),
-//        prev = mkLogical.projectField(
-//          Property(Var("n")(CTNode), PropertyKey("name"))(CTString),
-//          IRField("foo")(CTString),
-//          Property(Var("n")(CTNode), PropertyKey("name"))(CTString),
-//          logicalNodeScan("n", "Person"))
-//      )
-//    )
-//    val headerExpressions = result.header.expressions
-//
-//    result should equalWithTracing(
-//      mkFlat.select(
-//        List(Var("foo")(CTString)),
-//        mkFlat.project(
-//          Property(Var("n")(CTNode), PropertyKey("name"))(CTString) -> Some(Var("foo")(CTString)),
-//          flatNodeScan("n", "Person")
-//        )
-//      )
-//    )
-//    headerExpressions should equalWithTracing(Set(Var("foo")(CTString)))
-//  }
+  it("Construct selection") {
+    val result = flatPlanner.process(
+      mkLogical.planSelect(
+        List(Var("foo")(CTString)),
+        prev = mkLogical.projectField(
+          Property(Var("n")(CTNode), PropertyKey("name"))(CTString),
+          IRField("foo")(CTString),
+          logicalNodeScan("n", "Person"))
+      )
+    )
+    val headerExpressions = result.header.expressions
+
+    result should equalWithTracing(
+      mkFlat.select(
+        List(Var("foo")(CTString)),
+        mkFlat.project(
+          Property(Var("n")(CTNode), PropertyKey("name"))(CTString) -> Some(Var("foo")(CTString)),
+          flatNodeScan("n", "Person")
+        )
+      )
+    )
+    headerExpressions should equalWithTracing(Set(Var("foo")(CTString)))
+  }
 
   test("Construct selection with several fields") {
     val result = flatPlanner.process(
@@ -363,7 +361,4 @@ class FlatPlannerTest extends BaseTestSuite {
 
   private def flatNodeScan(node: String, labelNames: String*): NodeScan =
     flatNodeScan(Var(node)(CTNode(labelNames.toSet)))
-
-  private def flatVarLengthEdgeScan(edgeList: Var) =
-    mkFlat.varLengthRelationshipScan(edgeList, flatStartOperator)
 }

@@ -102,10 +102,11 @@ trait RelationalCypherRecords[T <: FlatRelationalTable[T]] extends CypherRecords
     from(updatedHeader, updatedTable)
   }
 
-  def withColumnsRenamed(renamings: (Expr, String)*): R = {
-    val updatedHeader = renamings.foldLeft(header) {
+  def withColumnsRenamed(renamings: (Expr, String)*)(headerOpt: Option[RecordHeader] = None): R = {
+    val updatedHeader = headerOpt.getOrElse(renamings.foldLeft(header) {
       case (currentHeader, (expr, newColumn)) => currentHeader.withColumnRenamed(expr, newColumn)
-    }
+    })
+
     val updatedTable = renamings.foldLeft(relationalTable) {
       case (currentTable, (expr, newColumn)) => currentTable.withColumnRenamed(header.column(expr), newColumn)
     }
@@ -152,9 +153,17 @@ trait RelationalCypherRecords[T <: FlatRelationalTable[T]] extends CypherRecords
   }
 
   def join(other: R, joinType: JoinType, joinExprs: (Expr, Expr)*): R = {
-    val joinCols = joinExprs.map { case (l, r) => header.column(l) -> other.header.column(r) }
-    val joinHeader = other.header ++ header
-    val joinData = relationalTable.join(other.relationalTable, joinType, joinCols: _*)
+    val joinHeader = header join other.header
+
+    val cleanOther = if (relationalTable.physicalColumns.toSet ++ other.relationalTable.physicalColumns.toSet != joinHeader.columns) {
+      val renameColumns = other.header.expressions
+        .filter(expr => other.header.column(expr) != joinHeader.column(expr))
+        .map { expr => expr -> joinHeader.column(expr) }.toSeq
+      other.withColumnsRenamed(renameColumns: _*)().asInstanceOf[R]
+    } else other
+
+    val joinCols = joinExprs.map { case (l, r) => header.column(l) -> cleanOther.header.column(r) }
+    val joinData = relationalTable.join(cleanOther.relationalTable, joinType, joinCols: _*)
     from(joinHeader, joinData)
   }
 }

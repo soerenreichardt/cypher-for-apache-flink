@@ -35,17 +35,16 @@ import org.opencypher.okapi.ir.api._
 import org.opencypher.okapi.ir.api.block._
 import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.ir.api.pattern.{CyclicRelationship, DirectedRelationship, Pattern}
-import org.opencypher.okapi.ir.impl.util.VarConverters.{toVar => irFieldToVar}
-import org.opencypher.okapi.ir.test.support.MatchHelper
-import org.opencypher.okapi.ir.test.support.MatchHelper._
-import org.opencypher.okapi.ir.test.{toField, toVar}
-import org.opencypher.okapi.logical.LogicalTestSuite
+import org.opencypher.okapi.ir.impl.util.VarConverters._
 import org.opencypher.okapi.logical.impl._
+import org.opencypher.okapi.testing.{BaseTestSuite, MatchHelper}
+import org.opencypher.okapi.testing.MatchHelper._
 import org.scalatest.matchers._
 
 import scala.language.implicitConversions
 
-class LogicalPlannerTest extends LogicalTestSuite {
+class LogicalPlannerTest extends BaseTestSuite with IrConstruction {
+
   val nodeA = IRField("a")(CTNode)
   val nodeB = IRField("b")(CTNode)
   val nodeG = IRField("g")(CTNode)
@@ -146,12 +145,12 @@ class LogicalPlannerTest extends LogicalTestSuite {
                 Directed,
                 NodeScan(
                   Var("a")(CTNode),
-                  Start(LogicalCatalogGraph(testQualifiedGraphName, Schema.empty), Set(), emptySqm),
+                  Start(LogicalCatalogGraph(testQualifiedGraphName, Schema.empty), emptySqm),
                   SolvedQueryModel(Set(nodeA), Set())
                 ),
                 NodeScan(
                   Var("g")(CTNode),
-                  Start(LogicalCatalogGraph(testQualifiedGraphName, Schema.empty), Set(), emptySqm),
+                  Start(LogicalCatalogGraph(testQualifiedGraphName, Schema.empty), emptySqm),
                   SolvedQueryModel(Set(IRField("g")(CTNode)), Set())),
                 SolvedQueryModel(Set(nodeA, IRField("g")(CTNode), relR))
               ),
@@ -229,7 +228,6 @@ class LogicalPlannerTest extends LogicalTestSuite {
                       testQualifiedGraphName,
                       schema
                     ),
-                    Set(),
                     emptySqm
                   ),
                   SolvedQueryModel(Set(nodeA), Set())
@@ -241,7 +239,6 @@ class LogicalPlannerTest extends LogicalTestSuite {
                       testQualifiedGraphName,
                       schema
                     ),
-                    Set(),
                     emptySqm
                   ),
                   SolvedQueryModel(Set(IRField("g")(CTNode)), Set())
@@ -302,7 +299,7 @@ class LogicalPlannerTest extends LogicalTestSuite {
         Not(Equals(Param("p1")(CTInteger), Param("p2")(CTBoolean))(CTBoolean))(CTBoolean),
         NodeScan(
           Var("a")(CTNode),
-          Start(LogicalCatalogGraph(testQualifiedGraphName, Schema.empty), Set(), emptySqm),
+          Start(LogicalCatalogGraph(testQualifiedGraphName, Schema.empty), emptySqm),
           SolvedQueryModel(Set(nodeA), Set())
         ),
         SolvedQueryModel(

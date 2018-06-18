@@ -34,13 +34,14 @@ import org.opencypher.okapi.api.graph._
 import org.opencypher.okapi.api.table.CypherRecords
 import org.opencypher.okapi.api.value.CypherValue._
 import org.opencypher.okapi.api.value._
+import org.opencypher.okapi.impl.graph.QGNGenerator
 import org.opencypher.okapi.impl.io.SessionGraphDataSource
 import org.opencypher.okapi.impl.util.Measurement.printTiming
 import org.opencypher.okapi.ir.api._
 import org.opencypher.okapi.ir.api.configuration.IrConfiguration.PrintIr
 import org.opencypher.okapi.ir.api.expr.{Expr, Var}
 import org.opencypher.okapi.ir.impl.parse.CypherParser
-import org.opencypher.okapi.ir.impl.{IRBuilder, IRBuilderContext, QGNGenerator, QueryCatalog}
+import org.opencypher.okapi.ir.impl.{IRBuilder, IRBuilderContext, QueryCatalog}
 import org.opencypher.okapi.logical.api.configuration.LogicalConfiguration.PrintLogicalPlan
 import org.opencypher.okapi.logical.impl._
 import org.opencypher.okapi.relational.api.configuration.CoraConfiguration.{PrintFlatPlan, PrintOptimizedPhysicalPlan, PrintPhysicalPlan, PrintQueryExecutionStages}
@@ -190,7 +191,7 @@ sealed class CAPSSessionImpl(val sparkSession: SparkSession)
     logStageProgress("Done!")
     if (PrintLogicalPlan.isSet) {
       println("Optimized logical plan:")
-      println(optimizedLogicalPlan.pretty())
+      optimizedLogicalPlan.show()
     }
     optimizedLogicalPlan
   }
@@ -202,12 +203,12 @@ sealed class CAPSSessionImpl(val sparkSession: SparkSession)
     queryCatalog: QueryCatalog = QueryCatalog(catalog.listSources)
   ): CAPSResult = {
     logStageProgress("Flat planning ... ", newLine = false)
-    val flatPlannerContext = FlatPlannerContext(parameters)
+    val flatPlannerContext = FlatPlannerContext(parameters, records.asCaps.header)
     val flatPlan = time("Flat planning")(flatPlanner(logicalPlan)(flatPlannerContext))
     logStageProgress("Done!")
     if (PrintFlatPlan.isSet) {
       println("Flat plan:")
-      println(flatPlan.pretty())
+      flatPlan.show()
     }
 
     logStageProgress("Physical planning ... ", newLine = false)
@@ -216,7 +217,7 @@ sealed class CAPSSessionImpl(val sparkSession: SparkSession)
     logStageProgress("Done!")
     if (PrintPhysicalPlan.isSet) {
       println("Physical plan:")
-      println(physicalPlan.pretty())
+      physicalPlan.show()
     }
 
 
@@ -225,7 +226,7 @@ sealed class CAPSSessionImpl(val sparkSession: SparkSession)
     logStageProgress("Done!")
     if (PrintOptimizedPhysicalPlan.isSet) {
       println("Optimized physical plan:")
-      println(optimizedPhysicalPlan.pretty())
+      optimizedPhysicalPlan.show()
     }
 
     val graphAt = (qgn: QualifiedGraphName) => Some(catalog.graph(qgn).asCaps)

@@ -27,14 +27,15 @@
 package org.opencypher.okapi.relational.impl.table
 
 import org.opencypher.okapi.api.types._
+import org.opencypher.okapi.ir.api.expr.Expr._
 import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.ir.api.{Label, PropertyKey, RelType}
-import org.opencypher.okapi.ir.test.support.MatchHelper._
-import org.scalatest.{FunSpec, Matchers}
+import org.opencypher.okapi.testing.BaseTestSuite
+import org.opencypher.okapi.testing.MatchHelper._
 
-import Expr._
+import scala.language.implicitConversions
 
-class RecordHeaderTest extends FunSpec with Matchers {
+class RecordHeaderTest extends BaseTestSuite {
 
   val n: Var = Var("n")(CTNode("A", "B"))
   val m: Var = Var("m")(CTNode("A", "B"))
@@ -166,9 +167,9 @@ class RecordHeaderTest extends FunSpec with Matchers {
     val s = Var("nPropFoo_Alias")(nPropFoo.cypherType)
     val t = Var("nPropFoo_Alias")(nPropFoo.cypherType)
     val aliasHeader = nHeader
-          .withAlias(n as m)
-          .withAlias(nPropFoo as s)
-          .withAlias(s as t)
+      .withAlias(n as m)
+      .withAlias(nPropFoo as s)
+      .withAlias(s as t)
 
     aliasHeader.aliasesFor(n) should equalWithTracing(Set(m, n))
     aliasHeader.aliasesFor(m) should equalWithTracing(Set(m, n))
@@ -180,7 +181,7 @@ class RecordHeaderTest extends FunSpec with Matchers {
   it("adds a new child expr for all aliases of owner") {
     val prop2 = Property(n, PropertyKey("bar"))(CTString)
     val aliasHeader = nHeader
-          .withAlias(n as m)
+      .withAlias(n as m)
       .withExpr(prop2)
 
     aliasHeader.ownedBy(n) should equalWithTracing(nExprs + prop2)
@@ -300,8 +301,8 @@ class RecordHeaderTest extends FunSpec with Matchers {
   it("returns selected entity and alias vars and their corresponding columns") {
     val s = Var("nPropFoo_Alias")(nPropFoo.cypherType)
     val aliasHeader = nHeader
-          .withAlias(n as m)
-          .withAlias(nPropFoo as s)
+      .withAlias(n as m)
+      .withAlias(nPropFoo as s)
 
     aliasHeader.select(Set(s)) should equal(RecordHeader(Map(
       s -> nHeader.column(nPropFoo)
@@ -383,6 +384,39 @@ class RecordHeaderTest extends FunSpec with Matchers {
     val modifiedHeader = nHeader.withColumnsRenamed(Map(nPropFoo -> newName1, nLabelA -> newName2))
     modifiedHeader.column(nPropFoo) should equal(newName1)
     modifiedHeader.column(nLabelA) should equal(newName2)
+  }
+
+  it("pretty prints a record header") {
+    nHeader.pretty should equal(
+      """|╔════════════════╤════════════════╤═════════════════╤═════════════════╗
+         |║ n:A :: BOOLEAN │ n:B :: BOOLEAN │ n.foo :: STRING │ n :: NODE(:A:B) ║
+         |╠════════════════╪════════════════╪═════════════════╪═════════════════╣
+         |║ '1117703155'   │ '1246785874'   │ '2020204695'    │ '225729346'     ║
+         |╚════════════════╧════════════════╧═════════════════╧═════════════════╝
+         |(1 row)
+         |""".stripMargin)
+  }
+
+  describe("join") {
+    it("joins two none conflicting headers") {
+      nHeader.join(mHeader) should equal(nHeader ++ mHeader)
+    }
+
+    it("joins record headers with overlapping column names") {
+      val aliased = nHeader.withAlias(n, m).select(m)
+      nHeader.join(aliased) should equal(nHeader ++ mHeader)
+    }
+
+    it("joins record headers with overlapping column names and multiple expressions per column") {
+      val aliased = nHeader.withAlias(n, m).withAlias(n, o).select(m, o)
+      nHeader.join(aliased) should equal(nHeader ++ mHeader.withAlias(m, o))
+    }
+
+    it("raises an error when joining header with overlapping expressions"){
+      intercept[org.opencypher.okapi.impl.exception.IllegalArgumentException] {
+        nHeader join nHeader
+      }
+    }
   }
 
 }

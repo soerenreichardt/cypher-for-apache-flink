@@ -29,15 +29,11 @@ package org.opencypher.okapi.relational.impl.flat
 import cats.Monoid
 import org.opencypher.okapi.api.schema.Schema
 import org.opencypher.okapi.api.types._
-import org.opencypher.okapi.impl.exception.IllegalStateException
 import org.opencypher.okapi.ir.api.block.SortItem
 import org.opencypher.okapi.ir.api.expr._
-import org.opencypher.okapi.ir.api.util.FreshVariableNamer
 import org.opencypher.okapi.logical.impl.{Direction, LogicalGraph}
 import org.opencypher.okapi.relational.api.schema.RelationalSchema._
 import org.opencypher.okapi.relational.impl.table._
-
-import scala.annotation.tailrec
 
 class FlatOperatorProducer(implicit context: FlatPlannerContext) {
 
@@ -84,21 +80,6 @@ class FlatOperatorProducer(implicit context: FlatPlannerContext) {
     RelationshipScan(rel, prev, prev.sourceGraph.schema.headerForRelationship(rel))
   }
 
-  @tailrec
-  private def relTypeFromList(t: CypherType): Set[String] = {
-    t match {
-      case l: CTList => relTypeFromList(l.elementType)
-      case r: CTRelationship => r.types
-      case _ => throw IllegalStateException(s"Required CTList or CTRelationship, but got $t")
-    }
-  }
-
-  def varLengthRelationshipScan(relationshipList: Var, prev: FlatOperator): RelationshipScan = {
-    val types = relTypeFromList(relationshipList.cypherType)
-    val edge = FreshVariableNamer(relationshipList.name + "extended", CTRelationship(types, relationshipList.cypherType.graph))
-    relationshipScan(edge, prev)
-  }
-
   def aggregate(aggregations: Set[(Var, Aggregator)], group: Set[Var], in: FlatOperator): Aggregate = {
     val newHeader = in.header.select(group).withExprs(aggregations.map(_._1))
     Aggregate(aggregations, group, in, newHeader)
@@ -133,7 +114,6 @@ class FlatOperatorProducer(implicit context: FlatPlannerContext) {
   ): FlatOperator = {
     val relHeader = schema.headerForRelationship(rel)
     val expandHeader = sourceOp.header ++ relHeader ++ targetOp.header
-
     Expand(source, rel, direction, target, sourceOp, targetOp, expandHeader, relHeader)
   }
 
@@ -147,7 +127,6 @@ class FlatOperatorProducer(implicit context: FlatPlannerContext) {
   ): FlatOperator = {
     val relHeader = schema.headerForRelationship(rel)
     val expandHeader = sourceOp.header ++ relHeader
-
     ExpandInto(source, rel, target, direction, sourceOp, expandHeader, relHeader)
   }
 
@@ -167,31 +146,54 @@ class FlatOperatorProducer(implicit context: FlatPlannerContext) {
     EmptyRecords(prev, RecordHeader.from(fields))
   }
 
-  def planStart(graph: LogicalGraph, fields: Set[Var]): Start = {
-    Start(graph, fields)
-  }
-
-  def initVarExpand(source: Var, edgeList: Var, in: FlatOperator): InitVarExpand = {
-    val endNodeId = FreshVariableNamer(edgeList.name + "endNode", CTNode)
-    val header = in.header.withExprs(edgeList, endNodeId)
-    InitVarExpand(source, edgeList, endNodeId, in, header)
+  def planStart(graph: LogicalGraph, header: RecordHeader): Start = {
+    Start(graph, header)
   }
 
   def boundedVarExpand(
-      source: Var,
-      edge: Var,
-      target: Var,
-      allNodes: Var,
-      direction: Direction,
-      lower: Int,
-      upper: Int,
-      sourceOp: FlatOperator,
-      edgeOp: FlatOperator,
-      targetOp: FlatOperator,
-      allNodesOp: FlatOperator,
-      isExpandInto: Boolean): FlatOperator = {
+    source: Var,
+    edgeScan: Var,
+    innerNode: Var,
+    target: Var,
+    direction: Direction,
+    lower: Int,
+    upper: Int,
+    sourceOp: FlatOperator,
+    edgeScanOp: FlatOperator,
+    innerNodeOp: FlatOperator,
+    targetOp: FlatOperator,
+    isExpandInto: Boolean
+  ): FlatOperator = {
 
-    ???
+    val aliasedEdgeScanCypherType = if (lower == 0) edgeScan.cypherType.nullable else edgeScan.cypherType
+    val aliasedEdgeScan = Var(s"${edgeScan.name}_1")(aliasedEdgeScanCypherType)
+    val aliasedEdgeScanHeader = edgeScanOp.header.withAlias(edgeScan -> aliasedEdgeScan).select(aliasedEdgeScan)
+
+    val startHeader = sourceOp.header join aliasedEdgeScanHeader
+
+    val expandCacheHeader = innerNodeOp.header join edgeScanOp.header
+
+    def expand(i: Int, prev: RecordHeader): RecordHeader = {
+      val innerNodeCypherType = if (i >= lower) innerNode.cypherType.nullable else innerNode.cypherType
+      val nextNode = Var(s"${innerNode.name}_${i - 1}")(innerNodeCypherType)
+
+      val edgeCypherType = if (i > lower) edgeScan.cypherType.nullable else edgeScan.cypherType
+      val nextEdge = Var(s"${edgeScan.name}_$i")(edgeCypherType)
+
+      val aliasedCacheHeader = expandCacheHeader
+        .withAlias(edgeScan -> nextEdge, innerNode -> nextNode)
+        .select(nextEdge, nextNode)
+
+      prev join aliasedCacheHeader
+    }
+
+    val expandHeader = (2 to upper).foldLeft(startHeader) {
+      case (acc, i) => expand(i, acc)
+    }
+
+    val header = if (isExpandInto) expandHeader else expandHeader join targetOp.header
+
+    BoundedVarExpand(source, edgeScan, innerNode, target, direction, lower, upper, sourceOp, edgeScanOp, innerNodeOp, targetOp, header, isExpandInto)
   }
 
   def planOptional(lhs: FlatOperator, rhs: FlatOperator): FlatOperator = {

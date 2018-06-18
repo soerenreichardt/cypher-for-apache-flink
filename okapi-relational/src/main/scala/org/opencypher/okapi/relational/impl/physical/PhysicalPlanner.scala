@@ -27,24 +27,28 @@
 package org.opencypher.okapi.relational.impl.physical
 
 import org.opencypher.okapi.api.graph.{CypherSession, PropertyGraph}
-import org.opencypher.okapi.api.table.CypherRecords
-import org.opencypher.okapi.api.types.{CTBoolean, CTNode, CTRelationship, CTWildcard}
 import org.opencypher.okapi.api.types.{CTBoolean, CTNode}
 import org.opencypher.okapi.impl.exception.NotImplementedException
 import org.opencypher.okapi.ir.api.block.SortItem
 import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.ir.api.util.DirectCompilationStage
 import org.opencypher.okapi.logical.impl._
+import org.opencypher.okapi.relational.api.io.{FlatRelationalTable, RelationalCypherRecords}
 import org.opencypher.okapi.relational.api.physical.{PhysicalOperator, PhysicalOperatorProducer, PhysicalPlannerContext, RuntimeContext}
 import org.opencypher.okapi.relational.impl.flat
 import org.opencypher.okapi.relational.impl.flat.FlatOperator
 import org.opencypher.okapi.relational.impl.table._
 
-class PhysicalPlanner[P <: PhysicalOperator[R, G, C], R <: CypherRecords, G <: PropertyGraph, C <: RuntimeContext[R, G]](producer: PhysicalOperatorProducer[P, R, G, C])
+class PhysicalPlanner[
+O <: FlatRelationalTable[O],
+K <: PhysicalOperator[A, P, I],
+A <: RelationalCypherRecords[O],
+P <: PropertyGraph,
+I <: RuntimeContext[A, P]](val producer: PhysicalOperatorProducer[O, K, A, P, I])
 
-  extends DirectCompilationStage[FlatOperator, P, PhysicalPlannerContext[P, R]] {
+  extends DirectCompilationStage[FlatOperator, K, PhysicalPlannerContext[K, A]] {
 
-  def process(flatPlan: FlatOperator)(implicit context: PhysicalPlannerContext[P, R]): P = {
+  def process(flatPlan: FlatOperator)(implicit context: PhysicalPlannerContext[K, A]): K = {
 
     implicit val caps: CypherSession = context.session
 
@@ -63,10 +67,10 @@ class PhysicalPlanner[P <: PhysicalOperator[R, G, C], R <: CypherRecords, G <: P
       case flat.EmptyRecords(in, header) =>
         producer.planEmptyRecords(process(in), header)
 
-      case flat.Start(graph, _) =>
+      case flat.Start(graph, header) =>
         graph match {
           case g: LogicalCatalogGraph =>
-            producer.planStart(Some(g.qualifiedGraphName), Some(context.inputRecords))
+            producer.planStart(Some(g.qualifiedGraphName), Some(context.inputRecords), header)
           case p: LogicalPatternGraph =>
             context.constructedGraphPlans.get(p.name) match {
               case Some(plan) => plan // the graph was already constructed
@@ -100,7 +104,7 @@ class PhysicalPlanner[P <: PhysicalOperator[R, G, C], R <: CypherRecords, G <: P
       case flat.Aggregate(aggregations, group, in, header) => producer.planAggregate(process(in), group, aggregations, header)
 
       case flat.Filter(expr, in, header) => expr match {
-        case TrueLit() =>
+        case TrueLit =>
           process(in) // optimise away filter
         case _ =>
           producer.planFilter(process(in), expr, header)
@@ -165,16 +169,27 @@ class PhysicalPlanner[P <: PhysicalOperator[R, G, C], R <: CypherRecords, G <: P
             producer.planTabularUnionAll(outgoing, incoming)
         }
 
-      case flat.InitVarExpand(source, edgeList, endNode, in, header) =>
-        producer.planInitVarExpand(process(in), source, edgeList, endNode, header)
-
       case flat.BoundedVarExpand(
-      source, rel, target, allNodes,
-      direction, lower, upper,
-      sourceOp, relOp, targetOp,
-      allNodesOp,
-      header, isExpandInto) =>
-        ???
+        source, edgeScan, innerNode, target,
+        direction, lower, upper,
+        sourceOp, edgeScanOp, innerNodeOp, targetOp,
+        header, isExpandInto
+      ) =>
+        val planner = direction match {
+          case Directed => new DirectedVarLengthExpandPlanner[O, K, A, P, I](
+            source, edgeScan, innerNode, target,
+            lower, upper,
+            sourceOp, edgeScanOp, innerNodeOp, targetOp,
+            header, isExpandInto)(this, context)
+
+          case Undirected => new UndirectedVarLengthExpandPlanner[O, K, A, P, I](
+            source, edgeScan, innerNode, target,
+            lower, upper,
+            sourceOp, edgeScanOp, innerNodeOp, targetOp,
+            header, isExpandInto)(this, context)
+        }
+
+        planner.plan
 
       case flat.Optional(lhs, rhs, header) => planOptional(lhs, rhs, header)
 
@@ -194,7 +209,8 @@ class PhysicalPlanner[P <: PhysicalOperator[R, G, C], R <: CypherRecords, G <: P
     }
   }
 
-  private def planConstructGraph(in: Option[FlatOperator], construct: LogicalPatternGraph)(implicit context: PhysicalPlannerContext[P, R]) = {
+  private def planConstructGraph(in: Option[FlatOperator], construct: LogicalPatternGraph)
+    (implicit context: PhysicalPlannerContext[K, A]) = {
     val onGraphPlan = {
       construct.onGraphs match {
         case Nil => producer.planStart() // Empty start
@@ -212,7 +228,8 @@ class PhysicalPlanner[P <: PhysicalOperator[R, G, C], R <: CypherRecords, G <: P
     constructGraphPlan
   }
 
-  private def planOptional(lhs: FlatOperator, rhs: FlatOperator, header: RecordHeader)(implicit context: PhysicalPlannerContext[P, R]) = {
+  private def planOptional(lhs: FlatOperator, rhs: FlatOperator, header: RecordHeader)
+    (implicit context: PhysicalPlannerContext[K, A]) = {
     val lhsData = process(lhs)
     val rhsData = process(rhs)
     val lhsHeader = lhs.header
@@ -233,12 +250,12 @@ class PhysicalPlanner[P <: PhysicalOperator[R, G, C], R <: CypherRecords, G <: P
     val rhsWithDropped = producer.planDrop(rhsData, expressionsToRemove, rhsHeaderWithDropped)
 
     // 3. Rename the join expressions on the right hand side, in order to make them distinguishable after the join
-    val joinFieldRenames: Map[Expr, String] = joinExprs.map(e => e -> generateUniqueName).toMap
-    val rhsHeaderWithRenames = rhsHeaderWithDropped.withColumnsRenamed(joinFieldRenames)
-    val rhsWithRenamed = producer.planRenameColumns(rhsWithDropped, joinFieldRenames, rhsHeaderWithRenames)
+    val joinExprRenames: Map[Var, Var] = joinExprs.map(e => e -> Var(generateUniqueName)(e.cypherType)).toMap
+    val rhsHeaderWithRenames = rhsHeaderWithDropped.withAlias(joinExprRenames.toSeq: _*) -- joinExprs
+    val rhsWithRenamed = producer.planAlias(rhsWithDropped, joinExprRenames.toSeq, rhsHeaderWithRenames)
 
     // 4. Left outer join the left side and the processed right side
-    val joined = producer.planJoin(lhsData, rhsWithRenamed, joinExprs.map(e => e -> e).toSeq, rhsHeaderWithRenames ++ lhsHeader , LeftOuterJoin)
+    val joined = producer.planJoin(lhsData, rhsWithRenamed, joinExprs.map(e => e -> joinExprRenames(e)).toSeq, lhsHeader join rhsHeaderWithRenames, LeftOuterJoin)
 
     // 5. Select the resulting header expressions
     producer.planSelect(joined, header.expressions.map(e => e -> Option.empty[Var]).toList, header)
