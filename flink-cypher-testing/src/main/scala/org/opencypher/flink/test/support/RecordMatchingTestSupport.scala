@@ -3,16 +3,14 @@ package org.opencypher.flink.test.support
 import org.apache.flink.table.expressions.UnresolvedFieldReference
 import org.apache.flink.table.api.scala._
 import org.apache.flink.api.scala._
-import org.opencypher.flink.CAPFRecords
 import org.opencypher.flink.test.CAPFTestSuite
-import org.opencypher.flink.TableOps._
-import org.opencypher.flink.CAPFRecordHeader._
-import org.opencypher.flink.CAPFConverters._
-import org.opencypher.flink.schema.EntityTable._
+import org.opencypher.flink.impl.TableOps._
+import org.opencypher.flink.impl.CAPFConverters._
+import org.opencypher.flink.impl.CAPFRecords
 import org.opencypher.okapi.api.table.CypherRecords
 import org.opencypher.okapi.api.value.CypherValue.CypherMap
 import org.opencypher.okapi.ir.api.expr.Var
-import org.opencypher.okapi.relational.impl.table.{FieldSlotContent, OpaqueField, ProjectedExpr, RecordHeader}
+import org.opencypher.okapi.relational.impl.table.RecordHeader
 import org.opencypher.okapi.testing.Bag
 import org.opencypher.okapi.testing.Bag._
 import org.scalatest.Assertion
@@ -41,13 +39,14 @@ trait RecordMatchingTestSupport {
     }
 
     private def projected(records: CAPFRecords): CAPFRecords = {
-      val newSlots = records.header.slots.map(_.content).map {
-        case slot: FieldSlotContent => OpaqueField(slot.field)
-        case slot: ProjectedExpr    => OpaqueField(Var(slot.expr.withoutType)(slot.cypherType))
-      }
-      val newHeader = RecordHeader.from(newSlots: _*)
-      val newData = records.data.safeRenameColumns(records.data.columns, newHeader.columns)
-      CAPFRecords.verifyAndCreate(newHeader, newData)(records.capf)
+      val aliases = records.header.expressions.map { expr =>
+        expr -> (expr match {
+          case _: Var => None
+          case e => Some(Var(e.withoutType)(e.cypherType))
+        })
+      }.toSeq
+
+      records.select(aliases.head, aliases.tail: _*)
     }
   }
 
@@ -56,11 +55,9 @@ trait RecordMatchingTestSupport {
 
     def toMaps: Bag[CypherMap] = {
       val rows = capfRecords.toTable().collect().map { r =>
-        val properties = capfRecords.header.slots.map { s =>
-          s.content match {
-            case f: FieldSlotContent => f.field.name -> r.getCypherValue(f.key, capfRecords.header)
-            case x                   => x.key.withoutType -> r.getCypherValue(x.key, capfRecords.header)
-          }
+        val properties = capfRecords.header.expressions.map {
+          case v: Var => v.name -> r.getCypherValue(v, capfRecords.header, capfRecords.table.getSchema.columnNameToIndex)
+          case e => e.withoutType -> r.getCypherValue(e, capfRecords.header, capfRecords.table.getSchema.columnNameToIndex)
         }.toMap
         CypherMap(properties)
       }

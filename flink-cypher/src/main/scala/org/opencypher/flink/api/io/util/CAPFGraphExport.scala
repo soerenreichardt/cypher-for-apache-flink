@@ -3,12 +3,14 @@ package org.opencypher.flink.api.io.util
 import org.apache.flink.table.api.scala._
 import org.apache.flink.table.api.{Table, Types}
 import org.apache.flink.table.expressions.{ResolvedFieldReference, UnresolvedFieldReference}
-import org.opencypher.flink.CAPFCypherType._
+import org.opencypher.flink.impl.convert.FlinkConversions._
 import org.opencypher.flink._
+import org.opencypher.flink.api.io.{GraphEntity, Relationship}
+import org.opencypher.flink.impl.CAPFGraph
 import org.opencypher.okapi.api.schema.Schema
 import org.opencypher.okapi.api.types.CTRelationship
 import org.opencypher.okapi.ir.api.expr.Var
-import org.opencypher.okapi.relational.impl.util.StringEncodingUtilities._
+import org.opencypher.okapi.impl.util.StringEncodingUtilities._
 
 object CAPFGraphExport {
 
@@ -40,14 +42,14 @@ object CAPFGraphExport {
       val nodeRecords = graph.nodesWithExactLabels(varName, labels)
 
       val idRenaming = varName -> GraphEntity.sourceIdKey
-      val propertyRenamings = nodeRecords.header.propertySlots(Var(varName)())
-          .map { case (p, slot) => ColumnName.of(slot) -> p.key.name.toPropertyColumnName }
+      val properties = nodeRecords.header.propertiesFor(Var(varName)())
+      val propertyRenamings = properties.map { p => nodeRecords.header.column(p) -> p.key.name.toRelTypeColumnName }
 
       val selectColumnsExprs = (idRenaming :: propertyRenamings.toList.sorted).map {
         case (oldName, newName) => UnresolvedFieldReference(oldName) as Symbol(newName)
       }
 
-      nodeRecords.data.select(selectColumnsExprs: _*)
+      nodeRecords.table.select(selectColumnsExprs: _*)
     }
 
     def canonicalRelationshipTable(relType: String): Table = {
@@ -59,16 +61,16 @@ object CAPFGraphExport {
       val header = relRecords.header
 
       val idRenaming = varName -> GraphEntity.sourceIdKey
-      val sourceIdRenaming = ColumnName.of(header.sourceNodeSlot(v)) -> Relationship.sourceStartNodeKey
-      val targetIdRenaming = ColumnName.of(header.targetNodeSlot(v)) -> Relationship.sourceEndNodeKey
-      val propertyRenamings = header.propertySlots(Var(varName)())
-        .map { case (p, slot) => ColumnName.of(slot) -> p.key.name.toPropertyColumnName }
+      val sourceIdRenaming = header.column(header.startNodeFor(v)) -> Relationship.sourceStartNodeKey
+      val targetIdRenaming = header.column(header.endNodeFor(v)) -> Relationship.sourceEndNodeKey
+      val properties = header.propertiesFor(Var(varName)())
+      val propertyRenamings = properties.map { p => relRecords.header.column(p) -> p.key.name.toPropertyColumnName }
 
       val selectColumnsExprs = (idRenaming :: sourceIdRenaming :: targetIdRenaming :: propertyRenamings.toList.sorted).map {
         case (oldName, newName) => UnresolvedFieldReference(oldName) as Symbol(newName)
       }
 
-      relRecords.data.select(selectColumnsExprs: _*)
+      relRecords.table.select(selectColumnsExprs: _*)
     }
   }
 

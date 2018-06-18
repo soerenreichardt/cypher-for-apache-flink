@@ -4,14 +4,15 @@ import org.apache.flink.table.api.{Table, TableSchema}
 import org.apache.flink.table.expressions.ResolvedFieldReference
 import org.opencypher.flink.api.io.metadata.CAPFGraphMetaData
 import org.opencypher.flink._
-import org.opencypher.flink.datasource.CAPFPropertyGraphDataSource
 import org.opencypher.flink.api.io.util.CAPFGraphExport._
-import org.opencypher.flink.schema.{CAPFNodeTable, CAPFRelationshipTable}
-import org.opencypher.flink.CAPFConverters._
+import org.opencypher.flink.impl.CAPFConverters._
+import org.opencypher.flink.impl.{CAPFGraph, CAPFSession}
+import org.opencypher.flink.impl.io.CAPFPropertyGraphDataSource
+import org.opencypher.flink.schema.CAPFSchema
 import org.opencypher.okapi.api.graph.{GraphName, PropertyGraph}
 import org.opencypher.okapi.api.types.CTInteger
 import org.opencypher.okapi.impl.exception.{GraphAlreadyExistsException, GraphNotFoundException}
-import org.opencypher.okapi.relational.impl.util.StringEncodingUtilities._
+import org.opencypher.okapi.impl.util.StringEncodingUtilities._
 
 abstract class AbstractDataSource(implicit val session: CAPFSession) extends CAPFPropertyGraphDataSource {
 

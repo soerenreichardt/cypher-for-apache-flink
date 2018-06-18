@@ -1,4 +1,4 @@
-package org.opencypher.flink
+package org.opencypher.flink.impl
 
 import java.sql._
 import java.time.LocalDate

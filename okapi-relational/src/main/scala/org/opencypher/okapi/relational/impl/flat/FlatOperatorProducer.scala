@@ -191,18 +191,7 @@ class FlatOperatorProducer(implicit context: FlatPlannerContext) {
       allNodesOp: FlatOperator,
       isExpandInto: Boolean): FlatOperator = {
 
-    val withoutTargetHeader = (1 to upper-1).foldLeft(sourceOp.header ++ edgeOp.header) { (acc, i) =>
-      val allNodesVar = Var(allNodes.name + "_" + i)(target.cypherType)
-      val edgeVar = Var(edge.name + "_" + i)(edge.cypherType)
-
-      val renamedAllNodes = allNodesOp.header.slots.map(_.withOwner(allNodesVar).content)
-      val renamedEdgeSlots = edgeOp.header.slots.map(_.withOwner(edgeVar).content)
-
-      acc ++ RecordHeader.from(renamedAllNodes: _*) ++ RecordHeader.from(renamedEdgeSlots: _*)
-    }
-
-    val header = withoutTargetHeader ++ targetOp.header
-    BoundedVarExpand(source, edge, target, allNodes, direction, lower, upper, sourceOp, edgeOp, targetOp, allNodesOp, header, isExpandInto)
+    ???
   }
 
   def planOptional(lhs: FlatOperator, rhs: FlatOperator): FlatOperator = {

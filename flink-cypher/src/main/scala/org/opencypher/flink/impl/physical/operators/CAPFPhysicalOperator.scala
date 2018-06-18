@@ -1,9 +1,10 @@
 package org.opencypher.flink.impl.physical.operators
 
 import org.apache.flink.table.api.Table
-import org.opencypher.flink.CAPFConverters._
-import org.opencypher.flink.TableOps._
+import org.opencypher.flink.impl.CAPFConverters._
+import org.opencypher.flink.impl.TableOps._
 import org.opencypher.flink._
+import org.opencypher.flink.impl.{CAPFGraph, CAPFRecords, CAPFSession}
 import org.opencypher.flink.impl.physical.{CAPFPhysicalResult, CAPFRuntimeContext}
 import org.opencypher.okapi.api.graph.QualifiedGraphName
 import org.opencypher.okapi.api.types.CTNode

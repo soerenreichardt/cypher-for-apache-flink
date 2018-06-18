@@ -1,11 +1,12 @@
-package org.opencypher.flink
+package org.opencypher.flink.impl
 
 import org.apache.flink.table.api.Types
 import org.apache.flink.table.api.scala._
 import org.apache.flink.table.expressions.{Expression, Literal, UnresolvedFieldReference}
-import org.opencypher.flink.CAPFConverters._
-import org.opencypher.flink.CAPFSchema._
 import org.opencypher.flink.api.io.{CAPFEntityTable, CAPFNodeTable}
+import org.opencypher.flink.impl.CAPFConverters._
+import org.opencypher.flink.schema.CAPFSchema
+import org.opencypher.flink.schema.CAPFSchema._
 import org.opencypher.okapi.api.graph.{GraphOperations, PropertyGraph}
 import org.opencypher.okapi.api.schema.Schema
 import org.opencypher.okapi.api.table.CypherRecords

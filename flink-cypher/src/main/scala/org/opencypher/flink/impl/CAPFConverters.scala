@@ -1,4 +1,4 @@
-package org.opencypher.flink
+package org.opencypher.flink.impl
 
 import org.opencypher.okapi.api.graph.{CypherSession, PropertyGraph}
 import org.opencypher.okapi.api.table.CypherRecords

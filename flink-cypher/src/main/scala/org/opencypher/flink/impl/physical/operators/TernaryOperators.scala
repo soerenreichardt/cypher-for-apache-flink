@@ -1,7 +1,6 @@
-package org.opencypher.flink.physical.operators
+package org.opencypher.flink.impl.physical.operators
 
 import org.opencypher.flink.impl.physical.{CAPFPhysicalResult, CAPFRuntimeContext}
-import org.opencypher.flink.physical.CAPFRuntimeContext
 
 private[flink] abstract class TernaryPhysicalOperator extends CAPFPhysicalOperator {
 

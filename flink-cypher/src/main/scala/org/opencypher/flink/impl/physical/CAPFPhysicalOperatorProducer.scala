@@ -1,7 +1,8 @@
 package org.opencypher.flink.impl.physical
 
 import org.opencypher.flink._
-import org.opencypher.flink.physical.operators.CAPFPhysicalOperator
+import org.opencypher.flink.impl.{CAPFGraph, CAPFRecords, CAPFSession}
+import org.opencypher.flink.impl.physical.operators.CAPFPhysicalOperator
 import org.opencypher.okapi.api.graph.QualifiedGraphName
 import org.opencypher.okapi.api.value.CypherValue.CypherMap
 import org.opencypher.okapi.ir.api.block.SortItem

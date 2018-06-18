@@ -2,10 +2,10 @@ package org.opencypher.flink.test
 
 import org.apache.flink.api.scala._
 import org.apache.flink.table.api.scala._
-import org.opencypher.flink.CAPFRecords
+import org.opencypher.flink.api.value.CAPFNode
+import org.opencypher.flink.impl.CAPFRecords
 import org.opencypher.okapi.api.value.CypherValue.CypherMap
 import org.opencypher.flink.test.fixture.{GraphConstructionFixture, TeamDataFixture}
-import org.opencypher.flink.value.CAPFNode
 import org.opencypher.okapi.api.graph.{Namespace, QualifiedGraphName}
 import org.opencypher.okapi.impl.io.SessionGraphDataSource
 import org.opencypher.okapi.testing.Bag

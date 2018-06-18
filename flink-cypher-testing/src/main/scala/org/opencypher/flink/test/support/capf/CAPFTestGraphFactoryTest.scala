@@ -2,8 +2,8 @@ package org.opencypher.flink.test.support.capf
 
 import org.apache.flink.api.scala._
 import org.apache.flink.table.api.scala._
-import org.opencypher.flink.CAPFGraph
-import org.opencypher.flink.schema.{CAPFNodeTable, CAPFRelationshipTable}
+import org.opencypher.flink.api.io.{CAPFNodeTable, CAPFRelationshipTable}
+import org.opencypher.flink.impl.CAPFGraph
 import org.opencypher.flink.test.CAPFTestSuite
 import org.opencypher.flink.test.support.GraphMatchingTestSupport
 import org.opencypher.okapi.api.io.conversion.{NodeMapping, RelationshipMapping}

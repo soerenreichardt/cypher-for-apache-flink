@@ -139,16 +139,16 @@ object FlinkSQLExprMapper {
           ???
 //          TODO
 
-        case Type(inner) =>
-          inner match {
-            case v: Var =>
-              val typeExprs = header.typesFor(v)
-              val (relTypeNames, relTypeColumn) = typeExprs.toSeq.map(e => e.relType.name -> e.asFlinkSQLExpr).unzip
-              val booleanLabelFlagColumn = array(relTypeColumn.head, relTypeColumn.tail: _*)
-              ???
-            case _ =>
-              throw NotImplementedException(s"Inner expression $inner of $expr is not yet supported (only variables)")
-          }
+        case Type(inner) => ???
+//          inner match {
+//            case v: Var =>
+//              val typeExprs = header.typesFor(v)
+//              val (relTypeNames, relTypeColumn) = typeExprs.toSeq.map(e => e.relType.name -> e.asFlinkSQLExpr).unzip
+//              val booleanLabelFlagColumn = array(relTypeColumn.head, relTypeColumn.tail: _*)
+//              ???
+//            case _ =>
+//              throw NotImplementedException(s"Inner expression $inner of $expr is not yet supported (only variables)")
+//          }
 
         case StartNodeFunction(e) =>
           val rel = e.owner.get

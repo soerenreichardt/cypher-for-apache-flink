@@ -85,22 +85,7 @@ class FlatPlanner extends DirectCompilationStage[LogicalOperator, FlatOperator, 
         producer.planFromGraph(graph, process(in))
 
       case logical.BoundedVarLengthExpand(source, edgeList, target, direction, lower, upper, sourceOp, targetOp, _) =>
-        val edgeScan = producer.varLengthEdgeScan(edgeList, producer.planStart(input.graph, Set.empty))
-        val allNodesVar = FreshVariableNamer("allNodes", CTNode)
-        val allNodesScan = producer.nodeScan(allNodesVar, producer.planStart(input.graph, Set.empty))
-        producer.boundedVarExpand(
-          source,
-          edgeScan.edge,
-          target,
-          allNodesVar,
-          direction,
-          lower,
-          upper,
-          process(sourceOp),
-          edgeScan,
-          process(targetOp),
-          allNodesScan,
-          isExpandInto = sourceOp == targetOp)
+        ???
 
       case logical.Optional(lhs, rhs, _) =>
         producer.planOptional(process(lhs), process(rhs))

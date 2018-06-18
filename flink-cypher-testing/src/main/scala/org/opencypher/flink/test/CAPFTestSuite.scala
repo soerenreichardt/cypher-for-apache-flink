@@ -1,6 +1,6 @@
 package org.opencypher.flink.test
 
-import org.opencypher.flink.physical.CAPFRuntimeContext
+import org.opencypher.flink.impl.physical.CAPFRuntimeContext
 import org.opencypher.flink.test.fixture.{CAPFSessionFixture, FlinkSessionFixture}
 import org.opencypher.flink.test.support.{GraphMatchingTestSupport, RecordMatchingTestSupport}
 import org.opencypher.okapi.testing.BaseTestSuite

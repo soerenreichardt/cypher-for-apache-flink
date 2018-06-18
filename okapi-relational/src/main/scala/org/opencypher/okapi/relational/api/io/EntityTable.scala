@@ -73,9 +73,9 @@ trait RelationalCypherRecords[T <: FlatRelationalTable[T]] extends CypherRecords
 
   def from(header: RecordHeader, table: T, displayNames: Option[Seq[String]] = None): R
 
-  def table: T
+  def relationalTable: T
 
-  override def physicalColumns: Seq[String] = table.physicalColumns
+  override def physicalColumns: Seq[String] = relationalTable.physicalColumns
 
   def header: RecordHeader
 
@@ -93,12 +93,12 @@ trait RelationalCypherRecords[T <: FlatRelationalTable[T]] extends CypherRecords
     val selectHeader = headerWithAliases.select(selectExprs: _*)
     val logicalColumns = selectExprs.collect { case e: Var => e.withoutType }
 
-    from(selectHeader, table.select(selectExprs.map(headerWithAliases.column).distinct: _*), Some(logicalColumns))
+    from(selectHeader, relationalTable.select(selectExprs.map(headerWithAliases.column).distinct: _*), Some(logicalColumns))
   }
 
   def drop(exprs: Expr*): R = {
     val updatedHeader = header -- exprs.toSet
-    val updatedTable = table.drop(exprs.map(header.column): _*)
+    val updatedTable = relationalTable.drop(exprs.map(header.column): _*)
     from(updatedHeader, updatedTable)
   }
 
@@ -106,7 +106,7 @@ trait RelationalCypherRecords[T <: FlatRelationalTable[T]] extends CypherRecords
     val updatedHeader = renamings.foldLeft(header) {
       case (currentHeader, (expr, newColumn)) => currentHeader.withColumnRenamed(expr, newColumn)
     }
-    val updatedTable = renamings.foldLeft(table) {
+    val updatedTable = renamings.foldLeft(relationalTable) {
       case (currentTable, (expr, newColumn)) => currentTable.withColumnRenamed(header.column(expr), newColumn)
     }
     from(updatedHeader, updatedTable)
@@ -114,7 +114,7 @@ trait RelationalCypherRecords[T <: FlatRelationalTable[T]] extends CypherRecords
 
   def withColumnRenamed(oldColumn: Expr, newColumn: String): R = {
     val updatedHeader = header.withColumnRenamed(oldColumn, newColumn)
-    val updatedTable = table.withColumnRenamed(header.column(oldColumn), newColumn)
+    val updatedTable = relationalTable.withColumnRenamed(header.column(oldColumn), newColumn)
     from(updatedHeader, updatedTable)
   }
 
@@ -123,38 +123,38 @@ trait RelationalCypherRecords[T <: FlatRelationalTable[T]] extends CypherRecords
       case Asc(expr) => header.column(expr) -> Ascending
       case Desc(expr) => header.column(expr) -> Descending
     }
-    from(header, table.orderBy(tableSortItems: _*))
+    from(header, relationalTable.orderBy(tableSortItems: _*))
   }
 
   def withAliases(originalToAlias: (Expr, Var)*): R = {
     val headerWithAliases = header.withAlias(originalToAlias: _*)
-    from(headerWithAliases, table)
+    from(headerWithAliases, relationalTable)
   }
 
   def removeVars(vars: Set[Var]): R = {
     val updatedHeader = header -- vars
     val keepColumns = updatedHeader.columns.toSeq.sorted
-    val updatedData = table.select(keepColumns: _*)
+    val updatedData = relationalTable.select(keepColumns: _*)
     from(updatedHeader, updatedData)
   }
 
   def unionAll(other: R): R = {
-    val unionData = table.unionAll(other.table)
+    val unionData = relationalTable.unionAll(other.relationalTable)
     from(header, unionData)
   }
 
   def distinct: R = {
-    from(header, table.distinct)
+    from(header, relationalTable.distinct)
   }
 
   def distinct(fields: Var*): R = {
-    from(header, table.distinct(fields.flatMap(header.expressionsFor).map(header.column).sorted: _*))
+    from(header, relationalTable.distinct(fields.flatMap(header.expressionsFor).map(header.column).sorted: _*))
   }
 
   def join(other: R, joinType: JoinType, joinExprs: (Expr, Expr)*): R = {
     val joinCols = joinExprs.map { case (l, r) => header.column(l) -> other.header.column(r) }
     val joinHeader = other.header ++ header
-    val joinData = table.join(other.table, joinType, joinCols: _*)
+    val joinData = relationalTable.join(other.relationalTable, joinType, joinCols: _*)
     from(joinHeader, joinData)
   }
 }
@@ -176,10 +176,10 @@ trait EntityTable[T <: FlatRelationalTable[T]] extends RelationalCypherRecords[T
   }
 
   protected def verify(): Unit = {
-    mapping.idKeys.foreach(key => table.verifyColumnType(key, CTInteger, "id key"))
-    if (table.physicalColumns != mapping.allSourceKeys) throw IllegalArgumentException(
+    mapping.idKeys.foreach(key => relationalTable.verifyColumnType(key, CTInteger, "id key"))
+    if (relationalTable.physicalColumns != mapping.allSourceKeys) throw IllegalArgumentException(
       s"Columns: ${mapping.allSourceKeys.mkString(", ")}",
-      s"Columns: ${table.physicalColumns.mkString(", ")}",
+      s"Columns: ${relationalTable.physicalColumns.mkString(", ")}",
       s"Use CAPS[Node|Relationship]Table#fromMapping to create a valid EntityTable")
   }
 
@@ -188,7 +188,7 @@ trait EntityTable[T <: FlatRelationalTable[T]] extends RelationalCypherRecords[T
 
     val exprToColumn = Map[Expr, String](nodeMapping.id(nodeVar)) ++
       nodeMapping.optionalLabels(nodeVar) ++
-      nodeMapping.properties(nodeVar, table.columnType)
+      nodeMapping.properties(nodeVar, relationalTable.columnType)
 
     RecordHeader(exprToColumn)
   }
@@ -202,7 +202,7 @@ trait EntityTable[T <: FlatRelationalTable[T]] extends RelationalCypherRecords[T
       relationshipMapping.startNode(relVar),
       relationshipMapping.endNode(relVar)) ++
       relationshipMapping.relTypes(relVar) ++
-      relationshipMapping.properties(relVar, table.columnType)
+      relationshipMapping.properties(relVar, relationalTable.columnType)
 
     RecordHeader(exprToColumn)
   }

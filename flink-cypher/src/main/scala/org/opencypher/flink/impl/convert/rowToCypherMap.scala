@@ -1,8 +1,7 @@
-package org.opencypher.flink
+package org.opencypher.flink.impl.convert
 
 import org.apache.flink.types.Row
 import org.opencypher.flink.api.value.{CAPFNode, CAPFRelationship}
-import org.opencypher.flink.value.CAPFRelationship
 import org.opencypher.okapi.api.types.{CTNode, CTRelationship}
 import org.opencypher.okapi.api.value.CypherValue
 import org.opencypher.okapi.api.value.CypherValue.{CypherMap, CypherNull, CypherValue}

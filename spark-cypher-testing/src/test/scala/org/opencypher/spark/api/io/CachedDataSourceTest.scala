@@ -88,7 +88,7 @@ class CachedDataSourceTest extends CAPSTestSuite with GraphConstructionFixture w
 
   private def assert(g: PropertyGraph, storageLevel: StorageLevel): Unit = {
     g.asInstanceOf[CAPSScanGraph].scans
-      .map(_.table.df)
+      .map(_.relationalTable.df)
       .foreach(_.storageLevel should equal(storageLevel))
   }
 }

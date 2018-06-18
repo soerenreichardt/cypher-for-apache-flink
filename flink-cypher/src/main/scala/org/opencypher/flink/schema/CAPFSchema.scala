@@ -1,11 +1,11 @@
-package org.opencypher.flink
+package org.opencypher.flink.schema
 
-import org.opencypher.okapi.api.schema.{LabelPropertyMap, RelTypePropertyMap, Schema}
-import org.opencypher.okapi.impl.exception.{SchemaException, UnsupportedOperationException}
-import org.opencypher.okapi.impl.schema.SchemaUtils._
 import org.opencypher.flink.impl.convert.FlinkConversions._
 import org.opencypher.okapi.api.schema.PropertyKeys.PropertyKeys
+import org.opencypher.okapi.api.schema.{LabelPropertyMap, RelTypePropertyMap, Schema}
 import org.opencypher.okapi.api.types.{CTRelationship, CypherType}
+import org.opencypher.okapi.impl.exception.{SchemaException, UnsupportedOperationException}
+import org.opencypher.okapi.impl.schema.SchemaUtils._
 import org.opencypher.okapi.impl.schema.{ImpliedLabels, LabelCombinations}
 
 object CAPFSchema {

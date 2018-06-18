@@ -88,8 +88,6 @@ final case class Aggregate(
 
 final case class Alias(expr: Expr, alias: Var, in: FlatOperator, header: RecordHeader) extends StackingFlatOperator
 
-final case class BulkAlias(exprs: Seq[Expr], aliases: Seq[RecordSlot], in: FlatOperator, header: RecordHeader) extends StackingFlatOperator
-
 final case class CartesianProduct(lhs: FlatOperator, rhs: FlatOperator, header: RecordHeader) extends BinaryFlatOperator
 
 final case class Optional(lhs: FlatOperator, rhs: FlatOperator, header: RecordHeader) extends BinaryFlatOperator

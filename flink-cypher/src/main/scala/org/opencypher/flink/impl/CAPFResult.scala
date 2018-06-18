@@ -1,11 +1,8 @@
-package org.opencypher.flink
+package org.opencypher.flink.impl
 
 import org.opencypher.flink.impl.physical.CAPFQueryPlans
-import org.opencypher.okapi.api.graph.{CypherQueryPlans, CypherResult, PropertyGraph}
-import org.opencypher.okapi.api.table.CypherRecords
+import org.opencypher.okapi.api.graph.CypherResult
 import org.opencypher.okapi.impl.util.PrintOptions
-
-import scala.reflect.runtime.universe.TypeTag
 
 trait CAPFResult extends CypherResult {
 

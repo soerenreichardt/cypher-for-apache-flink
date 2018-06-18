@@ -50,20 +50,20 @@ class CAPSScanGraph(val scans: Seq[CAPSEntityTable], val schema: CAPSSchema, val
 
   private lazy val relTables = scans.collect { case it: CAPSRelationshipTable => it }
 
-  override def cache(): CAPSScanGraph = forEach(_.table.cache())
+  override def cache(): CAPSScanGraph = forEach(_.relationalTable.cache())
 
-  override def persist(): CAPSScanGraph = forEach(_.table.persist())
+  override def persist(): CAPSScanGraph = forEach(_.relationalTable.persist())
 
   private def forEach(f: CAPSEntityTable => Unit): CAPSScanGraph = {
     scans.foreach(f)
     this
   }
 
-  override def persist(storageLevel: StorageLevel): CAPSScanGraph = forEach(_.table.persist(storageLevel))
+  override def persist(storageLevel: StorageLevel): CAPSScanGraph = forEach(_.relationalTable.persist(storageLevel))
 
-  override def unpersist(): CAPSScanGraph = forEach(_.table.unpersist())
+  override def unpersist(): CAPSScanGraph = forEach(_.relationalTable.unpersist())
 
-  override def unpersist(blocking: Boolean): CAPSScanGraph = forEach(_.table.unpersist(blocking))
+  override def unpersist(blocking: Boolean): CAPSScanGraph = forEach(_.relationalTable.unpersist(blocking))
 
   override def nodes(name: String, nodeCypherType: CTNode): CAPSRecords =
     nodesInternal(name, nodeCypherType, byExactType = false)

@@ -4,8 +4,9 @@ import org.apache.flink.table.api.Table
 import org.apache.flink.table.api.scala._
 import org.apache.flink.api.scala._
 import org.apache.flink.types.Row
-import org.opencypher.flink.schema.{CAPFNodeTable, CAPFRelationshipTable}
-import org.opencypher.flink.value.{CAPFNode, CAPFRelationship}
+import org.opencypher.flink.api.io.{CAPFNodeTable, CAPFRelationshipTable}
+import org.opencypher.flink.api.value.{CAPFNode, CAPFRelationship}
+import org.opencypher.flink.impl.{CAPFGraph, CAPFResult}
 import org.opencypher.okapi.api.io.conversion.{NodeMapping, RelationshipMapping}
 import org.opencypher.okapi.api.schema.Schema
 import org.opencypher.okapi.api.types.{CTInteger, CTList, CTString, CTVoid}
@@ -65,7 +66,7 @@ trait TeamDataFixture extends TestDataFixture {
 
   /**
     * Returns the rels for the test graph in /resources/csv/sn as expected by a
-    * [[org.opencypher.flink.CAPFGraph#relationships]] call.
+    * [[CAPFGraph#relationships]] call.
     *
     * @return expected rels
     */
@@ -77,7 +78,7 @@ trait TeamDataFixture extends TestDataFixture {
 
   /**
     * Returns the rels for the test graph in /resources/csv/sn as expected by a
-    * [[org.opencypher.flink.CAPFResult#records]] call.
+    * [[CAPFResult#records]] call.
     *
     * @return expected rels
     */

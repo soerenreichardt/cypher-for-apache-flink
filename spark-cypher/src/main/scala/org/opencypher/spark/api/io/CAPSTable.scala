@@ -148,8 +148,8 @@ trait CAPSEntityTable extends EntityTable[DataFrameTable] {
 
 case class CAPSNodeTable(
   override val mapping: NodeMapping,
-  override val table: DataFrameTable
-) extends NodeTable(mapping, table) with CAPSEntityTable {
+  override val relationalTable: DataFrameTable
+) extends NodeTable(mapping, relationalTable) with CAPSEntityTable {
 
   override type R = CAPSNodeTable
 
@@ -225,8 +225,8 @@ object CAPSNodeTable {
 
 case class CAPSRelationshipTable(
   override val mapping: RelationshipMapping,
-  override val table: DataFrameTable
-) extends RelationshipTable(mapping, table) with CAPSEntityTable {
+  override val relationalTable: DataFrameTable
+) extends RelationshipTable(mapping, relationalTable) with CAPSEntityTable {
 
   override type R = CAPSRelationshipTable
 

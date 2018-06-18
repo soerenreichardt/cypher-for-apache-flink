@@ -1,7 +1,6 @@
-package org.opencypher.flink
+package org.opencypher.flink.impl.physical
 
 import org.opencypher.flink.impl.physical.operators._
-import org.opencypher.flink.physical.operators._
 import org.opencypher.okapi.ir.api.block.Asc
 import org.opencypher.okapi.ir.api.util.DirectCompilationStage
 import org.opencypher.okapi.trees.TopDown

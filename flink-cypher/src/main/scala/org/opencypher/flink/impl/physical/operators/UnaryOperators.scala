@@ -1,20 +1,18 @@
-package org.opencypher.flink.physical.operators
+package org.opencypher.flink.impl.physical.operators
 
 import org.apache.flink.api.java.typeutils.RowTypeInfo
 import org.apache.flink.table.api.Table
 import org.apache.flink.table.api.scala._
 import org.apache.flink.table.expressions.{Expression, ResolvedFieldReference, UnresolvedFieldReference}
 import org.apache.flink.types.Row
-import org.opencypher.flink.FlinkSQLExprMapper._
-import org.opencypher.flink.TableOps._
+import org.opencypher.flink.impl.FlinkSQLExprMapper._
 import org.opencypher.flink.impl.convert.FlinkConversions._
 import org.opencypher.flink.impl.physical.{CAPFPhysicalResult, CAPFRuntimeContext}
-import org.opencypher.flink.physical.CAPFRuntimeContext
-import org.opencypher.flink.{CAPFRecords, CAPFSession}
+import org.opencypher.flink.impl.{CAPFRecords, CAPFSession}
 import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.api.value.CypherValue.{CypherInteger, CypherList}
-import org.opencypher.okapi.impl.exception.{IllegalArgumentException, IllegalStateException, NotImplementedException, SchemaException}
-import org.opencypher.okapi.ir.api.block.{Asc, Desc, SortItem}
+import org.opencypher.okapi.impl.exception.{IllegalArgumentException, NotImplementedException, SchemaException}
+import org.opencypher.okapi.ir.api.block.SortItem
 import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.logical.impl._
 import org.opencypher.okapi.relational.impl.table._

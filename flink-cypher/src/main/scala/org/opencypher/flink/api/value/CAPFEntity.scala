@@ -1,4 +1,4 @@
-package org.opencypher.flink.value
+package org.opencypher.flink.api.value
 
 import org.opencypher.okapi.api.value.CypherValue.{CypherMap, CypherNode, CypherRelationship}
 

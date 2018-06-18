@@ -1,6 +1,6 @@
 package org.opencypher.flink.test.fixture
 
-import org.opencypher.flink.{CAPFGraph, CAPFSession}
+import org.opencypher.flink.impl.{CAPFGraph, CAPFSession}
 import org.opencypher.okapi.testing.{BaseTestFixture, BaseTestSuite}
 
 trait CAPFSessionFixture extends BaseTestFixture {

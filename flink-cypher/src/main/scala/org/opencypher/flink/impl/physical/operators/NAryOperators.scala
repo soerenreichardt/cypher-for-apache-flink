@@ -1,10 +1,9 @@
-package org.opencypher.flink.physical.operators
+package org.opencypher.flink.impl.physical.operators
 
-import org.opencypher.flink.{CAPFRecords, CAPFUnionGraph}
-import org.opencypher.flink.physical.CAPFRuntimeContext
-import org.opencypher.okapi.api.graph.QualifiedGraphName
-import org.opencypher.flink.TagSupport._
+import org.opencypher.flink.impl.util.TagSupport._
 import org.opencypher.flink.impl.physical.{CAPFPhysicalResult, CAPFRuntimeContext}
+import org.opencypher.flink.impl.{CAPFRecords, CAPFUnionGraph}
+import org.opencypher.okapi.api.graph.QualifiedGraphName
 
 final case class GraphUnionAll(inputs: List[CAPFPhysicalOperator], qgn: QualifiedGraphName)
   extends CAPFPhysicalOperator with InheritedHeader {

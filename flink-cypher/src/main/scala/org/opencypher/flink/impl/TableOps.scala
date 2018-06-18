@@ -1,4 +1,4 @@
-package org.opencypher.flink
+package org.opencypher.flink.impl
 
 import org.apache.flink.api.common.typeinfo.{BasicArrayTypeInfo, BasicTypeInfo, TypeInformation}
 import org.apache.flink.api.scala._
@@ -7,13 +7,13 @@ import org.apache.flink.table.api.{Table, TableSchema, Types}
 import org.apache.flink.table.expressions._
 import org.apache.flink.table.functions.ScalarFunction
 import org.apache.flink.types.Row
-import org.opencypher.flink.impl.convert.FlinkConversions._
-import org.opencypher.okapi.impl.exception
 import org.opencypher.flink.api.Tags._
+import org.opencypher.flink.impl.convert.FlinkConversions._
 import org.opencypher.flink.impl.physical.CAPFRuntimeContext
 import org.opencypher.okapi.api.types.CypherType
 import org.opencypher.okapi.api.value.CypherValue
 import org.opencypher.okapi.api.value.CypherValue.CypherValue
+import org.opencypher.okapi.impl.exception
 import org.opencypher.okapi.impl.exception.{IllegalArgumentException, IllegalStateException}
 import org.opencypher.okapi.ir.api.expr.{Expr, Param}
 import org.opencypher.okapi.relational.impl.table.RecordHeader
@@ -191,9 +191,9 @@ object TableOps {
 
     def safeUpsertColumn(name: String, expr: Expression): Table = {
       if (table.columns.contains(name)) {
-        safeAddColumn(name, expr)
-      } else {
         safeReplaceColumn(name, expr)
+      } else {
+        safeAddColumn(name, expr)
       }
     }
 

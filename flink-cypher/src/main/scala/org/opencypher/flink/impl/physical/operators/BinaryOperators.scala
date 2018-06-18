@@ -2,10 +2,12 @@ package org.opencypher.flink.impl.physical.operators
 
 import org.apache.flink.table.api.scala._
 import org.apache.flink.table.expressions.{If, UnresolvedFieldReference}
-import org.opencypher.flink.TableOps._
+import org.opencypher.flink.impl.TableOps._
 import org.opencypher.flink._
 import org.opencypher.flink.api.Tags
+import org.opencypher.flink.impl.{CAPFGraph, CAPFRecords}
 import org.opencypher.flink.impl.physical.{CAPFPhysicalResult, CAPFRuntimeContext}
+import org.opencypher.flink.impl.physical.operators.CAPFPhysicalOperator._
 import org.opencypher.okapi.api.graph.QualifiedGraphName
 import org.opencypher.okapi.ir.api.expr.{Expr, Var}
 import org.opencypher.okapi.logical.impl.LogicalPatternGraph

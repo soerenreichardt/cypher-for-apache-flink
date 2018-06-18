@@ -2,7 +2,7 @@ package org.opencypher.flink.testing
 
 import java.io.File
 
-import org.opencypher.flink.CAPFGraph
+import org.opencypher.flink.impl.CAPFGraph
 import org.opencypher.flink.test.CAPFTestSuite
 import org.opencypher.flink.test.support.capf.{CAPFScanGraphFactory, CAPFTestGraphFactory}
 import org.opencypher.okapi.relational.api.configuration.CoraConfiguration.PrintPhysicalPlan

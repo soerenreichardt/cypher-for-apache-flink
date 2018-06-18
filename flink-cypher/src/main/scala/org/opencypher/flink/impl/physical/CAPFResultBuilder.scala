@@ -1,7 +1,7 @@
-package org.opencypher.flink.physical
+package org.opencypher.flink.impl.physical
 
-import org.opencypher.flink.physical.operators.CAPFPhysicalOperator
-import org.opencypher.flink.{CAPFGraph, CAPFRecords, CAPFResult}
+import org.opencypher.flink.impl.{CAPFGraph, CAPFRecords, CAPFResult}
+import org.opencypher.flink.impl.physical.operators.CAPFPhysicalOperator
 import org.opencypher.okapi.api.graph.CypherQueryPlans
 import org.opencypher.okapi.logical.impl.LogicalOperator
 import org.opencypher.okapi.relational.impl.flat.FlatOperator

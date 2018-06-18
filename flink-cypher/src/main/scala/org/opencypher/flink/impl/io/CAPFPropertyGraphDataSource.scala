@@ -1,4 +1,4 @@
-package org.opencypher.flink.datasource
+package org.opencypher.flink.impl.io
 
 import org.opencypher.okapi.api.graph.GraphName
 import org.opencypher.okapi.api.io.PropertyGraphDataSource

@@ -1,8 +1,7 @@
-package org.opencypher.flink.physical.operators
+package org.opencypher.flink.impl.physical.operators
 
 import org.opencypher.flink.impl.physical.{CAPFPhysicalResult, CAPFRuntimeContext}
-import org.opencypher.flink.physical.CAPFRuntimeContext
-import org.opencypher.flink.{CAPFRecords, CAPFSession}
+import org.opencypher.flink.impl.{CAPFRecords, CAPFSession}
 import org.opencypher.okapi.api.graph.QualifiedGraphName
 import org.opencypher.okapi.relational.impl.table.RecordHeader
 

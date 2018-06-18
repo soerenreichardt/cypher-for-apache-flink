@@ -1,8 +1,8 @@
 package org.opencypher.flink.api.io.json
 
-import org.opencypher.flink.CAPFSchema
 import org.opencypher.flink.api.io.AbstractDataSource
 import org.opencypher.flink.api.io.metadata.CAPFGraphMetaData
+import org.opencypher.flink.schema.CAPFSchema
 import org.opencypher.okapi.api.graph.GraphName
 import org.opencypher.okapi.api.schema.Schema
 

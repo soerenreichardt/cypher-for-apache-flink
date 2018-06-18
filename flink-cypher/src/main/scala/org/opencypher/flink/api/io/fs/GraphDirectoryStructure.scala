@@ -2,7 +2,7 @@ package org.opencypher.flink.api.io.fs
 
 import org.apache.flink.core.fs.Path
 import org.opencypher.okapi.api.graph.GraphName
-import org.opencypher.okapi.relational.impl.util.StringEncodingUtilities._
+import org.opencypher.okapi.impl.util.StringEncodingUtilities._
 
 
 trait GraphDirectoryStructure {

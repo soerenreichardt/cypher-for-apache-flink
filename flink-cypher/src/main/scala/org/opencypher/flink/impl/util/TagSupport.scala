@@ -1,4 +1,4 @@
-package org.opencypher.flink
+package org.opencypher.flink.impl.util
 
 object TagSupport {
 

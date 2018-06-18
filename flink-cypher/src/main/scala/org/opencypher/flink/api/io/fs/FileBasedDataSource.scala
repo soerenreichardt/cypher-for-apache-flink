@@ -7,10 +7,10 @@ import org.apache.flink.table.api.{Table, TableSchema}
 import org.apache.flink.table.expressions.ResolvedFieldReference
 import org.apache.flink.table.sinks.CsvTableSink
 import org.apache.flink.table.sources.{CsvTableSource, TableSourceUtil}
-import org.opencypher.flink.CAPFSession
 import org.opencypher.flink.api.io.AbstractDataSource
 import org.opencypher.flink.api.io.json.JsonSerialization
 import org.opencypher.flink.api.io.fs.DefaultFileSystem._
+import org.opencypher.flink.impl.CAPFSession
 import org.opencypher.okapi.api.graph.GraphName
 
 class FileBasedDataSource(

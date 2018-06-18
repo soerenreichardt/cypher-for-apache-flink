@@ -1,4 +1,4 @@
-package org.opencypher.flink
+package org.opencypher.flink.api
 
 import org.apache.flink.table.api.Types
 import org.apache.flink.table.expressions.{Expression, Literal}

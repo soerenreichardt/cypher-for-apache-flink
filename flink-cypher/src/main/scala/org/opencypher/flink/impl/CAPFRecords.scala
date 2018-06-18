@@ -1,14 +1,15 @@
-package org.opencypher.flink
+package org.opencypher.flink.impl
 
 import org.apache.flink.api.scala._
 import org.apache.flink.table.api.scala._
 import org.apache.flink.table.api.{Table, Types}
 import org.apache.flink.table.expressions._
 import org.apache.flink.types.Row
-import org.opencypher.flink.impl.convert.FlinkConversions._
-import org.opencypher.flink.TableOps._
 import org.opencypher.flink.api.io.CAPFEntityTable
 import org.opencypher.flink.api.io.FlinkCypherTable.FlinkTable
+import org.opencypher.flink.impl.TableOps._
+import org.opencypher.flink.impl.convert.FlinkConversions._
+import org.opencypher.flink.impl.convert.rowToCypherMap
 import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.api.value.CypherValue.{CypherMap, CypherValue}
 import org.opencypher.okapi.impl.exception.{IllegalArgumentException, UnsupportedOperationException}
@@ -24,6 +25,7 @@ object CAPFRecords {
 
   def empty(initialHeader: RecordHeader = RecordHeader.empty)(implicit capf: CAPFSession): CAPFRecords = {
     val initialTableSchema = initialHeader.toResolvedFieldReference
+    // TODO: resolved fields are not enough :P -> RowTypeInfo
     val initialTable = capf.tableEnv.fromDataSet(
       capf.env.fromCollection(List.empty[Row]),
       initialTableSchema: _*
@@ -37,7 +39,7 @@ object CAPFRecords {
   }
 
   def create(entityTable: CAPFEntityTable)(implicit capf: CAPFSession): CAPFRecords = {
-    val withCypherCompatibleTypes = entityTable.table.table.withCypherCompatibleTypes
+    val withCypherCompatibleTypes = entityTable.relationalTable.table.withCypherCompatibleTypes
     CAPFRecords(entityTable.header, withCypherCompatibleTypes)
   }
 
@@ -62,9 +64,11 @@ case class CAPFRecords(header: RecordHeader, table: Table, override val logicalC
   override def from(header: RecordHeader, table: FlinkTable, displayNames: Option[Seq[String]]): CAPFRecords =
     copy(header, table.table, displayNames)
 
+  override def relationalTable: FlinkTable = table
+
   def toTable(colNames: String*): Table = colNames match {
     case Nil => table
-    case _ => table.select(colNames.map(UnresolvedFieldReference): _*)
+    case _ => relationalTable.table.select(colNames.map(UnresolvedFieldReference): _*)
   }
 
   def cache(): CAPFRecords = ???
@@ -161,7 +165,7 @@ case class CAPFRecords(header: RecordHeader, table: Table, override val logicalC
       case _ => false
     }
 
-    val initialDataColumns = table.physicalColumns.toSeq
+    val initialDataColumns = relationalTable.physicalColumns.toSeq
 
     val duplicateColumns = initialDataColumns.groupBy(identity).collect {
       case (key, values) if values.size > 1 => key
@@ -174,7 +178,7 @@ case class CAPFRecords(header: RecordHeader, table: Table, override val logicalC
       )
 
     val headerColumnNames = header.columns
-    val dataColumnNames = table.physicalColumns.toSet
+    val dataColumnNames = relationalTable.physicalColumns.toSet
     val missingColumnNames = headerColumnNames -- dataColumnNames
     if (missingColumnNames.nonEmpty) {
       throw IllegalArgumentException(
@@ -197,7 +201,7 @@ case class CAPFRecords(header: RecordHeader, table: Table, override val logicalC
   }
 
   override def toString: String = {
-    val numRows = table.size
+    val numRows = relationalTable.size
     if (header.isEmpty && numRows == 0) {
       s"CAPFRecords.empty"
     } else if (header.isEmpty && numRows == 1) {
@@ -214,17 +218,19 @@ trait RecordBehaviour extends RelationalCypherRecords[FlinkTable] {
   override def show(implicit options: PrintOptions): Unit =
     RecordsPrinter.print(this)
 
-  override lazy val columnType: Map[String, CypherType] = table.table.columnType
+  override lazy val columnType: Map[String, CypherType] = relationalTable.table.columnType
 
-  override def rows: Iterator[String => CypherValue] = table.table.rows
+  override def rows: Iterator[String => CypherValue] = relationalTable.table.rows
 
-  override def iterator: Iterator[CypherMap] = ???
+  override def iterator: Iterator[CypherMap] = toCypherMaps.collect().iterator
+
+  def toLocalIterator: Iterator[CypherMap] = iterator
 
   override def collect: Array[CypherMap] = toCypherMaps.collect().toArray
 
-  override def size: Long = table.table.count()
+  override def size: Long = relationalTable.table.count()
 
   def toCypherMaps: DataSet[CypherMap] = {
-    table.table.toDataSet[Row].map(rowToCypherMap(header.exprToColumn.toSeq, table.table.getSchema.columnNameToIndex))
+    relationalTable.table.toDataSet[Row].map(rowToCypherMap(header.exprToColumn.toSeq, relationalTable.table.getSchema.columnNameToIndex))
   }
 }

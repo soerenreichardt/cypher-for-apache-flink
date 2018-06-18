@@ -63,7 +63,7 @@ object CAPSRecords {
   }
 
   def create(entityTable: CAPSEntityTable)(implicit caps: CAPSSession): CAPSRecords = {
-    val withCypherCompatibleTypes = entityTable.table.df.withCypherCompatibleTypes
+    val withCypherCompatibleTypes = entityTable.relationalTable.df.withCypherCompatibleTypes
     CAPSRecords(entityTable.header, withCypherCompatibleTypes)
   }
 
@@ -97,7 +97,7 @@ case class CAPSRecords(
   override def from(header: RecordHeader, table: DataFrameTable, displayNames: Option[Seq[String]]): CAPSRecords =
     copy(header, table.df, displayNames)
 
-  override def table: DataFrameTable = df
+  override def relationalTable: DataFrameTable = df
 
   //noinspection AccessorLikeMethodIsEmptyParen
   def toDF(colNames: String*): DataFrame = colNames match {
@@ -296,7 +296,7 @@ trait RecordBehaviour extends RelationalCypherRecords[DataFrameTable] {
   override def show(implicit options: PrintOptions): Unit =
     RecordsPrinter.print(this)
 
-  override lazy val columnType: Map[String, CypherType] = table.df.columnType
+  override lazy val columnType: Map[String, CypherType] = relationalTable.df.columnType
 
   override def rows: Iterator[String => CypherValue] = {
     toLocalIterator.asScala.map(_.value)
@@ -317,10 +317,10 @@ trait RecordBehaviour extends RelationalCypherRecords[DataFrameTable] {
   override def collect: Array[CypherMap] =
     toCypherMaps.collect()
 
-  override def size: Long = table.df.count()
+  override def size: Long = relationalTable.df.count()
 
   def toCypherMaps: Dataset[CypherMap] = {
     import encoders._
-    table.df.map(rowToCypherMap(header.exprToColumn.toSeq))
+    relationalTable.df.map(rowToCypherMap(header.exprToColumn.toSeq))
   }
 }

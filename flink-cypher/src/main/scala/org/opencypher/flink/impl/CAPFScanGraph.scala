@@ -1,11 +1,12 @@
-package org.opencypher.flink
+package org.opencypher.flink.impl
 
 import cats.data.NonEmptyVector
 import org.apache.flink.table.api.Types
 import org.apache.flink.table.api.scala._
-import org.apache.flink.table.expressions.{Literal, UnresolvedFieldReference}
-import org.opencypher.flink.TableOps._
+import org.apache.flink.table.expressions.{Expression, Literal, UnresolvedFieldReference}
 import org.opencypher.flink.api.io.{CAPFEntityTable, CAPFNodeTable, CAPFRelationshipTable}
+import org.opencypher.flink.impl.TableOps._
+import org.opencypher.flink.schema.CAPFSchema
 import org.opencypher.okapi.api.io.conversion.RelationshipMapping
 import org.opencypher.okapi.api.schema.Schema
 import org.opencypher.okapi.api.types.{CTNode, CTRelationship, CypherType, DefiniteCypherType}
@@ -65,7 +66,7 @@ class CAPFScanGraph(val scans: Seq[CAPFEntityTable], val schema: CAPFSchema, val
           case other =>
             val relTypeFilter = other
               .map(typeExpr => UnresolvedFieldReference(scanHeader.column(typeExpr)) === Literal(true, Types.BOOLEAN))
-              .reduce(_ || _)
+              .foldLeft(Literal(false, Types.BOOLEAN): Expression) { (acc, expr) => acc || expr }
             CAPFRecords(scanHeader, records.table.filter(relTypeFilter))
         }
       }

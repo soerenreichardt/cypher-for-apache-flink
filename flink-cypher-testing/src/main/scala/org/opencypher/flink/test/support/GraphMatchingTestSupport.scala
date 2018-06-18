@@ -4,7 +4,7 @@ import org.apache.flink.api.scala._
 import org.apache.flink.table.api.scala._
 import org.apache.flink.api.scala.ExecutionEnvironment
 import org.apache.flink.table.api.BatchTableEnvironment
-import org.opencypher.flink.CAPFGraph
+import org.opencypher.flink.impl.CAPFGraph
 import org.opencypher.flink.test.fixture.{CAPFSessionFixture, FlinkSessionFixture}
 import org.opencypher.okapi.testing.BaseTestSuite
 import org.scalatest.Assertion
@@ -17,10 +17,10 @@ trait GraphMatchingTestSupport {
   val tableEnv: BatchTableEnvironment = sessionTableEnv
 
   private def verify(actual: CAPFGraph, expected: CAPFGraph): Assertion = {
-    val expectedNodeIds = expected.nodes("n").data.select("n").collect().map(_.getField(0).asInstanceOf[Long]).toSet
-    val expectedRelIds = expected.relationships("r").data.select("r").collect().map(_.getField(0).asInstanceOf[Long]).toSet
-    val actualNodeIds = actual.nodes("n").data.select("n").collect().map(_.getField(0).asInstanceOf[Long]).toSet
-    val actualRelIds = actual.relationships("r").data.select("r").collect().map(_.getField(0).asInstanceOf[Long]).toSet
+    val expectedNodeIds = expected.nodes("n").table.select("n").collect().map(_.getField(0).asInstanceOf[Long]).toSet
+    val expectedRelIds = expected.relationships("r").table.select("r").collect().map(_.getField(0).asInstanceOf[Long]).toSet
+    val actualNodeIds = actual.nodes("n").table.select("n").collect().map(_.getField(0).asInstanceOf[Long]).toSet
+    val actualRelIds = actual.relationships("r").table.select("r").collect().map(_.getField(0).asInstanceOf[Long]).toSet
 
     expectedNodeIds should equal(actualNodeIds)
     expectedRelIds should equal(actualRelIds)
