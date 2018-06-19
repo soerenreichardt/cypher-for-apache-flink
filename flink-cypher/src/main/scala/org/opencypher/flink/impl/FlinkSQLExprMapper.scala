@@ -1,5 +1,6 @@
 package org.opencypher.flink.impl
 
+import org.apache.commons.cli.MissingArgumentException
 import org.apache.flink.api.common.typeinfo.TypeInformation
 import org.apache.flink.table.api.scala._
 import org.apache.flink.table.api.{Table, Types}
@@ -156,18 +157,6 @@ object FlinkSQLExprMapper {
 
         case ToFloat(e) => e.asFlinkSQLExpr.cast(Types.DOUBLE)
 
-        case Explode(list) => list match {
-          case p@Param(name) if p.cypherType.subTypeOf(CTList(CTAny)).maybeTrue =>
-            context.parameters(name) match {
-              case CypherList(l) =>
-                val elements = l.unwrap.toArray
-                val unwindFunction = new Unwind()
-                unwindFunction(elements)
-                ???
-              case notAList => throw IllegalArgumentException("a Cypher list", notAList)
-            }
-        }
-
 
         case ep: ExistsPatternExpr => ep.targetField.asFlinkSQLExpr
 
@@ -206,7 +195,7 @@ class GetTypes(relType: String*) extends ScalarFunction {
   }
 }
 
-class Unwind() extends TableFunction[AnyRef] {
+class Unwind(list: Array[Any]) extends TableFunction[AnyRef] {
 
   def eval(list: Array[AnyRef]): Unit = {
     list.foreach(collect)

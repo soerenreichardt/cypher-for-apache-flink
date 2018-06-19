@@ -63,7 +63,7 @@ class TckFlinkCypherTest extends CAPFTestSuite {
   }
 
   it("run Single Scenario") {
-    scenarios.get("`type()` on null relationship")
+    scenarios.get("Multiple WITHs using a predicate and aggregation")
       .foreach(scenario => scenario(TCKGraph(defaultFactory, CAPFGraph.empty)).execute())
   }
 

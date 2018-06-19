@@ -9,6 +9,7 @@ import org.opencypher.flink.impl.FlinkSQLExprMapper._
 import org.opencypher.flink.impl.convert.FlinkConversions._
 import org.opencypher.flink.impl.physical.{CAPFPhysicalResult, CAPFRuntimeContext}
 import org.opencypher.flink.impl.{CAPFRecords, CAPFSession}
+import org.opencypher.flink.impl.TableOps._
 import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.api.value.CypherValue.{CypherInteger, CypherList}
 import org.opencypher.okapi.impl.exception.{IllegalArgumentException, NotImplementedException, SchemaException}
@@ -45,7 +46,7 @@ final case class NodeScan(in: CAPFPhysicalOperator, v: Var, header: RecordHeader
       case n: CTNode => graph.nodes(v.name, n)
       case other => throw IllegalArgumentException("Node variable", other)
     }
-    if (header != records.header) {
+    if (header.!=(records.header)) {
       throw SchemaException(
         s"""
            |Graph schema does not match actual records returned for scan $v:
@@ -65,7 +66,7 @@ final case class RelationshipScan(in: CAPFPhysicalOperator, v: Var, header: Reco
       case r: CTRelationship => graph.relationships(v.name, r)
       case other => throw IllegalArgumentException("Relationship variable", other)
     }
-    if (header != records.header) {
+    if (header.!=(records.header)) {
       throw SchemaException(
         s"""
            |Graph schema does not match actual records returned for scan $v:
@@ -94,30 +95,33 @@ final case class Project(in: CAPFPhysicalOperator, expr: Expr, alias: Option[Exp
         records.table
       } else {
         // TODO: reimplement unwind
-        val tableColumn = expr.asFlinkSQLExpr(header, records.table, context) as Symbol(header.column(newColumn))
-        val columnsToSelect = in.header.columns.toSeq.map(UnresolvedFieldReference) :+ tableColumn
-        records.table.select(columnsToSelect: _*)
+        expr match {
+          case Explode(list) =>
+            implicit val session = records.capf
+            val listColumn = ResolvedFieldReference(header.column(expr), expr.cypherType.getFlinkType)
+            val listAsColumn = unwind(records, list, listColumn)
+            records.table.cross(listAsColumn)
+          case other =>
+            val tableColumn = expr.asFlinkSQLExpr (header, records.table, context) as Symbol (header.column (newColumn) )
+            val columnsToSelect = in.header.columns.toSeq.map(UnresolvedFieldReference) :+ tableColumn
+            records.table.select(columnsToSelect: _*)
+        }
       }
       CAPFRecords(header, updatedData)(records.capf)
-      //        case Seq(one) =>
-      //          expr match {
-      //            case Explode(list) =>
-      //              implicit val session = records.capf
-      //              val listColumn = ResolvedFieldReference(one, expr.cypherType.getFlinkType)
-      //              val listAsColumn = unwind(records, list, listColumn)
-      //              records.data.cross(listAsColumn)
-      //            case other =>
-      //              val newCol: Expression = expr.asFlinkSQLExpr(header, records.data, context) as Symbol(one)
-      //              val columnsToSelect = records.data.columns.map(UnresolvedFieldReference(_)) :+ newCol // TODO: missmatch between expression and column/table
-      //
-      //              records.data.select(columnsToSelect: _*)
-      //          }
-      //
-      //        case seq if seq.isEmpty => throw IllegalStateException(s"Did not find a slot for expression $expr in $headerNames")
-      //        case seq => throw IllegalStateException(s"Got multiple slots for expression $expr: $seq")
-      //      }
-      //
-      //      CAPFRecords.verifyAndCreate(header, newData)(records.capf)
+    }
+  }
+
+  private def unwind(records: CAPFRecords, list: Expr, column: ResolvedFieldReference)(implicit context: CAPFRuntimeContext): Table = {
+    list match {
+      case p@Param(name) if p.cypherType.subTypeOf(CTList(CTAny)).maybeTrue =>
+        context.parameters(name) match {
+          case CypherList(l) =>
+            val session = records.capf
+            implicit val typeInfo = new RowTypeInfo(column.resultType)
+            val listDS = session.env.fromCollection(l.unwrap.map(v => Row.of(v.asInstanceOf[AnyRef])))
+            session.tableEnv.fromDataSet(listDS, Symbol(column.name))
+        }
+      case notAList => throw IllegalArgumentException("a Cypher list", notAList)
     }
   }
 }
@@ -140,20 +144,6 @@ final case class Filter(in: CAPFPhysicalOperator, expr: Expr, header: RecordHead
     prev.mapRecordsWithDetails { records =>
       val filteredRows = records.table.where(expr.asFlinkSQLExpr(header, records.table, context))
       CAPFRecords(header, filteredRows)(records.capf)
-    }
-  }
-
-  private def unwind(records: CAPFRecords, list: Expr, column: ResolvedFieldReference)(implicit context: CAPFRuntimeContext): Table = {
-    list match {
-      case p@Param(name) if p.cypherType.subTypeOf(CTList(CTAny)).maybeTrue =>
-        context.parameters(name) match {
-          case CypherList(l) =>
-            val session = records.capf
-            implicit val typeInfo = new RowTypeInfo(column.resultType)
-            val listDS = session.env.fromCollection(l.unwrap.map(v => Row.of(v.asInstanceOf[AnyRef])))
-            session.tableEnv.fromDataSet(listDS, Symbol(column.name))
-        }
-      case notAList => throw IllegalArgumentException("a Cypher list", notAList)
     }
   }
 }

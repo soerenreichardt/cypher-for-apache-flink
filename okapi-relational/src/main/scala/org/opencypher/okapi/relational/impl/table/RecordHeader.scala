@@ -311,6 +311,27 @@ case class RecordHeader(exprToColumn: Map[Expr, String]) {
     copy(exprToColumn = updatedExprToColumn)
   }
 
+  def ==(other: RecordHeader): Boolean = {
+    def generalizedExprs(vars: Set[Expr]): Set[Expr] = {
+      vars.map { expr =>
+        val ct = if (expr.cypherType.isNullable) {
+          expr.cypherType
+        } else {
+          expr.cypherType.nullable
+        }
+        Var(expr.withoutType)(ct)
+      }
+    }
+
+    val headerWithNullable = generalizedExprs(this.expressions)
+    val otherWithNullable = generalizedExprs(other.expressions)
+
+    (headerWithNullable diff otherWithNullable).isEmpty
+  }
+
+  def !=(other: RecordHeader): Boolean =
+    !(this == other)
+
   def addExprToColumn(expr: Expr, columnName: String): RecordHeader = {
     copy(exprToColumn = exprToColumn + (expr -> columnName))
   }
