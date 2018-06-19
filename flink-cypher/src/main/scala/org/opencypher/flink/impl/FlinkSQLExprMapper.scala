@@ -1,6 +1,5 @@
 package org.opencypher.flink.impl
 
-import org.apache.commons.cli.MissingArgumentException
 import org.apache.flink.api.common.typeinfo.TypeInformation
 import org.apache.flink.table.api.scala._
 import org.apache.flink.table.api.{Table, Types}
@@ -9,9 +8,8 @@ import org.apache.flink.table.expressions.Expression
 import org.apache.flink.table.functions.{ScalarFunction, TableFunction}
 import org.opencypher.flink.impl.TableOps._
 import org.opencypher.flink.impl.convert.FlinkConversions._
-import org.opencypher.flink.impl.physical.CAPFRuntimeContext
 import org.opencypher.okapi.api.types._
-import org.opencypher.okapi.api.value.CypherValue.CypherList
+import org.opencypher.okapi.api.value.CypherValue.{CypherList, CypherMap}
 import org.opencypher.okapi.impl.exception.{IllegalArgumentException, IllegalStateException, NotImplementedException}
 import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.relational.impl.table.RecordHeader
@@ -25,7 +23,7 @@ object FlinkSQLExprMapper {
     }
 
     def compare(comparator: Expression => (Expression => Expression), lhs: Expr, rhs: Expr)
-      (implicit header: RecordHeader, table: Table, context: CAPFRuntimeContext): Expression = {
+      (implicit header: RecordHeader, table: Table, parameters: CypherMap): Expression = {
       comparator(lhs.asFlinkSQLExpr)(rhs.asFlinkSQLExpr)
     }
 
@@ -37,12 +35,12 @@ object FlinkSQLExprMapper {
 
     def gteq(e: Expression): Expression => Expression = e >= _
 
-    def asFlinkSQLExpr(implicit header: RecordHeader, table: Table, context: CAPFRuntimeContext): Expression = {
+    def asFlinkSQLExpr(implicit header: RecordHeader, table: Table, parameters: CypherMap): Expression = {
 
       expr match {
 
         case p@Param(name) if p.cypherType.subTypeOf(CTList(CTAny)).maybeTrue =>
-          context.parameters(name) match {
+          parameters(name) match {
             case CypherList(l) =>
               val expressionList = l.unwrap.map( elem => expressions.Literal(elem, TypeInformation.of(elem.getClass)))
               if (expressionList.isEmpty)
@@ -52,7 +50,7 @@ object FlinkSQLExprMapper {
             case notAList => throw IllegalArgumentException("a Cypher list", notAList)
           }
         case Param(name) =>
-          expressions.Literal(context.parameters(name).unwrap, TypeInformation.of(context.parameters(name).unwrap.getClass))
+          expressions.Literal(parameters(name).unwrap, TypeInformation.of(parameters(name).unwrap.getClass))
 
         case _: Var | _: Param | _:Property | _: HasLabel | _: HasType | _: StartNode | _: EndNode =>
           verify
@@ -63,6 +61,9 @@ object FlinkSQLExprMapper {
           } else {
             expressions.Null(expr.cypherType.getFlinkType) as Symbol(colName)
           }
+
+        case AliasExpr(innerExpr, _) =>
+          innerExpr.asFlinkSQLExpr
 
         case ListLit(exprs) =>
           val flinkExpressions = exprs.map(_.asFlinkSQLExpr)
@@ -118,22 +119,24 @@ object FlinkSQLExprMapper {
 
         case Exists(e) => e.asFlinkSQLExpr.isNotNull
         case Id(e) => e.asFlinkSQLExpr
-//        case Labels(e)=>
-//          val node = Var(ColumnName.of(header.slotsFor(e).head))(CTNode)
-//          val labelExprs = header.labels(node)
-//          val labelColumns = labelExprs.map(_.asFlinkSQLExpr)
-//          val labelNames = labelExprs.map(_.label.name)
-//          val booleanLabelFlagColumn = array(labelColumns.head, labelColumns.tail: _*)
-//          ???
-//          TODO
+        case Labels(e)=>
+          val node = e.owner.get
+          val labelExprs = header.labelsFor(node)
+          val (labelNames, labelColumns) = labelExprs
+            .toSeq
+            .map(e => e.label.name -> e.asFlinkSQLExpr)
+            .sortBy(_._1)
+            .unzip
+          val getLabelsFunction = new GetLabels(labelNames: _*)
+          getLabelsFunction(labelColumns: _*)
 
         case Keys(e) =>
           val node = e.owner.get
           val propertyExprs = header.propertiesFor(node).toSeq.sortBy(_.key.name)
           val (propertyKeys, propertyColumns) = propertyExprs.map(e => e.key.name -> e.asFlinkSQLExpr).unzip
-          val valuesColumn = array(propertyColumns.head, propertyColumns.tail: _*)
-          ???
-//          TODO
+
+          val getKeysFunction = new GetKeys(propertyKeys: _*)
+          getKeysFunction(propertyColumns: _*)
 
         case Type(inner) =>
           inner match {
@@ -146,6 +149,17 @@ object FlinkSQLExprMapper {
             case _ =>
               throw NotImplementedException(s"Inner expression $inner of $expr is not yet supported (only variables)")
           }
+
+//        case u@Explode(list) =>
+//          list.cypherType match {
+//            case _: CTList | _: CTListOrNull =>
+//              val innerExpr = list.asFlinkSQLExpr
+//              val columnName = header.column(u)
+//              val cardinality = innerExpr.cardinality()
+//              val unwindFunction = new Unwind(innerExpr)
+//              ???
+//            case other => throw IllegalArgumentException("CTList", other)
+//          }
 
         case StartNodeFunction(e) =>
           val rel = e.owner.get
@@ -173,32 +187,43 @@ object FlinkSQLExprMapper {
 }
 
 @scala.annotation.varargs
-class GetKeys(propertyKeys: String*) extends ScalarFunction {
-
-  @scala.annotation.varargs
-  def eval(properties: AnyRef*): Array[String] = {
-    propertyKeys.zip(properties).collect {
-      case (key, value) if value != null => key
-    }.toArray
-  }
-
-}
-
-@scala.annotation.varargs
-class GetTypes(relType: String*) extends ScalarFunction {
+class GetTypes(relTypes: String*) extends ScalarFunction {
 
   @scala.annotation.varargs
   def eval(relTypeFlag: Boolean*): String = {
-    relType.zip(relTypeFlag).collectFirst {
+    relTypes.zip(relTypeFlag).collectFirst {
       case (tpe, true) => tpe
     }.orNull
   }
 }
 
-class Unwind(list: Array[Any]) extends TableFunction[AnyRef] {
+@scala.annotation.varargs
+class GetLabels(labels: String*) extends ScalarFunction {
 
-  def eval(list: Array[AnyRef]): Unit = {
-    list.foreach(collect)
+  @scala.annotation.varargs
+  def eval(labelFlag: Boolean*): Array[String] = {
+    labels.zip(labelFlag).collect {
+      case (label, true) => label
+    }.toArray
   }
-
 }
+
+@scala.annotation.varargs
+class GetKeys(keys: String*) extends ScalarFunction {
+
+  @scala.annotation.varargs
+  def eval(valueColumns: Any*): Array[String] = {
+    keys.zip(valueColumns).collect {
+      case (key, true) => key
+    }.toArray
+  }
+}
+
+class Unwind(list: Expression) extends TableFunction[Any] {
+
+  def eval(): Unit = {
+
+//    list.foreach { elem => collect(elem) }
+  }
+}
+

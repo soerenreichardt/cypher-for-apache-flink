@@ -74,7 +74,7 @@ trait CAPFGraph extends PropertyGraph with GraphOperations with Serializable {
 
   protected def alignRecords(records: Seq[CAPFRecords], targetVar: Var, targetHeader: RecordHeader): Option[CAPFRecords] = {
     val alignedRecords = records.map(_.alignWith(targetVar, targetHeader))
-    val selectExpressions = targetHeader.expressions.toSeq.sorted.map(_ -> Option.empty[Var])
+    val selectExpressions = targetHeader.expressions.toSeq.sorted
     val consistentRecords = alignedRecords.map(_.select(selectExpressions.head, selectExpressions.tail: _*))
     consistentRecords.reduceOption(_ unionAll _)
   }

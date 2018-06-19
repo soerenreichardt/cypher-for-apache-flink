@@ -78,11 +78,26 @@ final case class RelationshipScan(in: CAPFPhysicalOperator, v: Var, header: Reco
   }
 }
 
-final case class Alias(in: CAPFPhysicalOperator, aliases: Seq[(Expr,  Var)], header: RecordHeader)
+final case class Alias(in: CAPFPhysicalOperator, aliases: Seq[AliasExpr], header: RecordHeader)
   extends UnaryPhysicalOperator {
 
   override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
    prev.mapRecordsWithDetails { records => CAPFRecords(header, records.table)(records.capf) }
+  }
+}
+
+final case class AddColumn(in: CAPFPhysicalOperator, expr: Expr, header: RecordHeader)
+  extends UnaryPhysicalOperator {
+  override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
+    prev.mapRecordsWithDetails { records => records.addColumn(expr)(context.parameters)}
+  }
+}
+
+final case class CopyColumn(in: CAPFPhysicalOperator, from: Expr, to: Expr, header: RecordHeader)
+  extends UnaryPhysicalOperator {
+
+  override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
+    prev.mapRecordsWithDetails { records => records.copyColumn(from, to)(context.parameters) }
   }
 }
 
@@ -94,7 +109,6 @@ final case class Project(in: CAPFPhysicalOperator, expr: Expr, alias: Option[Exp
       val updatedData = if (in.header.contains(newColumn)) {
         records.table
       } else {
-        // TODO: reimplement unwind
         expr match {
           case Explode(list) =>
             implicit val session = records.capf
@@ -102,7 +116,7 @@ final case class Project(in: CAPFPhysicalOperator, expr: Expr, alias: Option[Exp
             val listAsColumn = unwind(records, list, listColumn)
             records.table.cross(listAsColumn)
           case other =>
-            val tableColumn = expr.asFlinkSQLExpr (header, records.table, context) as Symbol (header.column (newColumn) )
+            val tableColumn = expr.asFlinkSQLExpr (header, records.table, context.parameters) as Symbol (header.column (newColumn) )
             val columnsToSelect = in.header.columns.toSeq.map(UnresolvedFieldReference) :+ tableColumn
             records.table.select(columnsToSelect: _*)
         }
@@ -135,14 +149,14 @@ final case class Drop(in: CAPFPhysicalOperator, dropFields: Set[Expr], header: R
 
 final case class RenameColumns(in: CAPFPhysicalOperator, renameExprs: Map[Expr, String], header: RecordHeader) extends UnaryPhysicalOperator {
   override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
-    prev.mapRecordsWithDetails { records => records.withColumnsRenamed(renameExprs.toSeq: _*)(Some(header)) }
+    prev.mapRecordsWithDetails { records => records.renameColumns(renameExprs.toSeq: _*)(Some(header)) }
   }
 }
 
 final case class Filter(in: CAPFPhysicalOperator, expr: Expr, header: RecordHeader) extends UnaryPhysicalOperator {
   override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
     prev.mapRecordsWithDetails { records =>
-      val filteredRows = records.table.where(expr.asFlinkSQLExpr(header, records.table, context))
+      val filteredRows = records.table.where(expr.asFlinkSQLExpr(header, records.table, context.parameters))
       CAPFRecords(header, filteredRows)(records.capf)
     }
   }
@@ -157,7 +171,7 @@ final case class ReturnGraph(in: CAPFPhysicalOperator) extends UnaryPhysicalOper
   override def header: RecordHeader = RecordHeader.empty
 }
 
-final case class Select(in: CAPFPhysicalOperator, exprs: List[(Expr, Option[Var])], header: RecordHeader) extends UnaryPhysicalOperator {
+final case class Select(in: CAPFPhysicalOperator, exprs: List[Expr], header: RecordHeader) extends UnaryPhysicalOperator {
   override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
     prev.mapRecordsWithDetails { records => records.select(exprs.head, exprs.tail: _*) }
   }
@@ -185,7 +199,7 @@ final case class Aggregate(
       val inData = records.table
 
       def withInnerExpr(expr: Expr)(f: Expression => Expression) =
-        f(expr.asFlinkSQLExpr(records.header, inData, context))
+        f(expr.asFlinkSQLExpr(records.header, inData, context.parameters))
 
       val columns =
         if (group.nonEmpty) {

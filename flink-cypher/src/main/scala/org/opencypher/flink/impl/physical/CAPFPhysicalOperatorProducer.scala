@@ -7,7 +7,7 @@ import org.opencypher.flink.impl.physical.operators.CAPFPhysicalOperator
 import org.opencypher.okapi.api.graph.QualifiedGraphName
 import org.opencypher.okapi.api.value.CypherValue.CypherMap
 import org.opencypher.okapi.ir.api.block.SortItem
-import org.opencypher.okapi.ir.api.expr.{Aggregator, Expr, Var}
+import org.opencypher.okapi.ir.api.expr.{Aggregator, AliasExpr, Expr, Var}
 import org.opencypher.okapi.ir.impl.QueryCatalog
 import org.opencypher.okapi.logical.impl._
 import org.opencypher.okapi.relational.api.physical.{PhysicalOperatorProducer, PhysicalPlannerContext}
@@ -52,7 +52,7 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
     header: RecordHeader
   ): CAPFPhysicalOperator = operators.RenameColumns(in, renameExprs, header)
 
-  override def planSelect(in: CAPFPhysicalOperator, exprs: List[(Expr, Option[Var])], header: RecordHeader): CAPFPhysicalOperator =
+  override def planSelect(in: CAPFPhysicalOperator, exprs: List[Expr], header: RecordHeader): CAPFPhysicalOperator =
     operators.Select(in, exprs, header)
 
   override def planReturnGraph(in: CAPFPhysicalOperator): CAPFPhysicalOperator =
@@ -83,11 +83,14 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
     v: Var,
     header: RecordHeader): CAPFPhysicalOperator = operators.RelationshipScan(in, v, header)
 
-  override def planAlias(in: CAPFPhysicalOperator, aliases: Seq[(Expr, Var)], header: RecordHeader): CAPFPhysicalOperator =
+  override def planAliases(in: CAPFPhysicalOperator, aliases: Seq[AliasExpr], header: RecordHeader): CAPFPhysicalOperator =
     operators.Alias(in, aliases, header)
 
-  override def planProject(in: CAPFPhysicalOperator, expr: Expr, to: Option[Expr], header: RecordHeader): CAPFPhysicalOperator =
-    operators.Project(in, expr, to, header)
+  override def planAddColumn(in: CAPFPhysicalOperator, expr: Expr, header: RecordHeader): CAPFPhysicalOperator =
+    operators.AddColumn(in, expr, header)
+
+  override def planCopyColumn(in: CAPFPhysicalOperator, from: Expr, to: Expr, header: RecordHeader): CAPFPhysicalOperator =
+    operators.CopyColumn(in, from, to, header)
 
   override def planConstructGraph(
     in: CAPFPhysicalOperator,

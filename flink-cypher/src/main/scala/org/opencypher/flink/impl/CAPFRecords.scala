@@ -185,7 +185,7 @@ case class CAPFRecords(header: RecordHeader, table: Table, override val logicalC
     if (missingColumnNames.nonEmpty) {
       throw IllegalArgumentException(
         s"data with columns ${header.columns.toSeq.sorted.mkString("\n[", ", ", "]\n")}",
-        s"data with columns ${dataColumnNames.toSeq.sorted.mkString("\n[", " ", "]\n")}"
+        s"data with columns ${dataColumnNames.toSeq.sorted.mkString("\n[", ", ", "]\n")}"
       )
     }
 

@@ -6,19 +6,21 @@ import org.apache.flink.table.expressions._
 import org.opencypher.flink._
 import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.relational.api.io.{EntityTable, FlatRelationalTable}
-import org.opencypher.flink.impl.TableOps._
 import org.opencypher.flink.api.io.FlinkCypherTable.FlinkTable
 import org.opencypher.flink.schema.CAPFSchema._
 import org.opencypher.flink.impl.{CAPFRecords, CAPFSession, RecordBehaviour}
+import org.opencypher.flink.impl.TableOps._
+import org.opencypher.flink.impl.FlinkSQLExprMapper._
 import org.opencypher.flink.schema.CAPFSchema
 import org.opencypher.okapi.api.table.CypherTable._
 import org.opencypher.okapi.api.io.conversion.{NodeMapping, RelationshipMapping}
 import org.opencypher.okapi.api.schema.Schema
 import org.opencypher.okapi.api.value.CypherValue
-import org.opencypher.okapi.api.value.CypherValue.CypherValue
+import org.opencypher.okapi.api.value.CypherValue.{CypherMap, CypherValue}
 import org.opencypher.okapi.relational.impl.physical._
 import org.opencypher.okapi.relational.impl.table.RecordHeader
 import org.opencypher.okapi.impl.util.StringEncodingUtilities._
+import org.opencypher.okapi.ir.api.expr.Expr
 
 object FlinkCypherTable {
 
@@ -80,7 +82,8 @@ object FlinkCypherTable {
     override def distinct: FlinkTable =
       table.distinct()
 
-    override def distinct(cols: String*): FlinkTable = ???
+    override def distinct(cols: String*): FlinkTable =
+      table.distinct()
 
     override def withColumnRenamed(oldColumn: String, newColumn: String): FlinkTable =
       table.safeRenameColumn(oldColumn, newColumn)
@@ -91,6 +94,13 @@ object FlinkCypherTable {
 
     override def withFalseColumn(col: String): FlinkTable = table.select('*, Literal(false, Types.BOOLEAN) as Symbol(col))
 
+    override def filter(expr: Expr)(implicit header: RecordHeader, parameters: CypherValue.CypherMap): FlinkTable = {
+      table.filter(expr.asFlinkSQLExpr(header, table, parameters))
+    }
+
+    override def withColumn(column: String, expr: Expr)(implicit header: RecordHeader, parameters: CypherMap): FlinkTable = {
+      table.safeUpsertColumn(column, expr.asFlinkSQLExpr(header, table, parameters))
+    }
   }
 
 }

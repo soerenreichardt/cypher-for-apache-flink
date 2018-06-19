@@ -93,21 +93,21 @@ trait RelationalCypherRecords[T <: FlatRelationalTable[T]] extends CypherRecords
     val selectHeader = headerWithAliases.select(allExprs: _*)
     val logicalColumns = allExprs.collect { case e: Var => e.withoutType }
 
-    from(selectHeader, table.select(allExprs.map(headerWithAliases.column).distinct: _*), Some(logicalColumns))
+    from(selectHeader, relationalTable.select(allExprs.map(headerWithAliases.column).distinct: _*), Some(logicalColumns))
   }
 
   def filter(expr: Expr)(implicit parameters: CypherMap): R = {
-    val filteredTable = table.filter(expr)(header, parameters)
+    val filteredTable = relationalTable.filter(expr)(header, parameters)
     from(header, filteredTable)
   }
 
   def drop(exprs: Expr*): R = {
     val updatedHeader = header -- exprs.toSet
     if (updatedHeader.columns.size < header.columns.size) {
-      val updatedTable = table.drop(exprs.map(header.column): _*)
+      val updatedTable = relationalTable.drop(exprs.map(header.column): _*)
       from(updatedHeader, updatedTable)
     } else {
-      from(updatedHeader, table)
+      from(updatedHeader, relationalTable)
     }
   }
 
@@ -117,20 +117,20 @@ trait RelationalCypherRecords[T <: FlatRelationalTable[T]] extends CypherRecords
         case a: AliasExpr => header.withAlias(a)
         case _ => header
       }
-      from(updatedHeader, table)
+      from(updatedHeader, relationalTable)
     } else {
       val updatedHeader = expr match {
         case a: AliasExpr => header.withExpr(a.expr).withAlias(a)
         case _ => header.withExpr(expr)
       }
-      val updatedTable = table.withColumn(updatedHeader.column(expr), expr)(updatedHeader, parameters)
+      val updatedTable = relationalTable.withColumn(updatedHeader.column(expr), expr)(updatedHeader, parameters)
       from(updatedHeader, updatedTable)
     }
   }
 
   def copyColumn(fromColumn: Expr, toColumn: Expr)(implicit parameters: CypherMap): R = {
     val updatedHeader = header.withExpr(toColumn)
-    val updatedData = table.withColumn(updatedHeader.column(toColumn), fromColumn)(header, parameters)
+    val updatedData = relationalTable.withColumn(updatedHeader.column(toColumn), fromColumn)(header, parameters)
     from(updatedHeader, updatedData)
   }
 
@@ -191,7 +191,7 @@ trait RelationalCypherRecords[T <: FlatRelationalTable[T]] extends CypherRecords
       val renameColumns = other.header.expressions
         .filter(expr => other.header.column(expr) != joinHeader.column(expr))
         .map { expr => expr -> joinHeader.column(expr) }.toSeq
-      other.renameColumns(renameColumns: _*)().asInstanceOf[R]
+      other.renameColumns(renameColumns: _*)()
     } else other
 
     val joinCols = joinExprs.map { case (l, r) => header.column(l) -> cleanOther.header.column(r) }
