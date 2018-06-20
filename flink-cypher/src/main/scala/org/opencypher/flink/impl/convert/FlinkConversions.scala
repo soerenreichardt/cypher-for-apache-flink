@@ -4,6 +4,7 @@ import org.apache.flink.api.common.typeinfo.{BasicArrayTypeInfo, PrimitiveArrayT
 import org.apache.flink.api.java.typeutils.ObjectArrayTypeInfo
 import org.apache.flink.table.api.{TableSchema, Types}
 import org.apache.flink.table.expressions.ResolvedFieldReference
+import org.apache.orc.TypeDescription
 import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.impl.exception.{IllegalArgumentException, IllegalStateException, NotImplementedException}
 import org.opencypher.okapi.ir.api.expr.Var
@@ -80,6 +81,29 @@ object FlinkConversions {
       case Types.FLOAT => Some(Types.DOUBLE)
       case compatible if tpe.toCypherType().isDefined => Some(compatible)
       case _ => None
+    }
+
+    def toOrcType(): Option[TypeDescription] = {
+      tpe match {
+        case Types.STRING => Some(TypeDescription.createString())
+        case Types.INT => Some(TypeDescription.createInt())
+        case Types.LONG => Some(TypeDescription.createLong())
+        case Types.BOOLEAN => Some(TypeDescription.createBoolean())
+        case PrimitiveArrayTypeInfo.BOOLEAN_PRIMITIVE_ARRAY_TYPE_INFO => Some(TypeDescription.createList(TypeDescription.createBoolean()))
+        case PrimitiveArrayTypeInfo.DOUBLE_PRIMITIVE_ARRAY_TYPE_INFO => Some(TypeDescription.createList(TypeDescription.createDouble()))
+        case PrimitiveArrayTypeInfo.FLOAT_PRIMITIVE_ARRAY_TYPE_INFO => Some(TypeDescription.createList(TypeDescription.createFloat()))
+        case PrimitiveArrayTypeInfo.INT_PRIMITIVE_ARRAY_TYPE_INFO => Some(TypeDescription.createList(TypeDescription.createInt()))
+        case PrimitiveArrayTypeInfo.LONG_PRIMITIVE_ARRAY_TYPE_INFO => Some(TypeDescription.createList(TypeDescription.createLong()))
+        case basicArray: BasicArrayTypeInfo[_, _] => Some(TypeDescription.createList(basicArray.getComponentInfo.toOrcType().get))
+        case objArray: ObjectArrayTypeInfo[_, _] => Some(TypeDescription.createList(objArray.getComponentInfo.toOrcType().get))
+
+        case _ => None
+      }
+    }
+
+    def getOrcType: TypeDescription = toOrcType match {
+      case Some(t) => t
+      case None => throw NotImplementedException(s"mapping of $tpe to TypeDescription.")
     }
   }
 

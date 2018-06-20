@@ -3,14 +3,17 @@ package org.opencypher.flink.api.io.fs
 import java.util.UUID
 
 import org.apache.flink.core.fs.FileSystem
-import org.apache.flink.table.api.{Table, TableSchema}
+import org.apache.flink.orc.OrcTableSource
+import org.apache.flink.table.api.Table
 import org.apache.flink.table.expressions.ResolvedFieldReference
 import org.apache.flink.table.sinks.CsvTableSink
-import org.apache.flink.table.sources.{CsvTableSource, TableSourceUtil}
+import org.apache.flink.table.sources.CsvTableSource
+import org.apache.orc.TypeDescription
 import org.opencypher.flink.api.io.AbstractDataSource
-import org.opencypher.flink.api.io.json.JsonSerialization
 import org.opencypher.flink.api.io.fs.DefaultFileSystem._
+import org.opencypher.flink.api.io.json.JsonSerialization
 import org.opencypher.flink.impl.CAPFSession
+import org.opencypher.flink.impl.convert.FlinkConversions._
 import org.opencypher.okapi.api.graph.GraphName
 
 class FileBasedDataSource(
@@ -37,11 +40,21 @@ class FileBasedDataSource(
   protected def writeFile(path: String, content: String): Unit = fileSystem.writeFile(path, content)
 
   protected def readTable(path: String, tableStorageFormat: String, schema: Seq[ResolvedFieldReference]): Table = {
+    val tableSourceName = tableStorageFormat + "#" + UUID.randomUUID()
     tableStorageFormat match {
       case "csv" =>
         val csvSource = new CsvTableSource(path, schema.map(_.name).toArray, schema.map(_.resultType).toArray)
-        val tableSourceName = path + UUID.randomUUID()
         session.tableEnv.registerTableSource(tableSourceName, csvSource)
+        session.tableEnv.scan(tableSourceName)
+      case "orc" =>
+        val typeDescription = schema.foldLeft(new TypeDescription(TypeDescription.Category.STRUCT)) {
+          case (acc, fieldRef) => acc.addField(fieldRef.name, fieldRef.resultType.getOrcType)
+        }
+        val orcSource = OrcTableSource.builder()
+          .path(path)
+          .forOrcSchema(typeDescription)
+          .build()
+        session.tableEnv.registerTableSource(tableSourceName, orcSource)
         session.tableEnv.scan(tableSourceName)
     }
   }

@@ -76,6 +76,7 @@
     <dep.spark.scope>compile</dep.spark.scope>
     <dep.flink.version>1.5.0</dep.flink.version>
     <dep.upickle.version>0.6.6</dep.upickle.version>
+    <dep.circe.version>0.10.0-M1</dep.circe.version>
 
     <!-- Test scope dependencies -->
     <dep.bouncycastle.version>1.57</dep.bouncycastle.version>
