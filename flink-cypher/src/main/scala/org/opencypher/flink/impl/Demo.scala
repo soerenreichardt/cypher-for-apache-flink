@@ -68,7 +68,7 @@ object Demo extends App {
 //      |WHERE b.age = age
 //      |RETURN b
 //    """.stripMargin).getRecords.show
-  graph.cypher("WITH 'foo' AS bar UNWIND [1, 2, 3] AS x RETURN x, bar").getRecords.show
+//  graph.cypher("WITH 'foo' AS bar UNWIND [1, 2, 3] AS x RETURN x, bar").getRecords.show
 //  graph.cypher("MATCH (n:Employee), (m: Person) RETURN (n)-[]->(m)").getRecords.show
 //  graph.cypher("MATCH (n:Employee) RETURN n").getRecords.show
 }
