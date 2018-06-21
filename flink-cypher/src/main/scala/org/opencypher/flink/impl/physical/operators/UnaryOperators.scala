@@ -86,11 +86,35 @@ final case class Alias(in: CAPFPhysicalOperator, aliases: Seq[AliasExpr], header
   }
 }
 
+final case class Unwind(in: CAPFPhysicalOperator, list: Expr, item: Var, header: RecordHeader)
+  extends UnaryPhysicalOperator {
+
+  override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
+    prev.mapRecordsWithDetails { records =>
+      val unwindedColumn = list match {
+        case p@Param(name) if p.cypherType.subTypeOf(CTList(CTAny)).maybeTrue =>
+          context.parameters(name) match {
+            case CypherList(l) =>
+              val session = records.capf
+              implicit val typeInfo = new RowTypeInfo(item.cypherType.getFlinkType)
+              val listDS = session.env.fromCollection(l.unwrap.map(v => Row.of(v.asInstanceOf[AnyRef])))
+              session.tableEnv.fromDataSet(listDS, Symbol(header.column(item)))
+          }
+        case notAList => throw IllegalArgumentException("a Cypher list", notAList)
+      }
+      implicit val session = records.capf
+      CAPFRecords(header, unwindedColumn)
+    }
+  }
+}
+
 final case class AddColumn(in: CAPFPhysicalOperator, expr: Expr, header: RecordHeader)
   extends UnaryPhysicalOperator {
+
   override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
-    prev.mapRecordsWithDetails { records => records.addColumn(expr)(context.parameters)}
+    prev.mapRecordsWithDetails { records => records.addColumn(expr)(context.parameters) }
   }
+
 }
 
 final case class CopyColumn(in: CAPFPhysicalOperator, from: Expr, to: Expr, header: RecordHeader)
@@ -109,23 +133,16 @@ final case class Project(in: CAPFPhysicalOperator, expr: Expr, alias: Option[Exp
       val updatedData = if (in.header.contains(newColumn)) {
         records.table
       } else {
-        expr match {
-          case Explode(list) =>
-            implicit val session = records.capf
-            val listColumn = ResolvedFieldReference(header.column(expr), expr.cypherType.getFlinkType)
-            val listAsColumn = unwind(records, list, listColumn)
-            records.table.cross(listAsColumn)
-          case other =>
-            val tableColumn = expr.asFlinkSQLExpr (header, records.table, context.parameters) as Symbol (header.column (newColumn) )
-            val columnsToSelect = in.header.columns.toSeq.map(UnresolvedFieldReference) :+ tableColumn
-            records.table.select(columnsToSelect: _*)
-        }
+        val tableColumn = expr.asFlinkSQLExpr (header, records.table, context.parameters) as Symbol (header.column (newColumn) )
+        val columnsToSelect = in.header.columns.toSeq.map(UnresolvedFieldReference) :+ tableColumn
+        records.table.select(columnsToSelect: _*)
       }
       CAPFRecords(header, updatedData)(records.capf)
     }
   }
 
   private def unwind(records: CAPFRecords, list: Expr, column: ResolvedFieldReference)(implicit context: CAPFRuntimeContext): Table = {
+    // TODO: list.asFlinkSQLExpr or inner list
     list match {
       case p@Param(name) if p.cypherType.subTypeOf(CTList(CTAny)).maybeTrue =>
         context.parameters(name) match {

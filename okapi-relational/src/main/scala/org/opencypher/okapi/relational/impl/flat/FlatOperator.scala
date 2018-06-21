@@ -170,6 +170,8 @@ final case class EmptyRecords(in: FlatOperator, header: RecordHeader) extends St
 
 final case class Start(sourceGraph: LogicalGraph, header: RecordHeader) extends FlatLeafOperator
 
+final case class Unwind(in: FlatOperator, list: Expr, item: Var, header: RecordHeader) extends StackingFlatOperator
+
 final case class FromGraph(override val sourceGraph: LogicalGraph, in: FlatOperator)
     extends StackingFlatOperator {
   override def header: RecordHeader = in.header

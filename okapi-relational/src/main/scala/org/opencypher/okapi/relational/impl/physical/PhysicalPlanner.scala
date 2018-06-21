@@ -78,6 +78,9 @@ I <: RuntimeContext[A, P]](val producer: PhysicalOperatorProducer[O, K, A, P, I]
             }
         }
 
+      case flat.Unwind(in, list, item, header) =>
+        producer.planUnwind(process(in), list, item, header)
+
       case flat.FromGraph(graph, in) =>
         graph match {
           case g: LogicalCatalogGraph =>

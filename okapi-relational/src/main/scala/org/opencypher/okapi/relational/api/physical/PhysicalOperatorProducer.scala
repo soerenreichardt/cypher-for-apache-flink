@@ -73,6 +73,8 @@ I <: RuntimeContext[A, P]] {
     */
   def planNodeScan(in: K, inGraph: LogicalGraph, v: Var, header: RecordHeader): K
 
+  def planUnwind(in: K, list: Expr, item: Var, header: RecordHeader): K
+
   /**
     * Scans the relationship set of the input graph and returns all relationships that match the given CTRelationship
     * type.

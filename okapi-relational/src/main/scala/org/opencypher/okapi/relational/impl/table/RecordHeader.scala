@@ -239,7 +239,7 @@ case class RecordHeader(exprToColumn: Map[Expr, String]) {
         case Some(_) => this
 
         case None =>
-          val newColumnName = expr.toString
+          val newColumnName = expr.withoutType.toString
             .replaceAll("-", "_")
             .replaceAll(":", "_")
             .replaceAll("\\.", "_")

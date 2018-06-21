@@ -150,6 +150,9 @@ object FlinkSQLExprMapper {
               throw NotImplementedException(s"Inner expression $inner of $expr is not yet supported (only variables)")
           }
 
+        case Explode(list) =>
+          list.asFlinkSQLExpr
+
 //        case u@Explode(list) =>
 //          list.cypherType match {
 //            case _: CTList | _: CTListOrNull =>

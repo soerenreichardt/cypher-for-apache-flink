@@ -5,7 +5,7 @@ import java.io.File
 import org.opencypher.flink.impl.CAPFGraph
 import org.opencypher.flink.test.CAPFTestSuite
 import org.opencypher.flink.test.support.capf.{CAPFScanGraphFactory, CAPFTestGraphFactory}
-import org.opencypher.okapi.relational.api.configuration.CoraConfiguration.PrintPhysicalPlan
+import org.opencypher.okapi.relational.api.configuration.CoraConfiguration.{PrintOptimizedPhysicalPlan, PrintPhysicalPlan}
 import org.opencypher.okapi.tck.test.Tags.{BlackList, WhiteList}
 import org.opencypher.okapi.tck.test.{ScenariosFor, TCKGraph}
 import org.opencypher.tools.tck.api.CypherTCK
@@ -29,6 +29,7 @@ class TckFlinkCypherTest extends CAPFTestSuite {
   private val scenarios = ScenariosFor(blacklistFile)
 
   PrintPhysicalPlan.set()
+  PrintOptimizedPhysicalPlan.set()
 
   forAll(factories) { (factory, additional_blacklist) =>
     forAll(scenarios.whiteList) { scenario =>

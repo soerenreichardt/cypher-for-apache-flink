@@ -145,4 +145,7 @@ final class CAPFPhysicalOperatorProducer(implicit capf: CAPFSession)
     * @return union all operator
     */
   override def planGraphUnionAll(graphs: List[CAPFPhysicalOperator], qgn: QualifiedGraphName): CAPFPhysicalOperator = ???
+
+  override def planUnwind(in: CAPFPhysicalOperator, list: Expr, item: Var, header: RecordHeader): CAPFPhysicalOperator =
+    operators.Unwind(in, list, item, header)
 }
