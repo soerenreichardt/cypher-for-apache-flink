@@ -5,7 +5,7 @@ import org.apache.flink.api.scala._
 import org.apache.flink.table.api.scala._
 import org.apache.flink.table.api.{Table, TableSchema, Types}
 import org.apache.flink.table.expressions._
-import org.apache.flink.table.functions.ScalarFunction
+import org.apache.flink.table.functions.{ScalarFunction, UserDefinedFunction}
 import org.apache.flink.types.Row
 import org.opencypher.flink.api.Tags._
 import org.opencypher.flink.impl.convert.FlinkConversions._
@@ -43,17 +43,17 @@ object TableOps {
 
   }
 
-  implicit class ColumnTagging(val col: UnresolvedFieldReference) extends AnyVal {
+  implicit class ColumnTagging(val col: Expression) extends AnyVal {
 
-    def replaceTag(from: Int, to: Int): UnresolvedFieldReference = {
-      ???
+    def replaceTag(from: Int, to: Int): Expression = {
+      If(getTag === Literal(from.toLong, Types.LONG), setTag(to), col)
     }
 
-    def setTag(tag: Int): UnresolvedFieldReference = {
+    def setTag(tag: Int): Expression = {
       val bitAnd = new BitwiseAnd(invertedTagMask)
-      val bitOr = new BitwiseOr(tag.toLong)
+      val bitOr = new BitwiseOr(tag.toLong << idBits)
 
-      ???
+      bitOr(bitAnd(col))
     }
 
     def getTag: Expression = {
@@ -216,12 +216,12 @@ object TableOps {
     }
 
     def safeReplaceTags(columnName: String, replacements: Map[Int, Int]): Table = {
-      val dataType = table.getSchema.getType(columnName)
+      val dataType = table.getSchema.getType(columnName).get
       require(dataType == Types.LONG, s"Cannot remap long values in Column with type $dataType")
 
       val col = UnresolvedFieldReference(columnName)
-      val updatedCol = replacements.foldLeft(col) {
-        case (current, (from, to)) => current.replaceTag(from, to)
+      val updatedCol = replacements.foldLeft(col: Expression) {
+        case (currentCol, (from, to)) => currentCol.replaceTag(from, to)
       }
 
       safeReplaceColumn(columnName, updatedCol)

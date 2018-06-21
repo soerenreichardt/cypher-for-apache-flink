@@ -9,7 +9,6 @@ import org.opencypher.flink.impl.FlinkSQLExprMapper._
 import org.opencypher.flink.impl.convert.FlinkConversions._
 import org.opencypher.flink.impl.physical.{CAPFPhysicalResult, CAPFRuntimeContext}
 import org.opencypher.flink.impl.{CAPFRecords, CAPFSession}
-import org.opencypher.flink.impl.TableOps._
 import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.api.value.CypherValue.{CypherInteger, CypherList}
 import org.opencypher.okapi.impl.exception.{IllegalArgumentException, NotImplementedException, SchemaException}
@@ -96,13 +95,13 @@ final case class Unwind(in: CAPFPhysicalOperator, list: Expr, item: Var, header:
           context.parameters(name) match {
             case CypherList(l) =>
               val session = records.capf
-              implicit val typeInfo = new RowTypeInfo(item.cypherType.getFlinkType)
+              implicit val typeInfo: RowTypeInfo = new RowTypeInfo(item.cypherType.getFlinkType)
               val listDS = session.env.fromCollection(l.unwrap.map(v => Row.of(v.asInstanceOf[AnyRef])))
               session.tableEnv.fromDataSet(listDS, Symbol(header.column(item)))
           }
         case notAList => throw IllegalArgumentException("a Cypher list", notAList)
       }
-      implicit val session = records.capf
+      implicit val session: CAPFSession = records.capf
       CAPFRecords(header, unwindedColumn)
     }
   }
@@ -142,13 +141,12 @@ final case class Project(in: CAPFPhysicalOperator, expr: Expr, alias: Option[Exp
   }
 
   private def unwind(records: CAPFRecords, list: Expr, column: ResolvedFieldReference)(implicit context: CAPFRuntimeContext): Table = {
-    // TODO: list.asFlinkSQLExpr or inner list
     list match {
       case p@Param(name) if p.cypherType.subTypeOf(CTList(CTAny)).maybeTrue =>
         context.parameters(name) match {
           case CypherList(l) =>
             val session = records.capf
-            implicit val typeInfo = new RowTypeInfo(column.resultType)
+            implicit val typeInfo: RowTypeInfo = new RowTypeInfo(column.resultType)
             val listDS = session.env.fromCollection(l.unwrap.map(v => Row.of(v.asInstanceOf[AnyRef])))
             session.tableEnv.fromDataSet(listDS, Symbol(column.name))
         }
@@ -245,7 +243,7 @@ final case class Aggregate(
             case CountStar(_) =>
               withInnerExpr(IntegerLit(0)(CTInteger))(_.count.as(columnName))
 
-            case Count(expr, distinct) => withInnerExpr(expr)( column =>
+            case Count(expr, _) => withInnerExpr(expr)( column =>
               column.count
                 .as(columnName)
             )
@@ -259,7 +257,7 @@ final case class Aggregate(
             case Sum(expr) =>
               withInnerExpr(expr)(_.sum.as(columnName))
 
-            case Collect(expr, distinct) => withInnerExpr(expr) { column =>
+            case Collect(expr, _) => withInnerExpr(expr) { column =>
               val list = array(column)
               list as columnName
             }

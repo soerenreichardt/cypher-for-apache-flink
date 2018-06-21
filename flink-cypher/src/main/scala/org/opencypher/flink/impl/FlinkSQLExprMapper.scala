@@ -221,12 +221,3 @@ class GetKeys(keys: String*) extends ScalarFunction {
     }.toArray
   }
 }
-
-class Unwind(list: Expression) extends TableFunction[Any] {
-
-  def eval(): Unit = {
-
-//    list.foreach { elem => collect(elem) }
-  }
-}
-
