@@ -78,7 +78,7 @@ final case class ExistsSubQuery(
       .foldLeft(rightData)((acc, col) => acc.safeRenameColumn(col._2, col._3))
       .safeDropColumns(columnsToRemove: _*)
 
-    val distinctRightData = reduceRhsData.distinct() // TODO: might be incorrect
+    val distinctRightData = reduceRhsData.distinct()
 
     val joinCols = joinColumnMapping.map(t => t._1 -> t._3)
 

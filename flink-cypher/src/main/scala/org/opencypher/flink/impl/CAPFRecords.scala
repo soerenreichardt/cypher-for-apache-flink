@@ -28,7 +28,6 @@ object CAPFRecords {
     val initialTableSchema = initialHeader.toResolvedFieldReference
 
     implicit val rowTypeInfo = new RowTypeInfo(initialTableSchema.map(_.resultType).toArray, initialTableSchema.map(_.name).toArray)
-    // TODO: resolved fields are not enough :P -> RowTypeInfo
     val initialTable = capf.tableEnv.fromDataSet(
       capf.env.fromCollection(List.empty[Row]),
       initialTableSchema.map(field => UnresolvedFieldReference(field.name)): _*
