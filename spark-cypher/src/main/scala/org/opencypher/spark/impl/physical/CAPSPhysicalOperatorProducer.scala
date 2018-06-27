@@ -166,4 +166,6 @@ final class CAPSPhysicalOperatorProducer(implicit caps: CAPSSession)
     CAPSPhysicalOperator = {
     operators.GraphUnionAll(graphs, qgn)
   }
+
+  override def planUnwind(in: CAPSPhysicalOperator, list: Expr, item: Var, header: RecordHeader): CAPSPhysicalOperator = ???
 }

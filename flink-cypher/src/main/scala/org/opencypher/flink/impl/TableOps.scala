@@ -1,7 +1,9 @@
 package org.opencypher.flink.impl
 
 import org.apache.flink.api.common.typeinfo.{BasicArrayTypeInfo, BasicTypeInfo, TypeInformation}
+import org.apache.flink.api.java.typeutils.RowTypeInfo
 import org.apache.flink.api.scala._
+import org.apache.flink.api.scala.utils.DataSetUtils
 import org.apache.flink.table.api.scala._
 import org.apache.flink.table.api.{Table, TableSchema, Types}
 import org.apache.flink.table.expressions._
@@ -155,13 +157,6 @@ object TableOps {
       }
     }
 
-    def safeAddColumn(name: String, col: Table): Table = {
-      require(!table.columns.contains(name),
-        s"Cannot add column `$name`. A column with that name exists already. " +
-      s"Use `safeReplaceColumn` if you intend to replace that column.")
-      table.select('*, col.columns.head as Symbol(name))
-    }
-
     def safeAddColumn(name: String, expr: Expression): Table = {
       require(!table.columns.contains(name),
         s"Cannot add column `$name`. A column with that name exists already. " +
@@ -227,6 +222,29 @@ object TableOps {
       safeReplaceColumn(columnName, updatedCol)
     }
 
+    def safeAddIdColumn()(implicit capf: CAPFSession): Table = {
+      require(!table.getSchema.getColumnNames.toSet.contains("id"),
+      "Cannot create column `id` as it already exists")
+
+      val tableTypes = table.getSchema.getTypes
+      val tableNames = table.getSchema.getColumnNames
+
+      val dsWithIndex = table.toDataSet[Row].zipWithUniqueId
+
+      val flattenedDs = dsWithIndex.map { rowWithIndex =>
+        rowWithIndex match {
+          case (l: Long, r: Row) =>
+            val rowAsSeq = (0 until r.getArity).map(r.getField)
+            Row.of(Seq(l.asInstanceOf[java.lang.Long]) ++ rowAsSeq: _*)
+        }
+      }(Types.ROW(Seq(Types.LONG) ++ tableTypes: _*), null)
+
+      flattenedDs.safeCreateTableFromDataSet(
+        Seq("id") ++ tableNames,
+        Seq(Types.LONG) ++ tableTypes
+      )
+    }
+
     def withCypherCompatibleTypes: Table = {
       val castExprs = table.getSchema.getColumnNames.zip(table.getSchema.getTypes).map {
         case (fieldName, fieldType) =>
@@ -244,6 +262,19 @@ object TableOps {
 
   }
 
+  implicit class RichDataSet(val ds: DataSet[Row]) extends AnyVal {
+
+    def safeCreateTableFromDataSet(columnNames: Seq[String], rowTypes: Seq[TypeInformation[_]])
+      (implicit capf: CAPFSession): Table = {
+
+      implicit val rowTypeInfo: RowTypeInfo = new RowTypeInfo(rowTypes: _*)
+      capf.tableEnv.fromDataSet(
+        ds,
+        columnNames.map(UnresolvedFieldReference): _*
+      )
+    }
+
+  }
 
 }
 

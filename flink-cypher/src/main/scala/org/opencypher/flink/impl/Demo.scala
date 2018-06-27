@@ -5,10 +5,13 @@ import java.time.LocalDate
 
 import org.apache.flink.api.scala._
 import org.apache.flink.table.api.scala._
+import org.apache.flink.types.Row
 import org.opencypher.flink.api.io.{CAPFNodeTable, CAPFRelationshipTable, CsvDataSource}
+import org.opencypher.flink.impl.CAPFConverters._
 import org.opencypher.okapi.api.configuration.Configuration.PrintTimings
 import org.opencypher.okapi.api.graph.Namespace
 import org.opencypher.okapi.api.io.conversion.{NodeMapping, RelationshipMapping}
+import org.opencypher.okapi.impl.util.Measurement
 import org.opencypher.okapi.relational.api.configuration.CoraConfiguration.PrintPhysicalPlan
 
 object Demo extends App {
@@ -45,7 +48,14 @@ object Demo extends App {
 
   PrintPhysicalPlan.set()
   PrintTimings.set()
-//    graph.cypher("MATCH (n:Person)-[r:KNOWS]->(n2:Person) RETURN n.age AS age").getRecords.show                                    // expand
+  val planning = Measurement.time(graph.cypher("MATCH (n:Person)-[r:KNOWS]->(n2:Person) RETURN n.age AS age"))
+  println("Planning: " + planning._2)
+  val translation = Measurement.time(planning._1.getRecords.asCapf.table.toDataSet[Row])
+  println("Translation: " + translation._2)
+  val execution = Measurement.time(translation._1.collect())
+  println("Execution: " +  execution._2)
+  println("Flink execution: " + session.env.getLastJobExecutionResult.getNetRuntime)
+//  println(session.tableEnv.explain(planning._1.getRecords.asCapf.table))
 //  val records = graph.cypher("MATCH (n:Person)-[r:KNOWS*2..2]->(n2:Person) RETURN n.name, n2.name").getRecords.show                   // var expand
 //  graph.cypher("MATCH (n:Person) WHERE (n)--({age: 29}) RETURN n.name").getRecords.show                               // exists
 //  graph.cypher("MATCH (n:Person) OPTIONAL MATCH (n)-[:KNOWS]->(b {age: 29}) RETURN n.name, b.name").getRecords.show   // optional match
