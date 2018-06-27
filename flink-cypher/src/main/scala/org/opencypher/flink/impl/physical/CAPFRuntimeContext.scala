@@ -1,5 +1,6 @@
 package org.opencypher.flink.impl.physical
 
+import org.opencypher.flink.api.io.FlinkCypherTable.FlinkTable
 import org.opencypher.flink.impl.physical.operators.CAPFPhysicalOperator
 import org.opencypher.flink.impl.{CAPFGraph, CAPFRecords}
 import org.opencypher.okapi.api.graph.QualifiedGraphName
@@ -17,4 +18,4 @@ case class CAPFRuntimeContext(
   resolve: QualifiedGraphName => Option[CAPFGraph],
   cache: mutable.Map[CAPFPhysicalOperator, CAPFPhysicalResult],
   patternGraphTags: mutable.Map[QualifiedGraphName, Set[Int]])
-extends RuntimeContext[CAPFRecords , CAPFGraph]
+extends RuntimeContext[FlinkTable, CAPFRecords , CAPFGraph]

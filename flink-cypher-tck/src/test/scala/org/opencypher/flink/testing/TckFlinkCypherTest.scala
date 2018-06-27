@@ -28,8 +28,8 @@ class TckFlinkCypherTest extends CAPFTestSuite {
   private val blacklistFile = getClass.getResource("/scenario_blacklist").getFile
   private val scenarios = ScenariosFor(blacklistFile)
 
-  PrintPhysicalPlan.set()
-  PrintOptimizedPhysicalPlan.set()
+//  PrintPhysicalPlan.set()
+//  PrintOptimizedPhysicalPlan.set()
 
   forAll(factories) { (factory, additional_blacklist) =>
     forAll(scenarios.whiteList) { scenario =>

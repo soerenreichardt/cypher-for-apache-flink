@@ -2,12 +2,10 @@ package org.opencypher.flink.impl.physical.operators
 
 import org.apache.flink.table.api.scala._
 import org.apache.flink.table.expressions.{If, UnresolvedFieldReference}
-import org.opencypher.flink.impl.TableOps._
-import org.opencypher.flink._
 import org.opencypher.flink.api.Tags
-import org.opencypher.flink.impl.{CAPFGraph, CAPFRecords}
+import org.opencypher.flink.impl.TableOps._
 import org.opencypher.flink.impl.physical.{CAPFPhysicalResult, CAPFRuntimeContext}
-import org.opencypher.flink.impl.physical.operators.CAPFPhysicalOperator._
+import org.opencypher.flink.impl.{CAPFGraph, CAPFRecords}
 import org.opencypher.okapi.api.graph.QualifiedGraphName
 import org.opencypher.okapi.ir.api.expr.{Expr, Var}
 import org.opencypher.okapi.logical.impl.LogicalPatternGraph
@@ -35,67 +33,10 @@ final case class Join(
 
   override def executeBinary(left: CAPFPhysicalResult, right: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
 
-    left.records.collect
     val joinedRecords = left.records.join(right.records, joinType, joinExprs: _*)
     CAPFPhysicalResult(joinedRecords, left.workingGraph, left.workingGraphName)
   }
 
-}
-
-final case class ExistsSubQuery(
-  lhs: CAPFPhysicalOperator,
-  rhs: CAPFPhysicalOperator,
-  targetField: Var,
-  header: RecordHeader)
-  extends BinaryPhysicalOperator {
-
-  override def executeBinary(left: CAPFPhysicalResult, right: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
-    val leftData = left.records.toTable()
-    val rightData = right.records.toTable()
-    val leftHeader = left.records.header
-    val rightHeader = right.records.header
-
-    val joinFields = leftHeader.vars.intersect(rightHeader.vars)
-
-    val columnsToRemove = joinFields
-      .flatMap(v => rightHeader.ownedBy(v) - v)
-      .map(rightHeader.column)
-      .toSeq
-
-    val lhsJoinSlots = joinFields.map(leftHeader.column)
-    val rhsJoinSlots = joinFields.map(rightHeader.column)
-
-    def generateUniqueColumnName: String = {
-      s"tmp${System.nanoTime}"
-    }
-
-    val joinColumnMapping = lhsJoinSlots
-      .map(lhsColumn => lhsColumn-> rhsJoinSlots.find(_ == lhsColumn).get)
-      .map(pair => (pair._1, pair._2, generateUniqueColumnName))
-      .toSeq
-
-    val reduceRhsData = joinColumnMapping
-      .foldLeft(rightData)((acc, col) => acc.safeRenameColumn(col._2, col._3))
-      .safeDropColumns(columnsToRemove: _*)
-
-    val distinctRightData = reduceRhsData.distinct()
-
-    val joinCols = joinColumnMapping.map(t => t._1 -> t._3)
-
-    val joinedRecords =
-      joinTables(left.records.table, distinctRightData, header, joinCols, "left_outer")(deduplicate = true)(left.records.capf)
-
-    val targetFieldColumnName = rightHeader.column(targetField)
-    val targetFieldColumn = UnresolvedFieldReference(targetFieldColumnName)
-
-    val updatedJoinedRecords = joinedRecords.table
-      .safeReplaceColumn(
-        targetFieldColumnName,
-        If(targetFieldColumn.isNull, false, true)
-      )
-
-    CAPFPhysicalResult(CAPFRecords(header, updatedJoinedRecords)(left.records.capf), left.workingGraph, left.workingGraphName)
-  }
 }
 
 final case class TabularUnionAll(lhs: CAPFPhysicalOperator, rhs: CAPFPhysicalOperator) extends BinaryPhysicalOperator with InheritedHeader {

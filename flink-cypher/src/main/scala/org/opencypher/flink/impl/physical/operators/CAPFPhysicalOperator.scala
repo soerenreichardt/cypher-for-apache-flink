@@ -4,6 +4,7 @@ import org.apache.flink.table.api.Table
 import org.opencypher.flink.impl.CAPFConverters._
 import org.opencypher.flink.impl.TableOps._
 import org.opencypher.flink._
+import org.opencypher.flink.api.io.FlinkCypherTable.FlinkTable
 import org.opencypher.flink.impl.{CAPFGraph, CAPFRecords, CAPFSession}
 import org.opencypher.flink.impl.physical.{CAPFPhysicalResult, CAPFRuntimeContext}
 import org.opencypher.okapi.api.graph.QualifiedGraphName
@@ -16,7 +17,7 @@ import org.opencypher.okapi.trees.AbstractTreeNode
 
 private[flink] abstract class CAPFPhysicalOperator
   extends AbstractTreeNode[CAPFPhysicalOperator]
-  with PhysicalOperator[CAPFRecords, CAPFGraph, CAPFRuntimeContext] {
+  with PhysicalOperator[FlinkTable, CAPFRecords, CAPFGraph, CAPFRuntimeContext] {
 
   override def execute(implicit context: CAPFRuntimeContext): CAPFPhysicalResult
 
@@ -32,37 +33,3 @@ private[flink] abstract class CAPFPhysicalOperator
   }
 }
 
-object CAPFPhysicalOperator {
-  def joinRecords(
-    header: RecordHeader,
-    joinColumns: Seq[(String, String)],
-    joinType: String = "inner",
-    deduplicate: Boolean = false)(lhs: CAPFRecords, rhs: CAPFRecords): CAPFRecords = {
-
-    val lhsData = lhs.toTable()
-    val rhsData = rhs.toTable()
-
-    joinTables(lhsData, rhsData,  header, joinColumns, joinType)(deduplicate)(lhs.capf)
-  }
-
-  def joinTables(lhsData: Table, rhsData: Table, header: RecordHeader, joinCols: Seq[(String, String)], joinType: String)
-    (deduplicate: Boolean)(implicit capf: CAPFSession): CAPFRecords = {
-
-    val joinedData = lhsData.safeJoin(rhsData, joinCols, joinType)
-
-    val returnData = if (deduplicate) {
-      val colsToDrop = joinCols.map(col => col._2)
-      joinedData.safeDropColumns(colsToDrop: _*)
-    } else joinedData
-
-    CAPFRecords(header, returnData)
-  }
-
-  def assertIsNode(e: Expr): Unit = {
-    e.cypherType match {
-      case CTNode(_, _) =>
-      case x =>
-        throw IllegalArgumentException(s"Expected $e to contain a node, but was $x")
-    }
-  }
-}
