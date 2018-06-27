@@ -24,48 +24,31 @@
  * described as "implementation extensions to Cypher" or as "proposed changes to
  * Cypher that are not yet approved by the openCypher community".
  */
-package org.opencypher.okapi.ir.api.expr
+package org.opencypher.spark.api.io
+import org.apache.spark.sql.DataFrame
+import org.opencypher.okapi.api.graph.GraphName
+import org.opencypher.spark.api.io.metadata.CAPSGraphMetaData
+import org.opencypher.spark.schema.CAPSSchema
 
-import org.opencypher.okapi.api.types._
-import org.scalatest.{FunSuite, Matchers}
-
-class ExprTest extends FunSuite with Matchers {
-
-  test("expressions ignore cypher type in equality") {
-    val n = Var("a")(CTInteger)
-    val r = Var("a")(CTString)
-    n should equal(r)
-
-    val a = StartNode(Var("rel")(CTRelationship))(CTWildcard)
-    val b = StartNode(Var("rel")(CTRelationship))(CTNode)
-    a should equal(b)
-  }
-
-  test("same expressions with different cypher types have the same hash code") {
-    val n = Var("a")(CTNode("a"))
-    val r = Var("a")(CTRelationship("b"))
-    n.hashCode should equal(r.hashCode)
-
-    val a = StartNode(Var("rel")(CTRelationship))(CTWildcard)
-    val b = StartNode(Var("rel")(CTRelationship))(CTNode)
-    a.hashCode should equal(b.hashCode)
-  }
-
-  test("different expressions are not equal") {
-    val p = Param("a")()
-    val v = Var("a")()
-    p should not equal (v)
-  }
-
-  test("different expressions have different hash codes") {
-    val p = Param("a")()
-    val v = Var("b")()
-    p.hashCode should not equal (v.hashCode)
-  }
-
-  test("alias expression has same type") {
-    val n = Var("n")(CTNode)
-    (n as Var("m")()).cypherType should equal(n.cypherType)
-  }
-
+trait ROAbstractGraphSource extends AbstractDataSource {
+  override protected def deleteGraph(graphName: GraphName): Unit =
+    throw new UnsupportedOperationException("Read-only graph sources can not delete graphs")
+  override protected def writeSchema(
+    graphName: GraphName,
+    schema: CAPSSchema
+  ): Unit = throw new UnsupportedOperationException("Read-only graph sources can not delete graphs")
+  override protected def writeCAPSGraphMetaData(
+    graphName: GraphName,
+    capsGraphMetaData: CAPSGraphMetaData
+  ): Unit = throw new UnsupportedOperationException("Read-only graph sources can not delete graphs")
+  override protected def writeNodeTable(
+    graphName: GraphName,
+    labels: Set[String],
+    table: DataFrame
+  ): Unit = throw new UnsupportedOperationException("Read-only graph sources can not delete graphs")
+  override protected def writeRelationshipTable(
+    graphName: GraphName,
+    relKey: String,
+    table: DataFrame
+  ): Unit = throw new UnsupportedOperationException("Read-only graph sources can not delete graphs")
 }

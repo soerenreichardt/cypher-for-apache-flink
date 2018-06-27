@@ -28,7 +28,7 @@ package org.opencypher.okapi.relational.api.physical
 
 import org.opencypher.okapi.api.graph.{PropertyGraph, QualifiedGraphName}
 import org.opencypher.okapi.ir.api.block.SortItem
-import org.opencypher.okapi.ir.api.expr.{Aggregator, AliasExpr, Expr, Var}
+import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.logical.impl._
 import org.opencypher.okapi.relational.api.io.{FlatRelationalTable, RelationalCypherRecords}
 import org.opencypher.okapi.relational.impl.physical.{InnerJoin, JoinType}
@@ -46,10 +46,10 @@ import org.opencypher.okapi.relational.impl.table.RecordHeader
   */
 trait PhysicalOperatorProducer[
 O <: FlatRelationalTable[O],
-K <: PhysicalOperator[A, P, I],
+K <: PhysicalOperator[O, A, P, I],
 A <: RelationalCypherRecords[O],
 P <: PropertyGraph,
-I <: RuntimeContext[A, P]] {
+I <: RuntimeContext[O, A, P]] {
 
   // Unary operators
 
@@ -288,18 +288,6 @@ I <: RuntimeContext[A, P]] {
     * @return union operator
     */
   def planTabularUnionAll(lhs: K, rhs: K): K
-
-  /**
-    * Filters the rows of the first input by checking if there exists a corresponding row in the second input.
-    *
-    * @param lhs         first previous operator
-    * @param rhs         second previous operator
-    * @param targetField field that stores the (boolean) result of the evaluation
-    * @param header      resulting record header
-    * @return exists subquery operator
-    */
-  def planExistsSubQuery(lhs: K, rhs: K, targetField: Var, header: RecordHeader): K
-
 
   // N-ary operators
   /**

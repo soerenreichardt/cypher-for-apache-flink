@@ -24,16 +24,29 @@
  * described as "implementation extensions to Cypher" or as "proposed changes to
  * Cypher that are not yet approved by the openCypher community".
  */
-package org.opencypher.spark.api.io.csv
+package org.opencypher.spark.impl.io.neo4j
 
-import org.opencypher.spark.api.CAPSSession
-import org.opencypher.spark.api.io.fs.FileBasedDataSource
-import org.opencypher.spark.impl.io.CAPSPropertyGraphDataSource
+import org.neo4j.driver.v1.Session
+import org.opencypher.okapi.api.value.CypherValue
+import org.opencypher.okapi.api.value.CypherValue.CypherValue
+import org.opencypher.spark.api.io.neo4j.Neo4jConfig
 
-object CsvDataSource {
+import scala.collection.JavaConverters._
 
-  def apply(rootPath: String)(implicit session: CAPSSession): CAPSPropertyGraphDataSource = {
-    new FileBasedDataSource(rootPath, "csv")
+object Neo4jHelpers {
+  implicit class RichConfig(val config: Neo4jConfig) extends AnyVal {
+
+    def execute[T](f: Session => T): T = {
+      val session = config.driver().session
+      val t = f(session)
+      session.close()
+      t
+    }
+
+    def cypher(query: String): List[Map[String, CypherValue]] = {
+      execute { session =>
+        session.run(query).list().asScala.map(_.asMap().asScala.mapValues(CypherValue(_)).toMap).toList
+      }
+    }
   }
-
 }

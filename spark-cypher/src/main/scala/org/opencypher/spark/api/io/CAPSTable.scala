@@ -42,11 +42,11 @@ import org.opencypher.okapi.relational.impl.table.RecordHeader
 import org.opencypher.spark.api.CAPSSession
 import org.opencypher.spark.api.io.SparkCypherTable.DataFrameTable
 import org.opencypher.spark.impl.DataFrameOps._
+import org.opencypher.spark.impl.SparkSQLExprMapper._
 import org.opencypher.spark.impl.util.Annotation
 import org.opencypher.spark.impl.{CAPSRecords, RecordBehaviour}
 import org.opencypher.spark.schema.CAPSSchema
 import org.opencypher.spark.schema.CAPSSchema._
-import org.opencypher.spark.impl.SparkSQLExprMapper._
 
 import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe._
@@ -78,7 +78,8 @@ object SparkCypherTable {
       df.where(expr.asSparkSQLExpr(header, df, parameters))
     }
 
-    override def withColumn(column: String, expr: Expr)(implicit header: RecordHeader, parameters: CypherMap): DataFrameTable = {
+    override def withColumn(column: String, expr: Expr)
+      (implicit header: RecordHeader, parameters: CypherMap): DataFrameTable = {
       df.withColumn(column, expr.asSparkSQLExpr(header, df, parameters))
     }
 
@@ -105,21 +106,28 @@ object SparkCypherTable {
         case LeftOuterJoin => "left_outer"
         case RightOuterJoin => "right_outer"
         case FullOuterJoin => "full_outer"
+        case CrossJoin => "cross"
       }
 
 
       val overlap = this.physicalColumns.toSet.intersect(other.physicalColumns.toSet)
       assert(overlap.isEmpty, s"overlapping columns: $overlap")
 
-      val joinExpr = joinCols.map {
-        case (l, r) => df.col(l) === other.df.col(r)
-      }.reduce((acc, expr) => acc && expr)
+      joinType match {
+        case CrossJoin =>
+          df.crossJoin(other.df)
 
-      // TODO: the join produced corrupt data when the previous operator was a cross. We work around that by using a
-      // subsequent select. This can be removed, once https://issues.apache.org/jira/browse/SPARK-23855 is solved or we
-      // upgrade to Spark 2.3.0
-      val potentiallyCorruptedResult = df.join(other.df, joinExpr, joinTypeString)
-      potentiallyCorruptedResult.select("*")
+        case _ =>
+          val joinExpr = joinCols.map {
+            case (l, r) => df.col(l) === other.df.col(r)
+          }.reduce((acc, expr) => acc && expr)
+
+          // TODO: the join produced corrupt data when the previous operator was a cross. We work around that by using a
+          // subsequent select. This can be removed, once https://issues.apache.org/jira/browse/SPARK-23855 is solved or we
+          // upgrade to Spark 2.3.0
+          val potentiallyCorruptedResult = df.join(other.df, joinExpr, joinTypeString)
+          potentiallyCorruptedResult.select("*")
+      }
     }
 
     override def distinct: DataFrameTable =
@@ -167,7 +175,8 @@ case class CAPSNodeTable(
   override def from(
     header: RecordHeader,
     table: DataFrameTable,
-    columnNames: Option[Seq[String]] = None): CAPSNodeTable = CAPSNodeTable(mapping, table)
+    columnNames: Option[Seq[String]] = None
+  ): CAPSNodeTable = CAPSNodeTable(mapping, table)
 
   override private[spark] def entityType = mapping.cypherType
 }

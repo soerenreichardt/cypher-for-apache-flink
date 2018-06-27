@@ -37,7 +37,7 @@ import org.opencypher.okapi.ir.api.block.{Asc, Desc, SortItem}
 import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.ir.api.{Label, PropertyKey, RelType}
 import org.opencypher.okapi.relational.api.io.RelationalEntityMapping._
-import org.opencypher.okapi.relational.impl.physical.{Ascending, Descending, JoinType, Order}
+import org.opencypher.okapi.relational.impl.physical._
 import org.opencypher.okapi.relational.impl.table.RecordHeader
 
 trait FlatRelationalTable[T <: FlatRelationalTable[T]] extends CypherTable {
@@ -91,12 +91,14 @@ trait RelationalCypherRecords[T <: FlatRelationalTable[T]] extends CypherRecords
     val headerWithAliases = header.withAlias(aliasExprs: _*)
 
     val selectHeader = headerWithAliases.select(allExprs: _*)
-    val logicalColumns = allExprs.collect { case e: Var => e.withoutType }
+    val logicalColumns = allExprs.flatMap(_.owner).collect{
+      case v: Var => v.withoutType
+    }.distinct
 
     from(selectHeader, relationalTable.select(allExprs.map(headerWithAliases.column).distinct: _*), Some(logicalColumns))
   }
 
-  def filter(expr: Expr)(implicit parameters: CypherMap): R = {
+    def filter(expr: Expr)(implicit parameters: CypherMap): R = {
     val filteredTable = relationalTable.filter(expr)(header, parameters)
     from(header, filteredTable)
   }
@@ -172,7 +174,22 @@ trait RelationalCypherRecords[T <: FlatRelationalTable[T]] extends CypherRecords
   }
 
   def unionAll(other: R): R = {
-    val unionData = relationalTable.unionAll(other.relationalTable)
+    val leftColumns = relationalTable.physicalColumns
+    val rightColumns = other.relationalTable.physicalColumns
+
+    if (leftColumns.size != rightColumns.size) {
+      throw IllegalArgumentException("same number of columns", s"left: $leftColumns right: $rightColumns")
+    }
+    if (leftColumns.toSet != rightColumns.toSet) {
+      throw IllegalArgumentException("same column names", s"left: $leftColumns right: $rightColumns")
+    }
+
+    val orderedTable = if (leftColumns != rightColumns) {
+      other.relationalTable.select(leftColumns: _*)
+    } else {
+      other.relationalTable
+    }
+    val unionData = relationalTable.unionAll(orderedTable)
     from(header, unionData)
   }
 

@@ -24,48 +24,40 @@
  * described as "implementation extensions to Cypher" or as "proposed changes to
  * Cypher that are not yet approved by the openCypher community".
  */
-package org.opencypher.okapi.ir.api.expr
+package org.opencypher.spark.util
 
-import org.opencypher.okapi.api.types._
-import org.scalatest.{FunSuite, Matchers}
+import org.neo4j.graphdb.Result
+import org.neo4j.harness.{ServerControls, TestServerBuilders}
+import org.opencypher.spark.api.io.neo4j.Neo4jConfig
 
-class ExprTest extends FunSuite with Matchers {
+object Neo4jHelpers {
 
-  test("expressions ignore cypher type in equality") {
-    val n = Var("a")(CTInteger)
-    val r = Var("a")(CTString)
-    n should equal(r)
+  implicit class RichServerControls(val server: ServerControls) extends AnyVal {
 
-    val a = StartNode(Var("rel")(CTRelationship))(CTWildcard)
-    val b = StartNode(Var("rel")(CTRelationship))(CTNode)
-    a should equal(b)
+    def dataSourceConfig =
+      Neo4jConfig(server.boltURI(), user = "anonymous", password = Some("password"), encrypted = false)
+
+    def uri: String = {
+      val scheme = server.boltURI().getScheme
+      val userInfo = s"anonymous:password@"
+      val host = server.boltURI().getAuthority
+      s"$scheme://$userInfo$host"
+    }
+
+    def stop(): Unit = {
+      server.close()
+    }
+
+    def execute(cypher: String): Result =
+      server.graph().execute(cypher)
   }
 
-  test("same expressions with different cypher types have the same hash code") {
-    val n = Var("a")(CTNode("a"))
-    val r = Var("a")(CTRelationship("b"))
-    n.hashCode should equal(r.hashCode)
-
-    val a = StartNode(Var("rel")(CTRelationship))(CTWildcard)
-    val b = StartNode(Var("rel")(CTRelationship))(CTNode)
-    a.hashCode should equal(b.hashCode)
+  def startNeo4j(dataFixture: String): ServerControls = {
+    TestServerBuilders
+      .newInProcessBuilder()
+      .withConfig("dbms.security.auth_enabled", "true")
+      .withFixture("CALL dbms.security.createUser('anonymous', 'password', false)")
+      .withFixture(dataFixture)
+      .newServer()
   }
-
-  test("different expressions are not equal") {
-    val p = Param("a")()
-    val v = Var("a")()
-    p should not equal (v)
-  }
-
-  test("different expressions have different hash codes") {
-    val p = Param("a")()
-    val v = Var("b")()
-    p.hashCode should not equal (v.hashCode)
-  }
-
-  test("alias expression has same type") {
-    val n = Var("n")(CTNode)
-    (n as Var("m")()).cypherType should equal(n.cypherType)
-  }
-
 }
