@@ -43,20 +43,28 @@ class FileBasedDataSource(
     val tableSourceName = tableStorageFormat + "#" + UUID.randomUUID()
     tableStorageFormat match {
       case "csv" =>
-        val csvSource = new CsvTableSource(path, schema.map(_.name).toArray, schema.map(_.resultType).toArray)
-        session.tableEnv.registerTableSource(tableSourceName, csvSource)
-        session.tableEnv.scan(tableSourceName)
+        readFromCsv(path, schema, tableSourceName)
       case "orc" =>
-        val typeDescription = schema.foldLeft(new TypeDescription(TypeDescription.Category.STRUCT)) {
-          case (acc, fieldRef) => acc.addField(fieldRef.name, fieldRef.resultType.getOrcType)
-        }
-        val orcSource = OrcTableSource.builder()
-          .path(path)
-          .forOrcSchema(typeDescription)
-          .build()
-        session.tableEnv.registerTableSource(tableSourceName, orcSource)
-        session.tableEnv.scan(tableSourceName)
+        readFromOrc(path, schema, tableSourceName)
     }
+  }
+
+  private def readFromCsv(path: String, schema: Seq[ResolvedFieldReference], tableSourceName: String): Table = {
+    val csvSource = new CsvTableSource(path, schema.map(_.name).toArray, schema.map(_.resultType).toArray)
+    session.tableEnv.registerTableSource(tableSourceName, csvSource)
+    session.tableEnv.scan(tableSourceName)
+  }
+
+  private def readFromOrc(path: String, schema: Seq[ResolvedFieldReference], tableSourceName: String): Table = {
+    val typeDescription = schema.foldLeft(new TypeDescription(TypeDescription.Category.STRUCT)) {
+      case (acc, fieldRef) => acc.addField(fieldRef.name, fieldRef.resultType.getOrcType)
+    }
+    val orcSource = OrcTableSource.builder()
+      .path(path)
+      .forOrcSchema(typeDescription)
+      .build()
+    session.tableEnv.registerTableSource(tableSourceName, orcSource)
+    session.tableEnv.scan(tableSourceName)
   }
 
   protected def writeTable(path: String, tableStorageFormat: String, table: Table): Unit = {

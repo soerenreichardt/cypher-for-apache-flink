@@ -9,7 +9,7 @@ import org.opencypher.flink.impl.{CAPFGraph, CAPFRecords}
 import org.opencypher.okapi.api.graph.QualifiedGraphName
 import org.opencypher.okapi.ir.api.expr.{Expr, Var}
 import org.opencypher.okapi.logical.impl.LogicalPatternGraph
-import org.opencypher.okapi.relational.impl.physical.JoinType
+import org.opencypher.okapi.relational.impl.physical.{CrossJoin, JoinType}
 import org.opencypher.okapi.relational.impl.table.RecordHeader
 
 private[flink] abstract class BinaryPhysicalOperator extends CAPFPhysicalOperator {
@@ -33,7 +33,14 @@ final case class Join(
 
   override def executeBinary(left: CAPFPhysicalResult, right: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
 
-    val joinedRecords = left.records.join(right.records, joinType, joinExprs: _*)
+    val joinedRecords = joinType match {
+      case CrossJoin =>
+        val crossedTable = left.records.table.cross(right.records.table)(left.records.capf)
+        CAPFRecords(header, crossedTable)(left.records.capf)
+      case other =>
+        left.records.join(right.records, joinType, joinExprs: _*)
+    }
+
     CAPFPhysicalResult(joinedRecords, left.workingGraph, left.workingGraphName)
   }
 

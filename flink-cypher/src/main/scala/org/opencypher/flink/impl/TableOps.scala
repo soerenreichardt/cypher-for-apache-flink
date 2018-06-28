@@ -4,8 +4,8 @@ import org.apache.flink.api.common.typeinfo.{BasicArrayTypeInfo, BasicTypeInfo, 
 import org.apache.flink.api.java.typeutils.RowTypeInfo
 import org.apache.flink.api.scala._
 import org.apache.flink.api.scala.utils.DataSetUtils
-import org.apache.flink.table.api.scala._
-import org.apache.flink.table.api.{Table, TableSchema, Types}
+import org.apache.flink.table.api.scala.{BatchTableEnvironment, _}
+import org.apache.flink.table.api.{Table, TableEnvironment, TableSchema, Types}
 import org.apache.flink.table.expressions._
 import org.apache.flink.table.functions.ScalarFunction
 import org.apache.flink.types.Row
@@ -222,8 +222,8 @@ object TableOps {
       safeReplaceColumn(columnName, updatedCol)
     }
 
-    def safeAddIdColumn()(implicit capf: CAPFSession): Table = {
-      require(!table.getSchema.getColumnNames.toSet.contains("id"),
+    def safeAddIdColumn(idColumnName: String)(implicit capf: CAPFSession): Table = {
+      require(!table.getSchema.getColumnNames.toSet.contains(idColumnName),
       "Cannot create column `id` as it already exists")
 
       val tableTypes = table.getSchema.getTypes
@@ -240,7 +240,7 @@ object TableOps {
       }(Types.ROW(Seq(Types.LONG) ++ tableTypes: _*), null)
 
       flattenedDs.safeCreateTableFromDataSet(
-        Seq("id") ++ tableNames,
+        Seq(idColumnName) ++ tableNames,
         Seq(Types.LONG) ++ tableTypes
       )
     }
