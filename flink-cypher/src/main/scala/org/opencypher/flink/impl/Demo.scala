@@ -56,9 +56,11 @@ object Demo extends App {
 //  println("Execution: " +  execution._2)
 //  println("Flink execution: " + session.env.getLastJobExecutionResult.getNetRuntime)
 //  println(session.tableEnv.explain(planning._1.getRecords.asCapf.table))
-  graph.cypher("MATCH (n:Person)-[r:KNOWS*2..2]->(n2:Person) RETURN n.name, n2.name").getRecords.show                   // var expand
+//  graph.cypher("MATCH (n:Person)-[r:KNOWS*2..2]->(n2:Person) RETURN n.name, n2.name").getRecords.show                   // var expand
 //  graph.cypher("MATCH (n:Person) WHERE (n)--({age: 29}) RETURN n.name").getRecords.show                               // exists
 //  graph.cypher("MATCH (n:Person) OPTIONAL MATCH (n)-[:KNOWS]->(b {age: 29}) RETURN n.name, b.name").getRecords.show   // optional match
+
+  graph.cypher("MATCH (n) RETURN CASE n.age WHEN 26 THEN 'Alice' WHEN 23 THEN 'Bob' ELSE 'other' END AS name").getRecords.show
 
 //  graph.cypher(
 //    """

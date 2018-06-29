@@ -4,7 +4,7 @@ import org.apache.flink.api.common.typeinfo.TypeInformation
 import org.apache.flink.table.api.scala._
 import org.apache.flink.table.api.{Table, Types}
 import org.apache.flink.table.expressions
-import org.apache.flink.table.expressions.Expression
+import org.apache.flink.table.expressions.{Expression, If}
 import org.apache.flink.table.functions.{ScalarFunction, TableFunction}
 import org.opencypher.flink.impl.TableOps._
 import org.opencypher.flink.impl.convert.FlinkConversions._
@@ -153,17 +153,6 @@ object FlinkSQLExprMapper {
         case Explode(list) =>
           list.asFlinkSQLExpr
 
-//        case u@Explode(list) =>
-//          list.cypherType match {
-//            case _: CTList | _: CTListOrNull =>
-//              val innerExpr = list.asFlinkSQLExpr
-//              val columnName = header.column(u)
-//              val cardinality = innerExpr.cardinality()
-//              val unwindFunction = new Unwind(innerExpr)
-//              ???
-//            case other => throw IllegalArgumentException("CTList", other)
-//          }
-
         case StartNodeFunction(e) =>
           val rel = e.owner.get
           header.startNodeFor(rel).asFlinkSQLExpr
@@ -181,7 +170,25 @@ object FlinkSQLExprMapper {
           val columns = es.map(_.asFlinkSQLExpr)
           columns.find(_.isNotNull == true).get
 
-        case c: CaseExpr => ???
+        case c: CaseExpr =>
+          val alternatives = c.alternatives.map {
+            case (predicate, action) => (predicate.asFlinkSQLExpr, action.asFlinkSQLExpr)
+          }
+
+          val alternativesHead = alternatives.head
+
+          def ifElseExpression(tailExprs: IndexedSeq[(Expression, Expression)]): Expression = {
+            tailExprs.headOption match {
+              case Some(head) => expressions.If(head._1, head._2, ifElseExpression(tailExprs.tail))
+              case None =>
+                c.default match {
+                  case Some(inner) => inner.asFlinkSQLExpr
+                  case None => expressions.Null(Types.LONG)
+                }
+            }
+          }
+
+          expressions.If(alternativesHead._1, alternativesHead._2, ifElseExpression(alternatives.tail))
       }
 
     }

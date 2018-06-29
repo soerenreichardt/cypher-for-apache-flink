@@ -41,10 +41,10 @@ case class EdgeListDataSource(path: String, options: Map[String, String] = Map.e
       .fieldDelimiter(options.get("sep").get)
       .commentPrefix(options.get("comment").get)
       .build()
+
     session.tableEnv.registerTableSource("relScanCsv", relTableSource)
     val rawRels = session.tableEnv.scan("relScanCsv")
       .safeAddIdColumn(sourceIdKey)
-      .select(sourceIdKey, sourceStartNodeKey, sourceEndNodeKey)
 
     val rawNodes = rawRels
       .select(UnresolvedFieldReference(sourceStartNodeKey) as Symbol(sourceIdKey))
