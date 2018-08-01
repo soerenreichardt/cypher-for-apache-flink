@@ -6,6 +6,7 @@ import java.time.LocalDate
 import org.apache.flink.api.scala._
 import org.apache.flink.table.api.scala._
 import org.apache.flink.types.Row
+import org.opencypher.flink.api.io.fs.FileBasedDataSource
 import org.opencypher.flink.api.io.{CAPFNodeTable, CAPFRelationshipTable, CsvDataSource}
 import org.opencypher.flink.impl.CAPFConverters._
 import org.opencypher.okapi.api.configuration.Configuration.PrintTimings
@@ -114,6 +115,22 @@ object CsvDemo extends App {
       |FROM GRAPH csv.products
       |MATCH (c:Customer)
       |RETURN *
+    """.stripMargin
+  ).getRecords.show
+}
+
+object OrcDemo extends App {
+
+  implicit val session: CAPFSession = CAPFSession.local()
+
+  val orcFolder = getClass.getResource("/orc").getFile
+  session.registerSource(Namespace("orc"), new FileBasedDataSource(orcFolder, "orc"))
+
+  session.cypher(
+    """
+      |FROM GRAPH orc.sf1
+      |MATCH (n:Person)
+      |RETURN n.firstName
     """.stripMargin
   ).getRecords.show
 }

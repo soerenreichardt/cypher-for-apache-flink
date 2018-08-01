@@ -94,6 +94,12 @@
             <version>${dep.circe.version}</version>
         </dependency>
 
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-client</artifactId>
+            <version>${dep.hadoop.version}</version>
+        </dependency>
+
     </dependencies>
 
 </project>

@@ -35,7 +35,7 @@ class FileBasedDataSource(
 
   protected def deleteDirectory(path: String): Unit = fileSystem.deleteDirectory(path)
 
-  protected def readFile(path: String): String = fileSystem.readFile(path)
+  protected def readFile(path: String): String = fileSystem.readFile("flink-cypher/src/main/resources/" + path)
 
   protected def writeFile(path: String, content: String): Unit = fileSystem.writeFile(path, content)
 

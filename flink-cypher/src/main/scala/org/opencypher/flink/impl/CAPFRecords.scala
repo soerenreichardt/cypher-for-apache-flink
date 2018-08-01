@@ -1,6 +1,6 @@
 package org.opencypher.flink.impl
 
-import org.apache.flink.api.java.typeutils.RowTypeInfo
+import org.apache.flink.api.java.typeutils.{ObjectArrayTypeInfo, RowTypeInfo}
 import org.apache.flink.api.scala._
 import org.apache.flink.table.api.scala._
 import org.apache.flink.table.api.{Table, Types}
@@ -95,6 +95,7 @@ case class CAPFRecords(header: RecordHeader, table: Table, override val logicalC
   protected val TRUE_LIT: Expression = Literal(true, Types.BOOLEAN)
   protected val FALSE_LIT: Expression = Literal(false, Types.BOOLEAN)
   protected val NULL_LIT: Expression = Null(Types.BOOLEAN)
+  protected val EMPTY_LIST: Expression = ArrayConstructor(Seq("0"))
 
   def alignWith(v: Var, targetHeader: RecordHeader): CAPFRecords = {
 
@@ -145,7 +146,12 @@ case class CAPFRecords(header: RecordHeader, table: Table, override val logicalC
                 s"Cannot align scan on $v by adding a NULL column, because the type for '$expr' is non-nullable"
               )
             }
-            NULL_LIT.cast(expr.cypherType.getFlinkType)
+            val nullOrEmptyList = if (!expr.cypherType.getFlinkType.isBasicType) {
+              EMPTY_LIST
+            } else {
+              NULL_LIT
+            }
+            nullOrEmptyList.cast(expr.cypherType.getFlinkType)
         }
 
         currentTable.safeUpsertColumn(
