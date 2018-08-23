@@ -98,7 +98,7 @@ trait RelationalCypherRecords[T <: FlatRelationalTable[T]] extends CypherRecords
     from(selectHeader, relationalTable.select(allExprs.map(headerWithAliases.column).distinct: _*), Some(logicalColumns))
   }
 
-    def filter(expr: Expr)(implicit parameters: CypherMap): R = {
+  def filter(expr: Expr)(implicit parameters: CypherMap): R = {
     val filteredTable = relationalTable.filter(expr)(header, parameters)
     from(header, filteredTable)
   }

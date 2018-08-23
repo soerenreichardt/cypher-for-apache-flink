@@ -34,9 +34,9 @@ abstract class AbstractDataSource(implicit val session: CAPFSession) extends CAP
 
   protected def writeCAPFGraphMetaData(graphName: GraphName, capfGraphMetaData: CAPFGraphMetaData): Unit
 
-  protected def readNodeTable(graphName: GraphName, tableStorageFormat: String, labels: Set[String], tableSchema: Seq[ResolvedFieldReference]): Table
+  protected def readNodeTable(graphName: GraphName, labels: Set[String], tableSchema: Seq[ResolvedFieldReference]): Table
 
-  protected def writeNodeTable(graphName: GraphName, tableStorageFormat: String, labels: Set[String], table: Table): Unit
+  protected def writeNodeTable(graphName: GraphName, labels: Set[String], table: Table): Unit
 
   protected def readRelationshipTable(graphName: GraphName, relKey: String, tableSchema: Seq[ResolvedFieldReference]): Table
 
@@ -64,7 +64,7 @@ abstract class AbstractDataSource(implicit val session: CAPFSession) extends CAP
         }
 
         val columnsWithCypherType = propertyColsWithCypherType + (GraphEntity.sourceIdKey -> CTInteger)
-        val table = readNodeTable(graphName, capfMetaData.tableStorageFormat, combo, capfSchema.canonicalNodeFieldReference(combo))
+        val table = readNodeTable(graphName, combo, capfSchema.canonicalNodeFieldReference(combo))
         CAPFNodeTable(combo, table)
       }
 
@@ -103,7 +103,7 @@ abstract class AbstractDataSource(implicit val session: CAPFSession) extends CAP
     writeSchema(graphName, schema)
 
     schema.labelCombinations.combos.foreach { combo =>
-      writeNodeTable(graphName, tableStorageFormat, combo, capfGraph.canonicalNodeTable(combo))
+      writeNodeTable(graphName, combo, capfGraph.canonicalNodeTable(combo))
     }
 
     schema.relationshipTypes.foreach { relType =>

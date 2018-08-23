@@ -13,6 +13,8 @@ import org.opencypher.okapi.api.configuration.Configuration.PrintTimings
 import org.opencypher.okapi.api.graph.Namespace
 import org.opencypher.okapi.api.io.conversion.{NodeMapping, RelationshipMapping}
 import org.opencypher.okapi.impl.util.Measurement
+import org.opencypher.okapi.ir.api.configuration.IrConfiguration.PrintIr
+import org.opencypher.okapi.logical.api.configuration.LogicalConfiguration.PrintLogicalPlan
 import org.opencypher.okapi.relational.api.configuration.CoraConfiguration.PrintPhysicalPlan
 
 object Demo extends App {
@@ -46,7 +48,8 @@ object Demo extends App {
 
   val graph: CAPFGraph = session.readFrom(nodeTable, relTable)
 
-
+  PrintIr.set()
+  PrintLogicalPlan.set()
   PrintPhysicalPlan.set()
   PrintTimings.set()
   val planning = Measurement.time(graph.cypher("MATCH (n:Person)-[r:KNOWS]->(n2:Person) WHERE n.age >= 26 RETURN n.age AS age"))
@@ -123,7 +126,7 @@ object OrcDemo extends App {
 
   implicit val session: CAPFSession = CAPFSession.local()
 
-  val orcFolder = getClass.getResource("/orc").getFile
+  val orcFolder = getClass.getResource("/orc").getPath
   session.registerSource(Namespace("orc"), new FileBasedDataSource(orcFolder, "orc"))
 
   session.cypher(
