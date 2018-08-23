@@ -124,37 +124,6 @@ final case class CopyColumn(in: CAPFPhysicalOperator, from: Expr, to: Expr, head
   }
 }
 
-final case class Project(in: CAPFPhysicalOperator, expr: Expr, alias: Option[Expr], header: RecordHeader) extends UnaryPhysicalOperator {
-
-  override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
-    prev.mapRecordsWithDetails { records: CAPFRecords =>
-      val newColumn = alias.getOrElse(expr)
-      val updatedData = if (in.header.contains(newColumn)) {
-        records.table
-      } else {
-        val tableColumn = expr.asFlinkSQLExpr (header, records.table, context.parameters) as Symbol (header.column (newColumn) )
-        val columnsToSelect = in.header.columns.toSeq.map(UnresolvedFieldReference) :+ tableColumn
-        records.table.select(columnsToSelect: _*)
-      }
-      CAPFRecords(header, updatedData)(records.capf)
-    }
-  }
-
-  private def unwind(records: CAPFRecords, list: Expr, column: ResolvedFieldReference)(implicit context: CAPFRuntimeContext): Table = {
-    list match {
-      case p@Param(name) if p.cypherType.subTypeOf(CTList(CTAny)).maybeTrue =>
-        context.parameters(name) match {
-          case CypherList(l) =>
-            val session = records.capf
-            implicit val typeInfo: RowTypeInfo = new RowTypeInfo(column.resultType)
-            val listDS = session.env.fromCollection(l.unwrap.map(v => Row.of(v.asInstanceOf[AnyRef])))
-            session.tableEnv.fromDataSet(listDS, Symbol(column.name))
-        }
-      case notAList => throw IllegalArgumentException("a Cypher list", notAList)
-    }
-  }
-}
-
 final case class Drop(in: CAPFPhysicalOperator, dropFields: Set[Expr], header: RecordHeader) extends UnaryPhysicalOperator {
 
   override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
@@ -170,10 +139,7 @@ final case class RenameColumns(in: CAPFPhysicalOperator, renameExprs: Map[Expr, 
 
 final case class Filter(in: CAPFPhysicalOperator, expr: Expr, header: RecordHeader) extends UnaryPhysicalOperator {
   override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult = {
-    prev.mapRecordsWithDetails { records =>
-      val filteredRows = records.table.where(expr.asFlinkSQLExpr(header, records.table, context.parameters))
-      CAPFRecords(header, filteredRows)(records.capf)
-    }
+    prev.mapRecordsWithDetails { records => records.filter(expr)(context.parameters) }
   }
 }
 
@@ -338,27 +304,3 @@ final case class FromGraph(in: CAPFPhysicalOperator, graph: LogicalCatalogGraph)
   override def executeUnary(prev: CAPFPhysicalResult)(implicit context: CAPFRuntimeContext): CAPFPhysicalResult =
     CAPFPhysicalResult(prev.records, resolve(graph.qualifiedGraphName), graph.qualifiedGraphName)
 }
-
-//object IdGenerator {
-//
-//  var lastIds = new java.util.concurrent.ConcurrentHashMap[Int, Long]
-//  var parallelism: Int = 0
-//  var baseValue: Long = 0
-//
-//  def increment(parId: Int, parallelism: Int): Long = {
-//    if (this.parallelism == 0) this.parallelism = parallelism
-//
-//    if (this.parallelism == parallelism) {
-//      val mapValue = lastIds.get(parId)
-//      if (mapValue == null) {
-//        lastIds.put(parId, baseValue + parId.toLong)
-//      } else {
-//        lastIds.put(parId, baseValue + parId * (((lastIds.get(parId) - baseValue) / parallelism) + 1))
-//      }
-//    } else {
-//      baseValue = ???
-//    }
-//
-//    lastIds.get(parId)
-//  }
-//}
