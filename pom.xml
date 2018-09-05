@@ -412,6 +412,7 @@
       </activation>
 
       <modules>
+        <module>licensecheck-config</module>
         <module>okapi-api</module>
         <module>okapi-ir</module>
         <module>okapi-logical</module>
