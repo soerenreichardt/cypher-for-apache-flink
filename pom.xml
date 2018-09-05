@@ -151,6 +151,13 @@
               </configuration>
             </execution>
           </executions>
+          <dependencies>
+            <dependency>
+              <groupId>org.opencypher</groupId>
+              <artifactId>okapi-licensecheck-config</artifactId>
+              <version>${project.version}</version>
+            </dependency>
+          </dependencies>
         </plugin>
 
         <!-- License header checking -->

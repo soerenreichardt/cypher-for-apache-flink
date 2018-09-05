@@ -26,28 +26,27 @@
  */
 package org.opencypher.flink.api.io
 
-import org.apache.flink.api.scala._
 import org.apache.flink.table.api.scala._
 import org.apache.flink.table.api.{Table, Types}
 import org.apache.flink.table.expressions._
-import org.opencypher.okapi.api.types._
-import org.opencypher.okapi.relational.api.io.{EntityTable, FlatRelationalTable}
 import org.opencypher.flink.api.io.FlinkCypherTable.FlinkTable
-import org.opencypher.flink.schema.CAPFSchema._
-import org.opencypher.flink.impl.{CAPFRecords, CAPFSession, RecordBehaviour}
-import org.opencypher.flink.impl.TableOps._
 import org.opencypher.flink.impl.FlinkSQLExprMapper._
+import org.opencypher.flink.impl.TableOps._
+import org.opencypher.flink.impl.{CAPFRecords, CAPFSession, RecordBehaviour}
 import org.opencypher.flink.schema.CAPFSchema
-import org.opencypher.okapi.api.table.CypherTable._
+import org.opencypher.flink.schema.CAPFSchema._
 import org.opencypher.okapi.api.io.conversion.{NodeMapping, RelationshipMapping}
 import org.opencypher.okapi.api.schema.Schema
+import org.opencypher.okapi.api.table.CypherTable._
+import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.api.value.CypherValue
 import org.opencypher.okapi.api.value.CypherValue.{CypherMap, CypherValue}
 import org.opencypher.okapi.impl.exception.IllegalArgumentException
-import org.opencypher.okapi.relational.impl.physical._
-import org.opencypher.okapi.relational.impl.table.RecordHeader
 import org.opencypher.okapi.impl.util.StringEncodingUtilities._
 import org.opencypher.okapi.ir.api.expr.Expr
+import org.opencypher.okapi.relational.api.io.{EntityTable, FlatRelationalTable}
+import org.opencypher.okapi.relational.impl.physical._
+import org.opencypher.okapi.relational.impl.table.RecordHeader
 
 object FlinkCypherTable {
 
