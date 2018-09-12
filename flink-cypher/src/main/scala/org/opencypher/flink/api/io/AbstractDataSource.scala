@@ -26,6 +26,8 @@
  */
 package org.opencypher.flink.api.io
 
+import org.apache.flink.api.scala._
+import org.apache.flink.table.api.scala._
 import org.apache.flink.table.api.{Table, TableSchema}
 import org.apache.flink.table.expressions.ResolvedFieldReference
 import org.opencypher.flink.api.io.metadata.CAPFGraphMetaData
@@ -102,7 +104,7 @@ abstract class AbstractDataSource(implicit val session: CAPFSession) extends CAP
         val table = readRelationshipTable(graphName, relType, capfSchema.canonicalRelFieldReference(relType))
         CAPFRelationshipTable(relType, table)
       }
-      CAPFGraph.create(capfMetaData.tags, nodeTables.head, (nodeTables.tail ++ relTables).toSeq: _*)
+      CAPFGraph.create(capfMetaData.tags, Some(capfSchema), nodeTables.head, (nodeTables.tail ++ relTables).toSeq: _*)
     }
   }
 

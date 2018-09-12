@@ -75,6 +75,7 @@
     <dep.spark.version>2.2.1</dep.spark.version>
     <dep.spark.scope>compile</dep.spark.scope>
     <dep.flink.version>1.5.3</dep.flink.version>
+    <dep.flink.scope>compile</dep.flink.scope>
     <dep.upickle.version>0.6.6</dep.upickle.version>
     <dep.circe.version>0.10.0-M1</dep.circe.version>
 
@@ -357,6 +358,7 @@
       <id>testing</id>
       <properties>
         <dep.spark.scope>compile</dep.spark.scope>
+        <dep.flink.scope>compile</dep.flink.scope>
       </properties>
 
       <!-- No license listing for this profile -->
@@ -411,6 +413,7 @@
       <properties>
         <project.artifact.classifier>cluster</project.artifact.classifier>
         <dep.spark.scope>provided</dep.spark.scope>
+        <dep.flink.scope>provided</dep.flink.scope>
       </properties>
       <activation>
         <property>

@@ -115,12 +115,16 @@ object CAPFGraph {
     }
 
   def create(nodeTable: CAPFNodeTable, entityTables: CAPFEntityTable*)(implicit capf: CAPFSession): CAPFGraph = {
-    create(Set(0), nodeTable, entityTables: _*)
+    create(Set(0), None, nodeTable, entityTables: _*)
   }
 
-  def create(tags: Set[Int], nodeTable: CAPFNodeTable, entityTables: CAPFEntityTable*)(implicit capf: CAPFSession): CAPFGraph = {
+  def create(maybeSchema: Option[CAPFSchema], nodeTable: CAPFNodeTable, entityTables: CAPFEntityTable*)(implicit capf: CAPFSession): CAPFGraph = {
+    create(Set(0), maybeSchema, nodeTable, entityTables: _*)
+  }
+
+  def create(tags: Set[Int], maybeSchema: Option[CAPFSchema], nodeTable: CAPFNodeTable, entityTables: CAPFEntityTable*)(implicit capf: CAPFSession): CAPFGraph = {
     val allTables = nodeTable +: entityTables
-    val schema = allTables.map(_.schema).reduce[Schema](_ ++ _).asCapf
+    val schema = maybeSchema.getOrElse(allTables.map(_.schema).reduce[Schema](_ ++ _).asCapf)
     new CAPFScanGraph(allTables, schema, tags)
   }
 

@@ -30,6 +30,7 @@
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-core</artifactId>
             <version>${dep.flink.version}</version>
+            <scope>${dep.flink.scope}</scope>
         </dependency>
 
         <dependency>
@@ -42,12 +43,14 @@
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-scala_${project.scala.binary.version}</artifactId>
             <version>${dep.flink.version}</version>
+            <scope>${dep.flink.scope}</scope>
         </dependency>
 
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-streaming-scala_${project.scala.binary.version}</artifactId>
             <version>${dep.flink.version}</version>
+            <scope>${dep.flink.scope}</scope>
         </dependency>
 
         <dependency>
