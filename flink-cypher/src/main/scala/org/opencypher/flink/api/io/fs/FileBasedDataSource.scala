@@ -28,15 +28,12 @@ package org.opencypher.flink.api.io.fs
 
 import java.util.UUID
 
-import org.apache.flink.api.scala._
-import org.apache.flink.table.api.scala._
 import org.apache.flink.core.fs.FileSystem
 import org.apache.flink.orc.OrcTableSource
 import org.apache.flink.table.api.Table
-import org.apache.flink.table.expressions.{ResolvedFieldReference, UnresolvedFieldReference}
+import org.apache.flink.table.expressions.ResolvedFieldReference
 import org.apache.flink.table.sinks.CsvTableSink
 import org.apache.flink.table.sources.CsvTableSource
-import org.apache.hadoop.conf.Configuration
 import org.apache.orc.TypeDescription
 import org.opencypher.flink.api.io.AbstractDataSource
 import org.opencypher.flink.api.io.fs.DefaultFileSystem._
@@ -85,14 +82,12 @@ class FileBasedDataSource(
   }
 
   private def readFromOrc(path: String, schema: Seq[ResolvedFieldReference], tableSourceName: String): Table = {
-    val hadoopConfig = new Configuration()
     val typeDescription = schema.foldLeft(new TypeDescription(TypeDescription.Category.STRUCT)) {
       case (acc, fieldRef) => acc.addField(fieldRef.name, fieldRef.resultType.getOrcType)
     }
     val orcSource = OrcTableSource.builder()
       .path(path)
       .forOrcSchema(typeDescription)
-      .withConfiguration(hadoopConfig)
       .build()
     session.tableEnv.registerTableSource(tableSourceName, orcSource)
     session.tableEnv.scan(tableSourceName)
