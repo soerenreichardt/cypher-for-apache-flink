@@ -413,7 +413,7 @@
       <properties>
         <project.artifact.classifier>cluster</project.artifact.classifier>
         <dep.spark.scope>provided</dep.spark.scope>
-        <dep.flink.scope>provided</dep.flink.scope>
+        <!--<dep.flink.scope>provided</dep.flink.scope>-->
       </properties>
       <activation>
         <property>
@@ -422,7 +422,7 @@
       </activation>
 
       <modules>
-        <module>licensecheck-config</module>
+        <!--<module>licensecheck-config</module>-->
         <module>okapi-api</module>
         <module>okapi-ir</module>
         <module>okapi-logical</module>

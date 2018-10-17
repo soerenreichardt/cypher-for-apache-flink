@@ -29,15 +29,13 @@ package org.opencypher.flink.api.io.util
 import org.apache.flink.table.api.scala._
 import org.apache.flink.table.api.{Table, Types}
 import org.apache.flink.table.expressions.{ResolvedFieldReference, UnresolvedFieldReference}
-import org.opencypher.flink.impl.convert.FlinkConversions._
-import org.opencypher.flink._
 import org.opencypher.flink.api.io.{GraphEntity, Relationship}
 import org.opencypher.flink.impl.CAPFGraph
 import org.opencypher.flink.impl.convert.FlinkConversions._
 import org.opencypher.okapi.api.schema.Schema
 import org.opencypher.okapi.api.types.{CTNode, CTRelationship}
-import org.opencypher.okapi.ir.api.expr.{Property, Var}
 import org.opencypher.okapi.impl.util.StringEncodingUtilities._
+import org.opencypher.okapi.ir.api.expr.{Property, Var}
 
 object CAPFGraphExport {
 

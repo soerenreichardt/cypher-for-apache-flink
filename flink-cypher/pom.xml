@@ -28,47 +28,30 @@
         <!-- Flink -->
         <dependency>
             <groupId>org.apache.flink</groupId>
-            <artifactId>flink-core</artifactId>
-            <version>${dep.flink.version}</version>
-            <scope>${dep.flink.scope}</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.flink</groupId>
             <artifactId>flink-table_${project.scala.binary.version}</artifactId>
             <version>${dep.flink.version}</version>
+            <!--<scope>${dep.flink.scope}</scope>-->
         </dependency>
 
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-scala_${project.scala.binary.version}</artifactId>
             <version>${dep.flink.version}</version>
-            <scope>${dep.flink.scope}</scope>
+            <!--<scope>${dep.flink.scope}</scope>-->
         </dependency>
 
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-streaming-scala_${project.scala.binary.version}</artifactId>
             <version>${dep.flink.version}</version>
-            <scope>${dep.flink.scope}</scope>
+            <!--<scope>${dep.flink.scope}</scope>-->
         </dependency>
 
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-orc_${project.scala.binary.version}</artifactId>
             <version>${dep.flink.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.scalatest</groupId>
-            <artifactId>scalatest_${project.scala.binary.version}</artifactId>
-            <version>${dep.scalatest.version}</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.scala-lang</groupId>
-                    <artifactId>scala-library</artifactId>
-                </exclusion>
-            </exclusions>
+            <!--<scope>${dep.flink.scope}</scope>-->
         </dependency>
 
         <!-- Neo4j -->
@@ -79,29 +62,29 @@
         </dependency>
 
         <!-- Utils -->
-        <dependency>
-            <groupId>io.circe</groupId>
-            <artifactId>circe-core_${project.scala.binary.version}</artifactId>
-            <version>${dep.circe.version}</version>
-        </dependency>
+        <!--<dependency>-->
+            <!--<groupId>io.circe</groupId>-->
+            <!--<artifactId>circe-core_${project.scala.binary.version}</artifactId>-->
+            <!--<version>${dep.circe.version}</version>-->
+        <!--</dependency>-->
 
-        <dependency>
-            <groupId>io.circe</groupId>
-            <artifactId>circe-generic_${project.scala.binary.version}</artifactId>
-            <version>${dep.circe.version}</version>
-        </dependency>
+        <!--<dependency>-->
+            <!--<groupId>io.circe</groupId>-->
+            <!--<artifactId>circe-generic_${project.scala.binary.version}</artifactId>-->
+            <!--<version>${dep.circe.version}</version>-->
+        <!--</dependency>-->
 
-        <dependency>
-            <groupId>io.circe</groupId>
-            <artifactId>circe-parser_${project.scala.binary.version}</artifactId>
-            <version>${dep.circe.version}</version>
-        </dependency>
+        <!--<dependency>-->
+            <!--<groupId>io.circe</groupId>-->
+            <!--<artifactId>circe-parser_${project.scala.binary.version}</artifactId>-->
+            <!--<version>${dep.circe.version}</version>-->
+        <!--</dependency>-->
 
-        <dependency>
-            <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-client</artifactId>
-            <version>${dep.hadoop.version}</version>
-        </dependency>
+        <!--<dependency>-->
+            <!--<groupId>org.apache.hadoop</groupId>-->
+            <!--<artifactId>hadoop-client</artifactId>-->
+            <!--<version>${dep.hadoop.version}</version>-->
+        <!--</dependency>-->
 
     </dependencies>
 
