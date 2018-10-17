@@ -27,14 +27,240 @@
 package org.opencypher.spark.api.util
 
 import org.opencypher.okapi.api.util.ZeppelinSupport._
-import org.opencypher.spark.impl.CAPSGraph
 import org.opencypher.spark.testing.CAPSTestSuite
 import org.opencypher.spark.testing.fixture.TeamDataFixture
 
 class ZeppelinSupportTest extends CAPSTestSuite with TeamDataFixture {
+  // scalastyle:off line.contains.tab
+  it("supports Zeppelin table representation") {
+    val graph = caps.graphs.create(personTable)
+    val result = graph.cypher("MATCH (p:Person) RETURN p.name, p.luckyNumber")
+    val asTable = result.records.toZeppelinTable
+
+    val expected = """p.name	p.luckyNumber
+                     |'Mats'	23
+                     |'Martin'	42
+                     |'Max'	1337
+                     |'Stefan'	9""".stripMargin
+
+    asTable should equal(expected)
+  }
+  // scalastyle:on line.contains.tab
+
+  it("can render a graph from records") {
+    val graph = caps.graphs.create(personTable, knowsTable)
+    val result = graph.cypher("MATCH (p:Person)-[k:KNOWS]->(p2:Person) RETURN p, k, p2")
+    val asGraph = result.records.toZeppelinGraph
+
+    val expected = """{
+                     |  "nodes": [
+                     |    {
+                     |      "id": "1",
+                     |      "label": "Person",
+                     |      "labels": [
+                     |        "Person",
+                     |        "Swedish"
+                     |      ],
+                     |      "data": {
+                     |        "luckyNumber": "23",
+                     |        "name": "Mats"
+                     |      }
+                     |    },
+                     |    {
+                     |      "id": "4",
+                     |      "label": "Person",
+                     |      "labels": [
+                     |        "Person"
+                     |      ],
+                     |      "data": {
+                     |        "luckyNumber": "9",
+                     |        "name": "Stefan"
+                     |      }
+                     |    },
+                     |    {
+                     |      "id": "1",
+                     |      "label": "Person",
+                     |      "labels": [
+                     |        "Person",
+                     |        "Swedish"
+                     |      ],
+                     |      "data": {
+                     |        "luckyNumber": "23",
+                     |        "name": "Mats"
+                     |      }
+                     |    },
+                     |    {
+                     |      "id": "3",
+                     |      "label": "Person",
+                     |      "labels": [
+                     |        "Person"
+                     |      ],
+                     |      "data": {
+                     |        "luckyNumber": "1337",
+                     |        "name": "Max"
+                     |      }
+                     |    },
+                     |    {
+                     |      "id": "1",
+                     |      "label": "Person",
+                     |      "labels": [
+                     |        "Person",
+                     |        "Swedish"
+                     |      ],
+                     |      "data": {
+                     |        "luckyNumber": "23",
+                     |        "name": "Mats"
+                     |      }
+                     |    },
+                     |    {
+                     |      "id": "2",
+                     |      "label": "Person",
+                     |      "labels": [
+                     |        "Person"
+                     |      ],
+                     |      "data": {
+                     |        "luckyNumber": "42",
+                     |        "name": "Martin"
+                     |      }
+                     |    },
+                     |    {
+                     |      "id": "2",
+                     |      "label": "Person",
+                     |      "labels": [
+                     |        "Person"
+                     |      ],
+                     |      "data": {
+                     |        "luckyNumber": "42",
+                     |        "name": "Martin"
+                     |      }
+                     |    },
+                     |    {
+                     |      "id": "4",
+                     |      "label": "Person",
+                     |      "labels": [
+                     |        "Person"
+                     |      ],
+                     |      "data": {
+                     |        "luckyNumber": "9",
+                     |        "name": "Stefan"
+                     |      }
+                     |    },
+                     |    {
+                     |      "id": "2",
+                     |      "label": "Person",
+                     |      "labels": [
+                     |        "Person"
+                     |      ],
+                     |      "data": {
+                     |        "luckyNumber": "42",
+                     |        "name": "Martin"
+                     |      }
+                     |    },
+                     |    {
+                     |      "id": "3",
+                     |      "label": "Person",
+                     |      "labels": [
+                     |        "Person"
+                     |      ],
+                     |      "data": {
+                     |        "luckyNumber": "1337",
+                     |        "name": "Max"
+                     |      }
+                     |    },
+                     |    {
+                     |      "id": "3",
+                     |      "label": "Person",
+                     |      "labels": [
+                     |        "Person"
+                     |      ],
+                     |      "data": {
+                     |        "luckyNumber": "1337",
+                     |        "name": "Max"
+                     |      }
+                     |    },
+                     |    {
+                     |      "id": "4",
+                     |      "label": "Person",
+                     |      "labels": [
+                     |        "Person"
+                     |      ],
+                     |      "data": {
+                     |        "luckyNumber": "9",
+                     |        "name": "Stefan"
+                     |      }
+                     |    }
+                     |  ],
+                     |  "edges": [
+                     |    {
+                     |      "id": "3",
+                     |      "source": "1",
+                     |      "target": "4",
+                     |      "label": "KNOWS",
+                     |      "data": {
+                     |        "since": "2015"
+                     |      }
+                     |    },
+                     |    {
+                     |      "id": "2",
+                     |      "source": "1",
+                     |      "target": "3",
+                     |      "label": "KNOWS",
+                     |      "data": {
+                     |        "since": "2016"
+                     |      }
+                     |    },
+                     |    {
+                     |      "id": "1",
+                     |      "source": "1",
+                     |      "target": "2",
+                     |      "label": "KNOWS",
+                     |      "data": {
+                     |        "since": "2017"
+                     |      }
+                     |    },
+                     |    {
+                     |      "id": "5",
+                     |      "source": "2",
+                     |      "target": "4",
+                     |      "label": "KNOWS",
+                     |      "data": {
+                     |        "since": "2013"
+                     |      }
+                     |    },
+                     |    {
+                     |      "id": "4",
+                     |      "source": "2",
+                     |      "target": "3",
+                     |      "label": "KNOWS",
+                     |      "data": {
+                     |        "since": "2016"
+                     |      }
+                     |    },
+                     |    {
+                     |      "id": "6",
+                     |      "source": "3",
+                     |      "target": "4",
+                     |      "label": "KNOWS",
+                     |      "data": {
+                     |        "since": "2016"
+                     |      }
+                     |    }
+                     |  ],
+                     |  "labels": {
+                     |    "Person": "#cbfe79",
+                     |    "Swedish": "#6f27a9"
+                     |  },
+                     |  "types": [
+                     |    "KNOWS"
+                     |  ],
+                     |  "directed": true
+                     |}""".stripMargin
+
+    asGraph should equal(expected)
+  }
 
   it("supports Zeppelin network representation") {
-    val graph = CAPSGraph.create(personTable, bookTable, readsTable, knowsTable, influencesTable)
+    val graph = caps.graphs.create(personTable, bookTable, readsTable, knowsTable, influencesTable)
     val asJson = graph.toZeppelinJson
     val expected = ujson.read(
       s"""

@@ -62,7 +62,8 @@ object SparkConversions {
           case CTFloat => Some(DoubleType)
           case _: CTNode => Some(LongType)
           case _: CTRelationship => Some(LongType)
-          case CTList(CTVoid) => Some(ArrayType(NullType))
+          case CTList(CTVoid) => Some(ArrayType(NullType, containsNull = true))
+          case CTList(CTNull) => Some(ArrayType(NullType, containsNull = true))
           case CTList(elemType) =>
             elemType.toSparkType.map(ArrayType(_, elemType.isNullable))
           case _ =>
@@ -128,6 +129,7 @@ object SparkConversions {
     def toCypherType(nullable: Boolean = false): Option[CypherType] = {
       val result = dt match {
         case StringType => Some(CTString)
+        case IntegerType => Some(CTInteger)
         case LongType => Some(CTInteger)
         case BooleanType => Some(CTBoolean)
         case BinaryType => Some(CTAny)

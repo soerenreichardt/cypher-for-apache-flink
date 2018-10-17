@@ -26,15 +26,15 @@
  */
 package org.opencypher.okapi.ir.impl.parse.rewriter
 
-import org.opencypher.v9_1.ast._
-import org.opencypher.v9_1.expressions.{Property, Variable}
-import org.opencypher.v9_1.util.{FreshIdNameGenerator, Rewriter, bottomUp}
+import org.opencypher.v9_0.ast._
+import org.opencypher.v9_0.expressions.{Property, Variable}
+import org.opencypher.v9_0.util.{FreshIdNameGenerator, Rewriter, bottomUp}
 
 case object normalizeReturnClauses extends Rewriter {
 
   def apply(that: AnyRef): AnyRef = instance.apply(that)
 
-  private val clauseRewriter: (Clause => Seq[Clause]) = {
+  private val clauseRewriter: Clause => Seq[Clause] = {
     case clause @ Return(distinct, ri @ ReturnItems(_, items), None, skip, limit, _) =>
       val (aliasProjection, finalProjection) = items.map {
         // avoid aliasing of primitive expressions (i.e. variables and properties)
@@ -104,3 +104,4 @@ case object normalizeReturnClauses extends Rewriter {
       query.copy(clauses = clauses.flatMap(clauseRewriter))(query.position)
   })
 }
+

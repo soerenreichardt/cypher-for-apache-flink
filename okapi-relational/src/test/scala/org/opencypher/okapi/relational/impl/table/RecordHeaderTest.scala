@@ -27,6 +27,7 @@
 package org.opencypher.okapi.relational.impl.table
 
 import org.opencypher.okapi.api.types._
+import org.opencypher.okapi.impl.exception.IllegalArgumentException
 import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.ir.api.{Label, PropertyKey, RelType}
 import org.opencypher.okapi.testing.BaseTestSuite
@@ -40,6 +41,7 @@ class RecordHeaderTest extends BaseTestSuite {
   val m: Var = Var("m")(CTNode("A", "B"))
   val o: Var = Var("o")(CTNode)
   val r: Var = Var("r")(CTRelationship)
+  val s: Var = Var("s")(CTNode("A"))
   val nodeList: Var = Var("l")(CTList(CTNode))
   val nodeListSegment: ListSegment = ListSegment(0, nodeList)(CTNode("A", "B"))
   val relList: Var = Var("l")(CTList(CTRelationship))
@@ -110,6 +112,11 @@ class RecordHeaderTest extends BaseTestSuite {
 
   it("can add an entity expression") {
     nHeader.ownedBy(n) should equal(nExprs)
+  }
+
+  it("can add entity expressions without column collisions") {
+    val underlineHeader = RecordHeader.empty.withExpr(Var("_")()).withExpr(Var(".")())
+    underlineHeader.columns.size should be(2)
   }
 
   it("can return all expressions for a given expression") {
@@ -323,6 +330,12 @@ class RecordHeaderTest extends BaseTestSuite {
     nHeader.nodesForType(CTNode("C")) should equalWithTracing(Set.empty)
   }
 
+  it("returns all node var that match a given node type exactly") {
+    nHeader.nodesForType(CTNode("A", "B"), exactMatch = true) should equalWithTracing(Set(n))
+    nHeader.nodesForType(CTNode("A"), exactMatch = true) should equalWithTracing(Set.empty)
+    nHeader.nodesForType(CTNode("B"), exactMatch = true) should equalWithTracing(Set.empty)
+  }
+
   it("returns all rel vars for a given rel type") {
     rHeader.relationshipsForType(CTRelationship("R")) should equalWithTracing(Set(r))
     rHeader.relationshipsForType(CTRelationship("R", "S")) should equalWithTracing(Set(r))
@@ -335,6 +348,10 @@ class RecordHeaderTest extends BaseTestSuite {
     nHeader.select(Set(m)) should equal(RecordHeader.empty)
     (nHeader ++ mHeader).select(Set(n)) should equal(nHeader)
     (nHeader ++ mHeader).select(Set(m)) should equal(mHeader)
+  }
+
+  it("returns the alias without the original when selecting an alias") {
+    nHeader.select(Set(n as m)) should equal(nHeader.withAlias(n as m) -- nHeader.expressions)
   }
 
   it("returns selected entity and alias vars and their corresponding columns") {
@@ -432,12 +449,12 @@ class RecordHeaderTest extends BaseTestSuite {
 
     it("joins record headers with overlapping column names") {
       val aliased = nHeader.withAlias(n as m).select(m)
-      nHeader.join(aliased) should equal(nHeader ++ mHeader)
+      an[IllegalArgumentException] should be thrownBy nHeader.join(aliased)
     }
 
     it("joins record headers with overlapping column names and multiple expressions per column") {
       val aliased = nHeader.withAlias(n as m).withAlias(n as o).select(m, o)
-      nHeader.join(aliased) should equal(nHeader ++ mHeader.withAlias(m as o))
+      an[IllegalArgumentException] should be thrownBy nHeader.join(aliased)
     }
 
     it("raises an error when joining header with overlapping expressions"){
@@ -447,4 +464,33 @@ class RecordHeaderTest extends BaseTestSuite {
     }
   }
 
+  describe("from") {
+    it("can build a RecordHeader from a Relationship type") {
+      val relType = CTRelationship("FOO", "BAR")
+
+      val v = RelationshipVar("")(relType)
+
+      val expected = RecordHeader.empty
+        .withExpr(v)
+        .withExpr(StartNode(v)(CTInteger))
+        .withExpr(EndNode(v)(CTInteger))
+        .withExpr(HasType(v, RelType("FOO"))(CTBoolean))
+        .withExpr(HasType(v, RelType("BAR"))(CTBoolean))
+
+      RecordHeader.from(relType) should equal(expected)
+    }
+
+    it("can build a RecordHeader from a node type") {
+      val nodeType = CTNode("FOO", "BAR")
+
+      val v = NodeVar("")(nodeType)
+
+      val expected = RecordHeader.empty
+        .withExpr(v)
+        .withExpr(HasLabel(v, Label("FOO"))(CTBoolean))
+        .withExpr(HasLabel(v, Label("BAR"))(CTBoolean))
+
+      RecordHeader.from(nodeType) should equal(expected)
+    }
+  }
 }

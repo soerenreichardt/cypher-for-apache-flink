@@ -27,11 +27,11 @@
 package org.opencypher.spark.impl
 
 import org.opencypher.okapi.api.graph.{Namespace, QualifiedGraphName}
-import org.opencypher.spark.api.value.CAPSNode
 import org.opencypher.okapi.api.value.CypherValue.CypherMap
 import org.opencypher.okapi.impl.io.SessionGraphDataSource
 import org.opencypher.okapi.testing.Bag
 import org.opencypher.okapi.testing.Bag._
+import org.opencypher.spark.api.value.CAPSNode
 import org.opencypher.spark.testing.CAPSTestSuite
 import org.opencypher.spark.testing.fixture.{GraphConstructionFixture, TeamDataFixture}
 
@@ -47,7 +47,7 @@ class CAPSSessionImplTest extends CAPSTestSuite with TeamDataFixture with GraphC
 
     caps.catalog.store(QualifiedGraphName("session.a"), g1)
     caps.catalog.store(QualifiedGraphName("working.a"), g2)
-    caps.cypher("CREATE GRAPH working.b { FROM GRAPH working.a RETURN GRAPH }")
+    caps.cypher("CATALOG CREATE GRAPH working.b { FROM GRAPH working.a RETURN GRAPH }")
     caps.catalog.store(QualifiedGraphName("foo.bar.baz.a"), g3)
 
     val r1 = caps.cypher("FROM GRAPH a MATCH (n) RETURN n")
@@ -55,23 +55,23 @@ class CAPSSessionImplTest extends CAPSTestSuite with TeamDataFixture with GraphC
     val r3 = caps.cypher("FROM GRAPH working.b MATCH (n) RETURN n")
     val r4 = caps.cypher("FROM GRAPH foo.bar.baz.a MATCH (n) RETURN n")
 
-    r1.getRecords.collect.toBag should equal(Bag(
+    r1.records.collect.toBag should equal(Bag(
       CypherMap("n" -> CAPSNode(0L, Set("A")))
     ))
-    r2.getRecords.collect.toBag should equal(Bag(
+    r2.records.collect.toBag should equal(Bag(
       CypherMap("n" -> CAPSNode(0L, Set("B")))
     ))
-    r3.getRecords.collect.toBag should equal(Bag(
+    r3.records.collect.toBag should equal(Bag(
       CypherMap("n" -> CAPSNode(0L, Set("B")))
     ))
-    r4.getRecords.collect.toBag should equal(Bag(
+    r4.records.collect.toBag should equal(Bag(
       CypherMap("n" -> CAPSNode(0L, Set("C")))
     ))
   }
 
   it("can execute sql on registered tables") {
-    CAPSRecords.wrap(personDF).toDF().createOrReplaceTempView("people")
-    CAPSRecords.wrap(knowsDF).toDF().createOrReplaceTempView("knows")
+    caps.records.wrap(personDF).df.createOrReplaceTempView("people")
+    caps.records.wrap(knowsDF).df.createOrReplaceTempView("knows")
 
     val sqlResult = caps.sql(
       """

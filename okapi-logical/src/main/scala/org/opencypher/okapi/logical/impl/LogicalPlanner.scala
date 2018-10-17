@@ -41,15 +41,15 @@ import org.opencypher.okapi.logical.impl.exception.{InvalidCypherTypeException, 
 import scala.annotation.tailrec
 
 class LogicalPlanner(producer: LogicalOperatorProducer)
-  extends DirectCompilationStage[CypherQuery[Expr], LogicalOperator, LogicalPlannerContext] {
+  extends DirectCompilationStage[CypherQuery, LogicalOperator, LogicalPlannerContext] {
 
-  override def process(ir: CypherQuery[Expr])(implicit context: LogicalPlannerContext): LogicalOperator = {
+  override def process(ir: CypherQuery)(implicit context: LogicalPlannerContext): LogicalOperator = {
     val model = ir.model
 
     planModel(model.result, model)
   }
 
-  def planModel(block: ResultBlock[Expr], model: QueryModel[Expr])(
+  def planModel(block: ResultBlock, model: QueryModel)(
     implicit context: LogicalPlannerContext): LogicalOperator = {
     val first = block.after.head // there should only be one, right?
 
@@ -57,15 +57,15 @@ class LogicalPlanner(producer: LogicalOperatorProducer)
 
     // always plan a select at the top
     block match {
-      case t: TableResultBlock[_] =>
+      case t: TableResultBlock =>
         val fields = t.binds.orderedFields.map(f => Var(f.name)(f.cypherType))
         producer.planSelect(fields, plan)
-      case g: GraphResultBlock[_] =>
+      case g: GraphResultBlock =>
         producer.planReturnGraph(producer.planFromGraph(resolveGraph(g.graph, plan.fields), plan))
     }
   }
 
-  final def planBlock(block: Block[Expr], model: QueryModel[Expr], plan: Option[LogicalOperator])(
+  final def planBlock(block: Block, model: QueryModel, plan: Option[LogicalOperator])(
     implicit context: LogicalPlannerContext): LogicalOperator = {
     if (block.after.isEmpty) {
       // this is a leaf block, just plan it
@@ -92,20 +92,24 @@ class LogicalPlanner(producer: LogicalOperatorProducer)
     }
   }
 
-  def planLeaf(block: Block[Expr], model: QueryModel[Expr])(implicit context: LogicalPlannerContext): LogicalOperator = {
+  def planLeaf(block: Block, model: QueryModel)(implicit context: LogicalPlannerContext): LogicalOperator = {
     block match {
       case SourceBlock(irGraph: IRCatalogGraph) =>
         val qualifiedGraphName = irGraph.qualifiedGraphName
         val graphSource = context.catalog(irGraph.qualifiedGraphName.namespace)
-        producer.planStart(
-          LogicalCatalogGraph(qualifiedGraphName, graphSource.schema(qualifiedGraphName.graphName).get),
-          context.inputRecordFields)
+        val logicalGraph = LogicalCatalogGraph(qualifiedGraphName, graphSource.schema(qualifiedGraphName.graphName).get)
+
+        if (context.inputRecordFields.isEmpty) {
+          producer.planStart(logicalGraph)
+        } else {
+          producer.planStartWithDrivingTable(logicalGraph, context.inputRecordFields)
+        }
       case x =>
         throw NotImplementedException(s"Support for leaf planning of $x not yet implemented. Tree:\n${x.pretty}")
     }
   }
 
-  def planNonLeaf(block: Block[Expr], model: QueryModel[Expr], plan: LogicalOperator)(
+  def planNonLeaf(block: Block, model: QueryModel, plan: LogicalOperator)(
     implicit context: LogicalPlannerContext): LogicalOperator = {
     block match {
       case MatchBlock(_, pattern, where, optional, graph) =>
@@ -221,6 +225,11 @@ class LogicalPlanner(producer: LogicalOperatorProducer)
         val plannedInner = inner.foldLeft(acc)((op, expr) => planInnerExpr(expr, op))
         producer.projectField(a, f, plannedInner)
 
+      case (acc, (f, containerIndex@ ContainerIndex(container, idx))) =>
+        val withContainer = planInnerExpr(container, acc)
+        val withIndex = planInnerExpr(idx, withContainer)
+        producer.projectField(containerIndex, f, withIndex)
+
       case (_, (_, x)) =>
         throw NotImplementedException(s"Support for projection of $x not yet implemented. Tree:\n${x.pretty}")
     }
@@ -301,8 +310,7 @@ class LogicalPlanner(producer: LogicalOperatorProducer)
 
       case _: Var => in
 
-      case p: Property =>
-        producer.projectExpr(p, in)
+      case _: Property => in
 
       case be: BinaryExpr =>
         val project1 = planInnerExpr(be.lhs, in)
@@ -331,6 +339,11 @@ class LogicalPlanner(producer: LogicalOperatorProducer)
         val plannedInner = inner.foldLeft(in)((op, expr) => planInnerExpr(expr, op))
         producer.projectExpr(ands, plannedInner)
 
+      case containerIndex@ ContainerIndex(container, idx) =>
+        val withContainer = planInnerExpr(container, in)
+        val withIndex = planInnerExpr(idx, withContainer)
+        producer.projectExpr(containerIndex, withIndex)
+
       case x =>
         throw NotImplementedException(s"Support for projection of inner expression $x not yet implemented. Tree:\n${x.pretty}")
     }
@@ -340,14 +353,14 @@ class LogicalPlanner(producer: LogicalOperatorProducer)
     implicit context: LogicalPlannerContext): LogicalGraph = {
 
     graph match {
-      // TODO: IRGraph[Expr]
-      case p: IRPatternGraph[Expr@unchecked] =>
+      // TODO: IRGraph
+      case p: IRPatternGraph =>
         import org.opencypher.okapi.ir.impl.util.VarConverters.RichIrField
-        val baseEntities = p.news.baseFields.mapValues(_.toVar)
+        val baseEntities = p.creates.baseFields.mapValues(_.toVar)
 
         val clonePatternEntities = p.clones.keys
 
-        val newPatternEntities = p.news.fields
+        val newPatternEntities = p.creates.fields
 
         val entitiesToCreate = newPatternEntities -- clonePatternEntities
 
@@ -359,24 +372,26 @@ class LogicalPlanner(producer: LogicalOperatorProducer)
           clonedField.toVar -> inputVar
         }
 
-        val newEntities: Set[ConstructedEntity] = entitiesToCreate.map(e => extractConstructedEntities(p.news, e, baseEntities.get(e)))
+        val newEntities: Set[ConstructedEntity] = entitiesToCreate.map(e => extractConstructedEntities(p.creates, e, baseEntities.get(e)))
 
         val setItems = {
-          p.news.properties.flatMap { case (irField, mapExpr) =>
+          val setPropertyItemsFromCreates = p.creates.properties.flatMap { case (irField, mapExpr) =>
             val v = irField.toVar
             mapExpr.items.map { case (propertyKey, expr) =>
               SetPropertyItem(propertyKey, v, expr)
             }
           }
+          setPropertyItemsFromCreates ++ p.sets
         }.toList
 
         LogicalPatternGraph(p.schema, clonedVarToInputVar, newEntities, setItems, p.onGraphs, p.qualifiedGraphName)
 
-      case g: IRCatalogGraph => LogicalCatalogGraph(g.qualifiedGraphName, g.schema)
+      case IRCatalogGraph(qgn, schema) => LogicalCatalogGraph(qgn, schema)
+
     }
   }
 
-  private def extractConstructedEntities(pattern: Pattern[Expr], e: IRField, baseField: Option[Var]) = e.cypherType match {
+  private def extractConstructedEntities(pattern: Pattern, e: IRField, baseField: Option[Var]) = e.cypherType match {
     case CTRelationship(relTypes, _) if relTypes.size <= 1 =>
       val connection = pattern.topology(e)
       ConstructedRelationship(e, connection.source, connection.target, relTypes.headOption, baseField)
@@ -389,7 +404,7 @@ class LogicalPlanner(producer: LogicalOperatorProducer)
   private def planStart(graph: IRGraph)(implicit context: LogicalPlannerContext): Start = {
     val logicalGraph: LogicalGraph = resolveGraph(graph, Set.empty)
 
-    producer.planStart(logicalGraph, context.inputRecordFields)
+    producer.planStart(logicalGraph)
   }
 
   private def planFromGraph(graph: LogicalGraph, prev: LogicalOperator)(
@@ -398,7 +413,7 @@ class LogicalPlanner(producer: LogicalOperatorProducer)
     producer.planFromGraph(graph, prev)
   }
 
-  private def planMatchPattern(plan: LogicalOperator, pattern: Pattern[Expr], where: Set[Expr], graph: IRGraph)(
+  private def planMatchPattern(plan: LogicalOperator, pattern: Pattern, where: Set[Expr], graph: IRGraph)(
     implicit context: LogicalPlannerContext) = {
     val components = pattern.components.toSeq
     if (components.size == 1) {
@@ -406,37 +421,17 @@ class LogicalPlanner(producer: LogicalOperatorProducer)
       val filteredPlan = planFilter(patternPlan, where)
       filteredPlan
     } else {
-      // TODO: Find a way to feed the same input into all arms of the cartesian product without recomputing it
-      val bases = plan +: components.map(_ => Start(plan.graph, SolvedQueryModel.empty)).tail
-      val plans = bases.zip(components).map {
+      components.foldLeft(plan) {
         case (base, component) =>
           val componentPlan = planComponentPattern(base, component, graph)
           val predicates = where.filter(_.canEvaluate(componentPlan.fields)).filterNot(componentPlan.solved.predicates)
           val filteredPlan = planFilter(componentPlan, predicates)
           filteredPlan
       }
-      val result = plans.reduceOption { (lhs, rhs) =>
-        val fieldsInScope = lhs.fields ++ rhs.fields
-        val solvedPredicates = lhs.solved.predicates ++ rhs.solved.predicates
-        val predicates = where.filter(_.canEvaluate(fieldsInScope)).filterNot(solvedPredicates)
-        val joinPredicates = predicates.collect { case e: Equals => e }
-        if (joinPredicates.isEmpty) {
-          val combinedPlan = producer.planCartesianProduct(lhs, rhs)
-          val filteredPlan = planFilter(combinedPlan, predicates)
-          filteredPlan
-        } else {
-          val (leftIn, rightIn) = joinPredicates.foldLeft((lhs, rhs)) {
-            case ((l, r), predicate) => producer.projectExpr(predicate.lhs, l) -> producer.projectExpr(predicate.rhs, r)
-          }
-          producer.planValueJoin(leftIn, rightIn, joinPredicates)
-        }
-      }
-      // TODO: use type system to avoid empty pattern
-      result.getOrElse(throw InvalidPatternException("Cannot plan an empty match pattern"))
     }
   }
 
-  private def planComponentPattern(plan: LogicalOperator, pattern: Pattern[Expr], graph: IRGraph)(
+  private def planComponentPattern(plan: LogicalOperator, pattern: Pattern, graph: IRGraph)(
     implicit context: LogicalPlannerContext): LogicalOperator = {
 
     // find all unsolved nodes from the pattern
@@ -458,7 +453,7 @@ class LogicalPlanner(producer: LogicalOperatorProducer)
 
       val (firstPlan, remaining) = if (solved.isEmpty) { // there is no connection to the previous plan
         val field = nodes.head
-        if (plan.solved.fields.nonEmpty) { // there are already fields in the previous plan, we need to plan a cartesian product
+        if (plan.fields.nonEmpty) { // there are already fields in the previous plan, we need to plan a cartesian product
           producer.planCartesianProduct(plan, nodePlan(planStart(graph), field)) -> nodes.tail
         } else { // there are no previous results, it's safe to plan a node scan
           nodePlan(plan, field) -> nodes.tail
@@ -479,7 +474,7 @@ class LogicalPlanner(producer: LogicalOperatorProducer)
   @tailrec
   private def planExpansions(
     disconnectedPlans: Set[LogicalOperator],
-    pattern: Pattern[Expr],
+    pattern: Pattern,
     producer: LogicalOperatorProducer): LogicalOperator = {
     val allSolved = disconnectedPlans.map(_.solved).reduce(_ ++ _)
 
@@ -504,7 +499,13 @@ class LogicalPlanner(producer: LogicalOperatorProducer)
           case _: DirectedVarLengthRelationship => Directed
           case _: UndirectedVarLengthRelationship => Undirected
         }
-        producer.planBoundedVarLengthExpand(c.source, r, c.target, v.edgeType, direction, v.lower, v.upper.get, sourcePlan, targetPlan)
+
+        if (v.upper.getOrElse(Integer.MAX_VALUE) < v.lower) {
+          val solved = sourcePlan.solved ++ targetPlan.solved.withField(r)
+          EmptyRecords(sourcePlan.fields ++ targetPlan.fields, Start(targetPlan.graph, solved), solved)
+        } else {
+          producer.planBoundedVarLengthExpand(c.source, r, c.target, v.edgeType, direction, v.lower, v.upper.get, sourcePlan, targetPlan)
+        }
 
       case _: UndirectedConnection if sourcePlan == targetPlan =>
         producer.planExpandInto(c.source, r, c.target, Undirected, sourcePlan)

@@ -26,13 +26,13 @@
  */
 package org.opencypher.okapi.logical.impl
 
-import org.opencypher.okapi.api.graph.QualifiedGraphName
+import org.opencypher.okapi.api.graph.{PropertyGraph, QualifiedGraphName}
 import org.opencypher.okapi.api.schema.Schema
 import org.opencypher.okapi.api.types.{CTNode, CTRelationship}
 import org.opencypher.okapi.ir.api.Label
 import org.opencypher.okapi.ir.api.block.SortItem
 import org.opencypher.okapi.ir.api.expr._
-import org.opencypher.okapi.ir.api.set.SetPropertyItem
+import org.opencypher.okapi.ir.api.set.SetItem
 import org.opencypher.okapi.trees.AbstractTreeNode
 
 sealed abstract class LogicalOperator extends AbstractTreeNode[LogicalOperator] {
@@ -42,7 +42,7 @@ sealed abstract class LogicalOperator extends AbstractTreeNode[LogicalOperator] 
 
   def graph: LogicalGraph
 
-  override def args = super.args.filter {
+  override def args: Iterator[Any] = super.args.filter {
     case SolvedQueryModel(_, _) => false
     case _ => true
   }
@@ -54,25 +54,28 @@ trait EmptyFields extends LogicalOperator {
   override val fields: Set[Var] = Set.empty
 }
 
-trait LogicalGraph {
+sealed trait LogicalGraph {
   def schema: Schema
 
   override def toString = s"${getClass.getSimpleName}($args)"
 
   protected def args: String
+
+  def qualifiedGraphName: QualifiedGraphName
+
 }
 
-final case class LogicalCatalogGraph(qualifiedGraphName: QualifiedGraphName, schema: Schema) extends LogicalGraph {
+case class LogicalCatalogGraph(qualifiedGraphName: QualifiedGraphName, schema: Schema) extends LogicalGraph {
   override protected def args: String = qualifiedGraphName.toString
 }
 
-final case class LogicalPatternGraph(
+case class LogicalPatternGraph(
   schema: Schema,
   clones: Map[Var, Var],
   newEntities: Set[ConstructedEntity],
-  sets: List[SetPropertyItem[Expr]],
+  sets: List[SetItem],
   onGraphs: List[QualifiedGraphName],
-  name: QualifiedGraphName
+  qualifiedGraphName: QualifiedGraphName
 ) extends LogicalGraph {
 
   override protected def args: String = {
@@ -264,7 +267,7 @@ final case class Select(
 final case class ReturnGraph(in: LogicalOperator, solved: SolvedQueryModel)
   extends StackingLogicalOperator with EmptyFields
 
-final case class OrderBy(sortItems: Seq[SortItem[Expr]], in: LogicalOperator, solved: SolvedQueryModel)
+final case class OrderBy(sortItems: Seq[SortItem], in: LogicalOperator, solved: SolvedQueryModel)
   extends StackingLogicalOperator {
 
   override val fields: Set[Var] = in.fields
@@ -315,7 +318,7 @@ final case class FromGraph(
   // TODO: adopt yield for construct
   override val fields: Set[Var] = graph match {
     case _: LogicalPatternGraph => Set.empty
-    case _: LogicalCatalogGraph => in.fields
+    case _ => in.fields
   }
 }
 
@@ -323,3 +326,5 @@ final case class EmptyRecords(fields: Set[Var], in: LogicalOperator, solved: Sol
   extends StackingLogicalOperator
 
 final case class Start(graph: LogicalGraph, solved: SolvedQueryModel) extends LogicalLeafOperator with EmptyFields
+
+final case class DrivingTable(graph: LogicalGraph, fields: Set[Var], solved: SolvedQueryModel) extends LogicalLeafOperator

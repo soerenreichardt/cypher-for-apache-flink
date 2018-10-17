@@ -26,22 +26,34 @@
  */
 package org.opencypher.spark.impl
 
-import org.apache.spark.sql.types.{BooleanType, DoubleType, LongType}
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Column, DataFrame, functions}
 import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.api.value.CypherValue.{CypherList, CypherMap}
-import org.opencypher.okapi.impl.exception.{IllegalArgumentException, IllegalStateException, NotImplementedException}
+import org.opencypher.okapi.impl.exception.{IllegalArgumentException, IllegalStateException, NotImplementedException, UnsupportedOperationException}
 import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.relational.impl.table.RecordHeader
-import org.opencypher.spark.impl.CAPSFunctions.{array_contains, get_node_labels, get_property_keys, get_rel_type}
+import org.opencypher.spark.impl.CAPSFunctions.{array_contains, get_node_labels, get_property_keys, get_rel_type, _}
 import org.opencypher.spark.impl.convert.SparkConversions._
 
 object SparkSQLExprMapper {
 
+  private val NULL_LIT: Column = functions.lit(null)
+
+  private val TRUE_LIT: Column = functions.lit(true)
+
+  private val FALSE_LIT: Column = functions.lit(false)
+
+  private val ONE_LIT: Column = functions.lit(1)
+
+  private val E: Column = functions.lit(Math.E)
+
+  private val PI: Column = functions.lit(Math.PI)
+
   implicit class RichExpression(expr: Expr) {
 
     def verify(implicit header: RecordHeader): Unit = {
-      if (header.expressionsFor(expr).isEmpty) throw IllegalStateException(s"Expression $expr not in header ${header.pretty}")
+      if (header.expressionsFor(expr).isEmpty) throw IllegalStateException(s"Expression $expr not in header:\n${header.pretty}")
     }
 
     /**
@@ -49,7 +61,7 @@ object SparkSQLExprMapper {
       *   - Spark SQL returns null when comparing across types (from initial investigation)
       *   - We never have multiple types per column in CAPS (yet)
       */
-    def compare(comparator: Column => (Column => Column), lhs: Expr, rhs: Expr)
+    def compare(comparator: Column => Column => Column, lhs: Expr, rhs: Expr)
       (implicit header: RecordHeader, df: DataFrame, parameters: CypherMap): Column = {
       comparator(lhs.asSparkSQLExpr)(rhs.asSparkSQLExpr)
     }
@@ -83,6 +95,8 @@ object SparkSQLExprMapper {
         case Param(name) =>
           functions.lit(parameters(name).unwrap)
 
+        case _: Property if !header.contains(expr) => NULL_LIT
+
         // direct column lookup
         case _: Var | _: Param | _: Property | _: HasLabel | _: HasType | _: StartNode | _: EndNode =>
           verify
@@ -91,7 +105,7 @@ object SparkSQLExprMapper {
           if (df.columns.contains(colName)) {
             df.col(colName)
           } else {
-            functions.lit(null)
+            NULL_LIT
           }
 
         case AliasExpr(innerExpr, _) =>
@@ -102,7 +116,7 @@ object SparkSQLExprMapper {
           functions.array(exprs.map(_.asSparkSQLExpr): _*)
 
         case NullLit(ct) =>
-          functions.lit(null).cast(ct.toSparkType.get)
+          NULL_LIT.cast(ct.toSparkType.get)
 
         case l: Lit[_] => functions.lit(l.v)
 
@@ -115,19 +129,19 @@ object SparkSQLExprMapper {
           val col = e.asSparkSQLExpr
           e.cypherType match {
             case CTString => functions.length(col).cast(LongType)
-            case _: CTList => functions.size(col).cast(LongType)
+            case _: CTList | _: CTListOrNull => functions.size(col).cast(LongType)
             case other => throw NotImplementedException(s"size() on values of type $other")
           }
 
         case Ands(exprs) =>
-          exprs.map(_.asSparkSQLExpr).foldLeft(functions.lit(true))(_ && _)
+          exprs.map(_.asSparkSQLExpr).foldLeft(TRUE_LIT)(_ && _)
 
         case Ors(exprs) =>
-          exprs.map(_.asSparkSQLExpr).foldLeft(functions.lit(false))(_ || _)
+          exprs.map(_.asSparkSQLExpr).foldLeft(FALSE_LIT)(_ || _)
 
         case In(lhs, rhs) =>
           if (rhs.cypherType == CTNull || lhs.cypherType == CTNull) {
-            functions.lit(null).cast(BooleanType)
+            NULL_LIT.cast(BooleanType)
           } else {
             val element = lhs.asSparkSQLExpr
             val array = rhs.asSparkSQLExpr
@@ -139,13 +153,50 @@ object SparkSQLExprMapper {
         case GreaterThanOrEqual(lhs, rhs) => compare(gteq, lhs, rhs)
         case GreaterThan(lhs, rhs) => compare(gt, lhs, rhs)
 
+        case StartsWith(lhs, rhs) =>
+          lhs.asSparkSQLExpr.startsWith(rhs.asSparkSQLExpr)
+        case EndsWith(lhs, rhs) =>
+          lhs.asSparkSQLExpr.endsWith(rhs.asSparkSQLExpr)
+        case Contains(lhs, rhs) =>
+          lhs.asSparkSQLExpr.contains(rhs.asSparkSQLExpr)
+
+        case RegexMatch(prop, Param(name)) => {
+          val regex: String = parameters(name).unwrap.toString
+          prop.asSparkSQLExpr.rlike(regex)
+        }
+
+
         // Arithmetics
-        case Add(lhs, rhs) => lhs.asSparkSQLExpr + rhs.asSparkSQLExpr
+        case Add(lhs, rhs) =>
+          val lhsCT = lhs.cypherType
+          val rhsCT = rhs.cypherType
+          lhsCT.material -> rhsCT.material match {
+            case (_: CTList, _) =>
+              throw UnsupportedOperationException("List concatenation is not supported")
+
+            case (_, _: CTList) =>
+              throw UnsupportedOperationException("List concatenation is not supported")
+
+            case (CTString, _) if rhsCT.subTypeOf(CTNumber).maybeTrue =>
+              functions.concat(lhs.asSparkSQLExpr, rhs.asSparkSQLExpr.cast(StringType))
+
+            case (_, CTString) if lhsCT.subTypeOf(CTNumber).maybeTrue =>
+              functions.concat(lhs.asSparkSQLExpr.cast(StringType), rhs.asSparkSQLExpr)
+
+            case (CTString, CTString) =>
+              functions.concat(lhs.asSparkSQLExpr, rhs.asSparkSQLExpr)
+
+            case _ =>
+              lhs.asSparkSQLExpr + rhs.asSparkSQLExpr
+          }
+
+
         case Subtract(lhs, rhs) => lhs.asSparkSQLExpr - rhs.asSparkSQLExpr
         case Multiply(lhs, rhs) => lhs.asSparkSQLExpr * rhs.asSparkSQLExpr
         case div@Divide(lhs, rhs) => (lhs.asSparkSQLExpr / rhs.asSparkSQLExpr).cast(div.cypherType.getSparkType)
 
         // Functions
+        case _: MonotonicallyIncreasingId => functions.monotonically_increasing_id()
         case Exists(e) => e.asSparkSQLExpr.isNotNull
         case Id(e) => e.asSparkSQLExpr
         case Labels(e) =>
@@ -187,10 +238,61 @@ object SparkSQLExprMapper {
 
         case ToFloat(e) => e.asSparkSQLExpr.cast(DoubleType)
 
+        case ToInteger(e) => e.asSparkSQLExpr.cast(IntegerType)
+
+        case ToString(e) => e.asSparkSQLExpr.cast(StringType)
+
+        case ToBoolean(e) => e.asSparkSQLExpr.cast(BooleanType)
+
         case Explode(list) => list.cypherType match {
           case CTList(_) | CTListOrNull(_) => functions.explode(list.asSparkSQLExpr)
+          case CTNull => functions.explode(functions.lit(null).cast(ArrayType(NullType)))
           case other => throw IllegalArgumentException("CTList", other)
         }
+
+        case Range(from, to, maybeStep) =>
+          val stepCol = maybeStep.map(_.asSparkSQLExpr).getOrElse(ONE_LIT)
+          rangeUdf(from.asSparkSQLExpr, to.asSparkSQLExpr, stepCol)
+
+        case Substring(original, start, maybeLength) =>
+          val origCol = original.asSparkSQLExpr
+          val startCol = start.asSparkSQLExpr + ONE_LIT
+          val lengthCol = maybeLength.map(_.asSparkSQLExpr).getOrElse(functions.length(origCol) - startCol + ONE_LIT)
+          origCol.substr(startCol, lengthCol)
+
+        // Mathematical functions
+
+        case _: E => E
+        case _: Pi => PI
+
+        case Sqrt(e) => functions.sqrt(e.asSparkSQLExpr)
+        case Log(e) => functions.log(e.asSparkSQLExpr)
+        case Log10(e) => functions.log(10.0, e.asSparkSQLExpr)
+        case Exp(e) => functions.exp(e.asSparkSQLExpr)
+        case Abs(e) => functions.abs(e.asSparkSQLExpr)
+        case Ceil(e) => functions.ceil(e.asSparkSQLExpr).cast(DoubleType)
+        case Floor(e) => functions.floor(e.asSparkSQLExpr).cast(DoubleType)
+        case _: Rand => functions.rand()
+        case Round(e) => functions.round(e.asSparkSQLExpr).cast(DoubleType)
+        case Sign(e) => functions.signum(e.asSparkSQLExpr).cast(IntegerType)
+
+        // Time functions
+
+        case Timestamp() => functions.current_timestamp().cast(LongType)
+
+        // Bit operations
+
+        case BitwiseAnd(lhs, rhs) =>
+          lhs.asSparkSQLExpr.bitwiseAND(rhs.asSparkSQLExpr)
+
+        case BitwiseOr(lhs, rhs) =>
+          lhs.asSparkSQLExpr.bitwiseOR(rhs.asSparkSQLExpr)
+
+        case ShiftLeft(value, IntegerLit(shiftBits)) =>
+          functions.shiftLeft(value.asSparkSQLExpr, shiftBits.toInt)
+
+        case ShiftRightUnsigned(value, IntegerLit(shiftBits)) =>
+          functions.shiftRightUnsigned(value.asSparkSQLExpr, shiftBits.toInt)
 
         // Pattern Predicate
         case ep: ExistsPatternExpr => ep.targetField.asSparkSQLExpr
@@ -215,6 +317,15 @@ object SparkSQLExprMapper {
             case (tmpCol, whenCol) => whenCol.otherwise(tmpCol)
           }
           caseColumn
+
+        case ContainerIndex(container, index) =>
+          val indexCol = index.asSparkSQLExpr
+          val containerCol = container.asSparkSQLExpr
+
+          container.cypherType.material match {
+            case _: CTList => containerCol.get(indexCol)
+            case other => throw NotImplementedException(s"Accessing $other by index is not supported")
+          }
 
         case _ =>
           throw NotImplementedException(s"No support for converting Cypher expression $expr to a Spark SQL expression")

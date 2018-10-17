@@ -26,7 +26,9 @@
  */
 package org.opencypher.okapi.api.schema
 
+import org.opencypher.okapi.api.schema.PropertyKeys.PropertyKeys
 import org.opencypher.okapi.api.types._
+import org.opencypher.okapi.impl.exception.SchemaException
 import org.scalatest.{FunSpec, Matchers}
 
 class SchemaTest extends FunSpec with Matchers {
@@ -53,16 +55,16 @@ class SchemaTest extends FunSpec with Matchers {
   it("should give correct node property schema") {
     val schema = Schema.empty.withNodePropertyKeys("Person")("name" -> CTString, "age" -> CTInteger)
 
-    schema.nodeKeys("NotPerson") shouldBe empty
-    schema.nodeKeys("Person") should equal(Map("name" -> CTString, "age" -> CTInteger))
+    schema.nodePropertyKeys(Set("NotPerson")) shouldBe empty
+    schema.nodePropertyKeys(Set("Person")) should equal(Map("name" -> CTString, "age" -> CTInteger))
     schema.labels should equal(Set("Person"))
   }
 
   it("should give correct relationship property schema") {
     val schema = Schema.empty.withRelationshipPropertyKeys("KNOWS")("since" -> CTInteger, "relative" -> CTBoolean)
 
-    schema.relationshipKeys("NOT_KNOWS") shouldBe empty
-    schema.relationshipKeys("KNOWS") should equal(Map("since" -> CTInteger, "relative" -> CTBoolean))
+    schema.relationshipPropertyKeys("NOT_KNOWS") shouldBe empty
+    schema.relationshipPropertyKeys("KNOWS") should equal(Map("since" -> CTInteger, "relative" -> CTBoolean))
     schema.relationshipTypes should equal(Set("KNOWS"))
   }
 
@@ -135,8 +137,8 @@ class SchemaTest extends FunSpec with Matchers {
       .withRelationshipPropertyKeys("BAR")("p1" -> CTBoolean)
       .withRelationshipPropertyKeys("BAR")("p2" -> CTFloat)
 
-    schema.nodeKeys("Foo") should equal(Map("name" -> CTString, "age" -> CTInteger.nullable))
-    schema.relationshipKeys("BAR") should equal(Map("p1" -> CTBoolean.nullable, "p2" -> CTFloat.nullable))
+    schema.nodePropertyKeys(Set("Foo")) should equal(Map("name" -> CTString, "age" -> CTInteger.nullable))
+    schema.relationshipPropertyKeys("BAR") should equal(Map("p1" -> CTBoolean.nullable, "p2" -> CTFloat.nullable))
   }
 
   it("combining schemas, separate keys") {
@@ -271,8 +273,8 @@ class SchemaTest extends FunSpec with Matchers {
       .withNodePropertyKeys(Set.empty[String], Map("name" -> CTString))
       .withNodePropertyKeys("A")("name" -> CTInteger)
 
-    schema.nodeKeys() should equal(Map("name" -> CTString))
-    schema.nodeKeys(Set.empty[String]) should equal(Map("name" -> CTString))
+    schema.nodePropertyKeys(Set.empty) should equal(Map("name" -> CTString))
+    schema.nodePropertyKeys(Set.empty[String]) should equal(Map("name" -> CTString))
   }
 
   it("get node key type with all given semantics") {
@@ -280,11 +282,11 @@ class SchemaTest extends FunSpec with Matchers {
       .withNodePropertyKeys(Set("A"), Map("a" -> CTInteger, "b" -> CTString, "c" -> CTFloat, "d" -> CTFloat.nullable))
       .withNodePropertyKeys(Set.empty[String], Map("a" -> CTString))
 
-    schema.nodeKeyType(Set("A"), "a") should equal(Some(CTInteger))
-    schema.nodeKeyType(Set.empty[String], "a") should equal(Some(CTAny))
-    schema.nodeKeyType(Set.empty[String], "b") should equal(Some(CTString.nullable))
-    schema.nodeKeyType(Set("B"), "b") should equal(None)
-    schema.nodeKeyType(Set("A"), "x") should equal(None)
+    schema.nodePropertyKeyType(Set("A"), "a") should equal(Some(CTInteger))
+    schema.nodePropertyKeyType(Set.empty[String], "a") should equal(Some(CTAny))
+    schema.nodePropertyKeyType(Set.empty[String], "b") should equal(Some(CTString.nullable))
+    schema.nodePropertyKeyType(Set("B"), "b") should equal(None)
+    schema.nodePropertyKeyType(Set("A"), "x") should equal(None)
   }
 
   it("get rel key type") {
@@ -297,13 +299,13 @@ class SchemaTest extends FunSpec with Matchers {
       )
       .withRelationshipType("C")
 
-    schema.relationshipKeyType(Set("A"), "a") should equal(Some(CTInteger))
-    schema.relationshipKeyType(Set("A", "B"), "a") should equal(Some(CTNumber))
-    schema.relationshipKeyType(Set("A", "B"), "b") should equal(Some(CTString.nullable))
-    schema.relationshipKeyType(Set("A", "B", "C"), "c") should equal(Some(CTAny.nullable))
-    schema.relationshipKeyType(Set("A"), "e") should equal(None)
+    schema.relationshipPropertyKeyType(Set("A"), "a") should equal(Some(CTInteger))
+    schema.relationshipPropertyKeyType(Set("A", "B"), "a") should equal(Some(CTNumber))
+    schema.relationshipPropertyKeyType(Set("A", "B"), "b") should equal(Some(CTString.nullable))
+    schema.relationshipPropertyKeyType(Set("A", "B", "C"), "c") should equal(Some(CTAny.nullable))
+    schema.relationshipPropertyKeyType(Set("A"), "e") should equal(None)
 
-    schema.relationshipKeyType(Set.empty, "a") should equal(Some(CTNumber.nullable))
+    schema.relationshipPropertyKeyType(Set.empty, "a") should equal(Some(CTNumber.nullable))
   }
 
   it("get all keys") {
@@ -312,7 +314,7 @@ class SchemaTest extends FunSpec with Matchers {
       .withNodePropertyKeys("A")("b" -> CTInteger, "c" -> CTString, "e" -> CTString, "f" -> CTInteger)
       .withNodePropertyKeys("B")("b" -> CTFloat, "c" -> CTString, "e" -> CTInteger, "f" -> CTBoolean)
 
-    schema.allNodeKeys should equal(
+    allNodePropertyKeys(schema) should equal(
       Map(
         "a" -> CTString.nullable,
         "b" -> CTNumber.nullable,
@@ -328,9 +330,9 @@ class SchemaTest extends FunSpec with Matchers {
       .withNodePropertyKeys("A")("b" -> CTInteger, "c" -> CTString, "e" -> CTString, "f" -> CTInteger)
       .withNodePropertyKeys("B")("b" -> CTFloat, "c" -> CTString, "e" -> CTInteger)
 
-    schema.keysFor("A") should equal(Map("b" -> CTInteger, "c" -> CTString, "e" -> CTString, "f" -> CTInteger))
-    schema.keysFor("B") should equal(Map("b" -> CTFloat, "c" -> CTString, "e" -> CTInteger))
-    schema.keysFor("A", "B") should equal(Map("b" -> CTNumber, "c" -> CTString, "e" -> CTAny, "f" -> CTInteger.nullable))
+    schema.nodePropertyKeysForCombinations(Set(Set("A"))) should equal(Map("b" -> CTInteger, "c" -> CTString, "e" -> CTString, "f" -> CTInteger))
+    schema.nodePropertyKeysForCombinations(Set(Set("B"))) should equal(Map("b" -> CTFloat, "c" -> CTString, "e" -> CTInteger))
+    schema.nodePropertyKeysForCombinations(Set(Set("A"), Set("B"))) should equal(Map("b" -> CTNumber, "c" -> CTString, "e" -> CTAny, "f" -> CTInteger.nullable))
   }
 
   it("get keys for label combinations") {
@@ -339,11 +341,11 @@ class SchemaTest extends FunSpec with Matchers {
       .withNodePropertyKeys("A")("b" -> CTInteger, "c" -> CTString, "e" -> CTString, "f" -> CTInteger)
       .withNodePropertyKeys("B")("b" -> CTFloat, "c" -> CTString, "e" -> CTInteger)
 
-    schema.keysFor(Set(Set("A"))) should equal(Map("b" -> CTInteger, "c" -> CTString, "e" -> CTString, "f" -> CTInteger))
-    schema.keysFor(Set(Set("B"))) should equal(Map("b" -> CTFloat, "c" -> CTString, "e" -> CTInteger))
-    schema.keysFor(Set(Set("A"), Set("B"))) should equal(Map("b" -> CTNumber, "c" -> CTString, "e" -> CTAny, "f" -> CTInteger.nullable))
-    schema.keysFor(Set(Set("A", "B"))) should equal(Map.empty)
-    schema.keysFor(Set(Set.empty[String])) should equal(Map("a" -> CTString, "c" -> CTString, "d" -> CTString.nullable, "f" -> CTString))
+    schema.nodePropertyKeysForCombinations(Set(Set("A"))) should equal(Map("b" -> CTInteger, "c" -> CTString, "e" -> CTString, "f" -> CTInteger))
+    schema.nodePropertyKeysForCombinations(Set(Set("B"))) should equal(Map("b" -> CTFloat, "c" -> CTString, "e" -> CTInteger))
+    schema.nodePropertyKeysForCombinations(Set(Set("A"), Set("B"))) should equal(Map("b" -> CTNumber, "c" -> CTString, "e" -> CTAny, "f" -> CTInteger.nullable))
+    schema.nodePropertyKeysForCombinations(Set(Set("A", "B"))) should equal(Map.empty)
+    schema.nodePropertyKeysForCombinations(Set(Set.empty[String])) should equal(Map("a" -> CTString, "c" -> CTString, "d" -> CTString.nullable, "f" -> CTString))
   }
 
   it("isEmpty") {
@@ -399,4 +401,400 @@ class SchemaTest extends FunSpec with Matchers {
         .withNodePropertyKeys("Foo")("p" -> CTString.nullable)
     )
   }
+
+  it("concatenates explicit schema patterns") {
+    val schema1 = Schema.empty
+      .withNodePropertyKeys("Foo")()
+      .withRelationshipPropertyKeys("REL")()
+      .withSchemaPatterns(SchemaPattern("Foo", "REL", "Foo"))
+
+    val schema2 = Schema.empty
+      .withNodePropertyKeys("Bar")()
+      .withRelationshipPropertyKeys("REL")()
+      .withSchemaPatterns(SchemaPattern("Bar", "REL", "Bar"))
+
+    val schemaSum = schema1 ++ schema2
+
+    schemaSum should equal(
+      Schema.empty
+        .withNodePropertyKeys("Foo")()
+        .withRelationshipPropertyKeys("REL")()
+        .withNodePropertyKeys("Bar")()
+        .withRelationshipPropertyKeys("REL")()
+        .withSchemaPatterns(SchemaPattern("Foo", "REL", "Foo"))
+        .withSchemaPatterns(SchemaPattern("Bar", "REL", "Bar"))
+    )
+  }
+
+  it("serializes to/from json when patterns and keys are not present") {
+    val schema = Schema.empty
+      .withRelationshipPropertyKeys("FOO")("p" -> CTString)
+      .withNodePropertyKeys("BAR")("q" -> CTInteger)
+
+    val serialized = schema.toJson
+
+    serialized should equal(
+      """|{
+         |    "version": 1,
+         |    "labelPropertyMap": [
+         |        {
+         |            "labels": [
+         |                "BAR"
+         |            ],
+         |            "properties": {
+         |                "q": "INTEGER"
+         |            }
+         |        }
+         |    ],
+         |    "relTypePropertyMap": [
+         |        {
+         |            "relType": "FOO",
+         |            "properties": {
+         |                "p": "STRING"
+         |            }
+         |        }
+         |    ]
+         |}""".stripMargin)
+
+    val deserialized = Schema.fromJson(serialized)
+
+    deserialized should equal(schema)
+  }
+
+  it("serializes to/from json when patterns and keys are present") {
+    val schema = Schema.empty
+      .withRelationshipPropertyKeys("FOO")("p" -> CTString)
+      .withNodePropertyKeys("BAR")("q" -> CTInteger)
+      .withSchemaPatterns(SchemaPattern(Set("BAR"), "FOO", Set("BAR")))
+      .withNodeKey("BAR", Set("q"))
+      .withRelationshipKey("FOO", Set("p"))
+
+    val serialized = schema.toJson
+
+    serialized should equal(
+      """|{
+         |    "version": 1,
+         |    "labelPropertyMap": [
+         |        {
+         |            "labels": [
+         |                "BAR"
+         |            ],
+         |            "properties": {
+         |                "q": "INTEGER"
+         |            }
+         |        }
+         |    ],
+         |    "relTypePropertyMap": [
+         |        {
+         |            "relType": "FOO",
+         |            "properties": {
+         |                "p": "STRING"
+         |            }
+         |        }
+         |    ],
+         |    "schemaPatterns": [
+         |        {
+         |            "sourceLabelCombination": [
+         |                "BAR"
+         |            ],
+         |            "relType": "FOO",
+         |            "targetLabelCombination": [
+         |                "BAR"
+         |            ]
+         |        }
+         |    ],
+         |    "nodeKeys": {
+         |        "BAR": [
+         |            "q"
+         |        ]
+         |    },
+         |    "relKeys": {
+         |        "FOO": [
+         |            "p"
+         |        ]
+         |    }
+         |}""".stripMargin)
+
+    val deserialized = Schema.fromJson(serialized)
+
+    deserialized should equal(schema)
+  }
+
+  describe("pattern schemas") {
+    it("is empty if the schema is empty") {
+      val schema = Schema.empty
+      schema.schemaPatterns shouldBe empty
+    }
+
+    it("is empty if there are no relationships") {
+      val schema = Schema.empty.withNodePropertyKeys("A")()
+      schema.schemaPatterns shouldBe empty
+    }
+
+    it("is empty if there are no nodes") {
+      val schema = Schema.empty.withRelationshipPropertyKeys("A")()
+      schema.schemaPatterns shouldBe empty
+    }
+
+    it("gives all the inferred patterns") {
+      val schema = Schema.empty
+        .withNodePropertyKeys("A")()
+        .withNodePropertyKeys("B")()
+        .withRelationshipPropertyKeys("REL")()
+
+      schema.schemaPatterns should equal(Set(
+        SchemaPattern(Set("A"), "REL", Set("A")),
+        SchemaPattern(Set("A"), "REL", Set("B")),
+        SchemaPattern(Set("B"), "REL", Set("A")),
+        SchemaPattern(Set("B"), "REL", Set("B"))
+      ))
+    }
+
+    it("returns the explicit patterns if any were given") {
+      val schema = Schema.empty
+        .withNodePropertyKeys("A")()
+        .withNodePropertyKeys("B")()
+        .withRelationshipPropertyKeys("REL")()
+        .withSchemaPatterns(SchemaPattern("A", "REL", "B"))
+
+      schema.schemaPatterns should equal(Set(
+        SchemaPattern("A", "REL", "B")
+      ))
+    }
+
+    it("throws a SchemaException when adding a schema pattern into an empty schema") {
+      a[SchemaException] should be thrownBy {
+        Schema.empty.withSchemaPatterns(SchemaPattern("A", "REL", "B"))
+      }
+    }
+
+    it("throws a SchemaException when adding a schema pattern for unknown start node labels") {
+      a[SchemaException] should be thrownBy {
+        Schema.empty
+          .withNodePropertyKeys("A")()
+          .withRelationshipPropertyKeys("REL")()
+          .withSchemaPatterns(SchemaPattern("A", "REL", "B"))
+      }
+    }
+
+    it("throws a SchemaException when adding a schema pattern for unknown end node labels") {
+      a[SchemaException] should be thrownBy {
+        Schema.empty
+          .withNodePropertyKeys("B")()
+          .withRelationshipPropertyKeys("REL")()
+          .withSchemaPatterns(SchemaPattern("A", "REL", "B"))
+      }
+    }
+
+    it("throws a SchemaException when adding a schema pattern for unknown rel type") {
+      a[SchemaException] should be thrownBy {
+        Schema.empty
+          .withNodePropertyKeys("A")()
+          .withNodePropertyKeys("B")()
+          .withSchemaPatterns(SchemaPattern("A", "REL", "B"))
+      }
+    }
+  }
+
+  describe("schemaPatternsFor") {
+    val aRel1B = SchemaPattern("A", "REL1", "B")
+    val aRel2CD = SchemaPattern(Set("A"), "REL2", Set("C", "D"))
+    val bRel2CD = SchemaPattern(Set("B"), "REL2", Set("C", "D"))
+    val CDRel1A = SchemaPattern(Set("C", "D"), "REL1", Set("A"))
+    val emptyRel1Empty = SchemaPattern(Set.empty[String], "REL1", Set.empty[String])
+
+    val schema = Schema.empty
+      .withNodePropertyKeys("A")()
+      .withNodePropertyKeys("B")()
+      .withNodePropertyKeys("C", "D")()
+      .withNodePropertyKeys()()
+      .withRelationshipPropertyKeys("REL1")()
+      .withRelationshipPropertyKeys("REL2")()
+      .withSchemaPatterns(aRel1B)
+      .withSchemaPatterns(aRel2CD)
+      .withSchemaPatterns(bRel2CD)
+      .withSchemaPatterns(CDRel1A)
+      .withSchemaPatterns(emptyRel1Empty)
+
+    it("works when nothing is known") {
+      schema.schemaPatternsFor(Set.empty, Set.empty, Set.empty) should equal(Set(
+        aRel1B,
+        aRel2CD,
+        bRel2CD,
+        CDRel1A,
+        emptyRel1Empty
+      ))
+    }
+
+    it("works when only the source node label is known") {
+      schema.schemaPatternsFor(Set.empty, Set.empty, Set.empty) should equal(Set(
+        aRel1B,
+        aRel2CD,
+        bRel2CD,
+        CDRel1A,
+        emptyRel1Empty
+      ))
+
+      schema.schemaPatternsFor(Set("A"), Set.empty, Set.empty) should equal(Set(
+        aRel1B,
+        aRel2CD
+      ))
+
+      schema.schemaPatternsFor(Set("C"), Set.empty, Set.empty) should equal(Set(
+        CDRel1A
+      ))
+    }
+
+    it("works when only the target node label is known") {
+      schema.schemaPatternsFor(Set.empty, Set.empty, Set("A")) should equal(Set(
+        CDRel1A
+      ))
+
+      schema.schemaPatternsFor(Set.empty, Set.empty, Set("C")) should equal(Set(
+        aRel2CD,
+        bRel2CD
+      ))
+    }
+
+    it("works when only the rel type is known") {
+      schema.schemaPatternsFor(Set.empty, Set("REL1"), Set.empty) should equal(Set(
+        aRel1B,
+        CDRel1A,
+        emptyRel1Empty
+      ))
+
+      schema.schemaPatternsFor(Set.empty, Set("REL1", "REL2"), Set.empty) should equal(Set(
+        aRel1B,
+        aRel2CD,
+        bRel2CD,
+        CDRel1A,
+        emptyRel1Empty
+      ))
+    }
+
+    it("works when every thing is known") {
+      schema.schemaPatternsFor(Set("A"), Set("REL1"), Set("B")) should equal(Set(
+        aRel1B
+      ))
+
+      schema.schemaPatternsFor(Set("A"), Set("REL2"), Set("C")) should equal(Set(
+        aRel2CD
+      ))
+
+      schema.schemaPatternsFor(Set("A"), Set("REL1"), Set("C")) shouldBe empty
+    }
+
+    it("works for no existing labels/types") {
+      schema.schemaPatternsFor(Set("A", "B"), Set.empty, Set.empty) shouldBe empty
+      schema.schemaPatternsFor(Set.empty, Set.empty, Set("A", "B")) shouldBe empty
+      schema.schemaPatternsFor(Set.empty, Set("REL3"), Set.empty) shouldBe empty
+    }
+  }
+
+  describe("entity keys") {
+    it("adds node keys") {
+      val schema = Schema.empty
+        .withNodePropertyKeys("A")("foo" -> CTString, "bar" -> CTString)
+        .withNodeKey("A", Set("foo", "bar"))
+      schema.nodeKeys shouldEqual Map("A" -> Set("foo", "bar"))
+    }
+
+    it("adds relationship keys") {
+      val schema = Schema.empty
+        .withRelationshipPropertyKeys("A")("foo" -> CTString, "bar" -> CTString)
+        .withRelationshipKey("A", Set("foo", "bar"))
+      schema.relationshipKeys shouldEqual Map("A" -> Set("foo", "bar"))
+    }
+
+    it("fails to add unknown entity keys") {
+      a[SchemaException] shouldBe thrownBy {
+        Schema.empty.withNodeKey("A", Set.empty)
+      }
+      a[SchemaException] shouldBe thrownBy {
+        Schema.empty.withRelationshipKey("A", Set.empty)
+      }
+    }
+
+    it("merges overlapping keys during schema merge") {
+      val schema1 = Schema.empty
+        .withNodePropertyKeys("A")("foo" -> CTString)
+        .withNodeKey("A", Set("foo"))
+      val schema2 = Schema.empty
+        .withNodePropertyKeys("A")("bar" -> CTString)
+        .withNodeKey("A", Set("bar"))
+      val joinedSchema = schema1 ++ schema2
+
+      joinedSchema.nodeKeys shouldEqual Map("A" -> Set("foo", "bar"))
+    }
+
+    it("fails if a node key refers to a non-existing label") {
+      an[SchemaException] shouldBe thrownBy {
+        Schema.empty
+          .withNodePropertyKeys("A")("foo" -> CTString)
+          .withNodeKey("B", Set("foo"))
+      }
+    }
+
+    it("fails if a node key refers to a non-existing property key for the label") {
+      an[SchemaException] shouldBe thrownBy {
+        Schema.empty
+          .withNodePropertyKeys("A")("foo" -> CTString)
+          .withNodeKey("A", Set("bar"))
+      }
+    }
+
+    it("fails if a node key refers to a nullable property key for the label") {
+      an[SchemaException] shouldBe thrownBy {
+        Schema.empty
+          .withNodePropertyKeys("A")("foo" -> CTString.nullable)
+          .withNodeKey("A", Set("foo"))
+      }
+    }
+
+
+    it("fails if a relationship key refers to a non-existing label") {
+      an[SchemaException] shouldBe thrownBy {
+        Schema.empty
+          .withRelationshipPropertyKeys("A")("foo" -> CTString)
+          .withRelationshipKey("B", Set("foo"))
+      }
+    }
+
+    it("fails if a relationship key refers to a non-existing property key for the label") {
+      an[SchemaException] shouldBe thrownBy {
+        Schema.empty
+          .withRelationshipPropertyKeys("A")("foo" -> CTString)
+          .withRelationshipKey("A", Set("bar"))
+      }
+    }
+
+    it("fails if a relationship key refers to a nullable property key for the label") {
+      an[SchemaException] shouldBe thrownBy {
+        Schema.empty
+          .withRelationshipPropertyKeys("A")("foo" -> CTString.nullable)
+          .withRelationshipKey("A", Set("foo"))
+      }
+    }
+  }
+
+  private def allNodePropertyKeys(schema: Schema): PropertyKeys = {
+    val keyToTypes = schema.allCombinations
+      .map(schema.nodePropertyKeys)
+      .toSeq
+      .flatten
+      .groupBy(_._1)
+      .map {
+        case (k, v) => k -> v.map(_._2)
+      }
+
+    keyToTypes
+      .mapValues(types => types.foldLeft[CypherType](CTVoid)(_ join _))
+      .map {
+        case (key, tpe) =>
+          if (schema.allCombinations.map(schema.nodePropertyKeys).forall(_.get(key).isDefined))
+            key -> tpe
+          else key -> tpe.nullable
+      }
+  }
+
 }

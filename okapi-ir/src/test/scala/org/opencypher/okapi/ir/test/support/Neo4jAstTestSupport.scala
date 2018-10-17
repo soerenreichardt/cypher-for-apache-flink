@@ -29,13 +29,13 @@ package org.opencypher.okapi.ir.test.support
 import org.opencypher.okapi.impl.exception.IllegalArgumentException
 import org.opencypher.okapi.ir.impl.parse.CypherParser
 import org.opencypher.okapi.testing.BaseTestSuite
-import org.opencypher.v9_1.ast._
-import org.opencypher.v9_1.ast.semantics.{SemanticCheckResult, SemanticState}
-import org.opencypher.v9_1.expressions.Expression
-import org.opencypher.v9_1.frontend.phases._
-import org.opencypher.v9_1.rewriting.RewriterStepSequencer
-import org.opencypher.v9_1.rewriting.rewriters.Never
-import org.opencypher.v9_1.util.{CypherException, InputPosition}
+import org.opencypher.v9_0.ast._
+import org.opencypher.v9_0.ast.semantics.{SemanticCheckResult, SemanticState}
+import org.opencypher.v9_0.expressions.Expression
+import org.opencypher.v9_0.frontend.phases._
+import org.opencypher.v9_0.rewriting.RewriterStepSequencer
+import org.opencypher.v9_0.rewriting.rewriters.Never
+import org.opencypher.v9_0.util.{CypherException, InputPosition}
 
 import scala.language.implicitConversions
 
@@ -60,10 +60,10 @@ trait Neo4jAstTestSupport extends AstConstructionTestSupport {
 object Neo4jAstTestSupport {
 
   object CypherParserWithoutSemanticChecking extends CypherParser {
-    override val pipeLine =
+    override val pipeLine: Transformer[BaseContext, BaseState, BaseState] =
       Parsing.adds(BaseContains[Statement]) andThen
         SyntaxDeprecationWarnings andThen
-        PreparatoryRewriting andThen
+        OkapiPreparatoryRewriting andThen
         NonThrowingSemanticAnalysis andThen
         AstRewriting(RewriterStepSequencer.newPlain, Never) andThen
         Namespacer andThen

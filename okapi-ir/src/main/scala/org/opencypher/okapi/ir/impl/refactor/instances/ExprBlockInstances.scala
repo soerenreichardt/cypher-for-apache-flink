@@ -45,12 +45,12 @@ trait ExprBlockInstances {
     }
   }
 
-  implicit def typedMatchBlock: TypedBlock[MatchBlock[Expr]] =
-    new TypedBlock[MatchBlock[Expr]] {
+  implicit def typedMatchBlock: TypedBlock[MatchBlock] =
+    new TypedBlock[MatchBlock] {
 
       override type BlockExpr = Expr
 
-      override def outputs(block: MatchBlock[Expr]): Set[IRField] = {
+      override def outputs(block: MatchBlock): Set[IRField] = {
         val opaqueTypedFields = block.binds.fields
         val predicates = block.where
 
@@ -66,7 +66,7 @@ trait ExprBlockInstances {
               // The below predicate is never present currently
               // Possibly it will be if we introduce a rewrite
               // Rel types are currently detailed already in pattern conversion
-              case HasType(rel: Var, relType) =>
+              case HasType(rel: Var, _) =>
                 fields.map {
                   case f if f representsRel rel =>
                     throw NotImplementedException("No support for annotating relationships in IR yet")

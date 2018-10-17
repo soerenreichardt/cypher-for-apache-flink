@@ -51,9 +51,9 @@ class DefaultFileSystemTest extends CAPSTestSuite {
     val graph = caps.cypher(
       """
         |CONSTRUCT
-        |  NEW ()
+        |  CREATE ()
         |RETURN GRAPH
-      """.stripMargin).getGraph
+      """.stripMargin).graph
     val ds = FSGraphSources(s"${tempDir.getRoot.getAbsolutePath}${pathSeparator}someNewFolder1${pathSeparator}someNewFolder2").csv
     ds.store(GraphName("foo"), graph)
   }

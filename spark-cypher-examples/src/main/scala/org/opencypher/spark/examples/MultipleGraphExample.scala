@@ -24,6 +24,7 @@
  * described as "implementation extensions to Cypher" or as "proposed changes to
  * Cypher that are not yet approved by the openCypher community".
  */
+// tag::full-example[]
 package org.opencypher.spark.examples
 
 import org.opencypher.okapi.api.graph.Namespace
@@ -58,10 +59,10 @@ object MultipleGraphExample extends ConsoleApp {
        |MATCH (c:Customer)
        |WHERE p.name = c.name
        |CONSTRUCT ON socialNetwork, purchases.products
-       |  NEW (p)-[:IS]->(c)
+       |  CREATE (p)-[:IS]->(c)
        |RETURN GRAPH
     """.stripMargin
-  ).getGraph
+  ).graph
 
   // 6) Query for product recommendations
   val recommendations = recommendationGraph.cypher(
@@ -74,3 +75,4 @@ object MultipleGraphExample extends ConsoleApp {
 
   recommendations.show
 }
+// end::full-example[]

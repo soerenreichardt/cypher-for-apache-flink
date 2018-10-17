@@ -26,7 +26,7 @@
  */
 package org.opencypher.okapi.ir.impl
 
-import org.opencypher.okapi.api.graph.GraphName
+import org.opencypher.okapi.api.graph.{GraphName, QualifiedGraphName}
 import org.opencypher.okapi.api.schema.Schema
 import org.opencypher.okapi.api.value.CypherValue._
 import org.opencypher.okapi.ir.api._
@@ -35,7 +35,7 @@ import org.opencypher.okapi.ir.api.expr.Expr
 import org.opencypher.okapi.ir.api.pattern.Pattern
 import org.opencypher.okapi.ir.impl.parse.CypherParser
 import org.opencypher.okapi.testing.BaseTestSuite
-import org.opencypher.v9_1.ast.semantics.SemanticState
+import org.opencypher.v9_0.ast.semantics.SemanticState
 
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
@@ -45,50 +45,51 @@ abstract class IrTestSuite extends BaseTestSuite {
   def testGraph()(implicit schema: Schema = testGraphSchema) =
     IRCatalogGraph(testQualifiedGraphName, schema)
 
-  def leafBlock: SourceBlock[Expr] = SourceBlock[Expr](testGraph)
+  def leafBlock: SourceBlock = SourceBlock(testGraph)
 
-  val graphBlock: SourceBlock[Expr] = SourceBlock[Expr](testGraph)
+  val graphBlock: SourceBlock = SourceBlock(testGraph)
 
   def project(
-    fields: Fields[Expr],
-    after: List[Block[Expr]] = List(leafBlock),
-    given: Set[Expr] = Set.empty[Expr]) =
+    fields: Fields,
+    after: List[Block] = List(leafBlock),
+    given: Set[Expr] = Set.empty) =
     ProjectBlock(after, fields, given, testGraph)
 
-  protected def matchBlock(pattern: Pattern[Expr]): Block[Expr] =
-    MatchBlock[Expr](List(leafBlock), pattern, Set.empty[Expr], false, testGraph)
+  protected def matchBlock(pattern: Pattern): Block =
+    MatchBlock(List(leafBlock), pattern, Set.empty, false, testGraph)
 
-  def irFor(root: Block[Expr]): CypherQuery[Expr] = {
-    val result = TableResultBlock[Expr](
+  def irFor(root: Block): CypherQuery = {
+    val result = TableResultBlock(
       after = List(root),
-      binds = OrderedFields[Expr](),
+      binds = OrderedFields(),
       graph = testGraph
     )
     val model = QueryModel(result, CypherMap.empty)
     CypherQuery(QueryInfo("test"), model)
   }
 
-  case class DummyBlock[E](override val after: List[Block[E]] = List.empty) extends BasicBlock[DummyBinds[E], E](BlockType("dummy")) {
-    override def binds: DummyBinds[E] = DummyBinds[E]()
+  case class DummyBlock(override val after: List[Block] = List.empty) extends BasicBlock[DummyBinds[Expr]](BlockType("dummy")) {
+    override def binds: DummyBinds[Expr] = DummyBinds[Expr]()
 
-    override def where(): Set[E] = Set.empty[E]
+    override def where: Set[Expr] = Set.empty[Expr]
 
-    override val graph = testGraph
+    override val graph: IRCatalogGraph = testGraph
   }
 
-  case class DummyBinds[E](fields: Set[IRField] = Set.empty) extends Binds[E]
+  case class DummyBinds[E](fields: Set[IRField] = Set.empty) extends Binds
 
   implicit class RichString(queryText: String) {
-    def parseIR[T <: CypherStatement[Expr] : ClassTag](graphsWithSchema: (GraphName, Schema)*)(implicit schema: Schema = Schema.empty): T =
-      ir(graphsWithSchema:_ *) match {
-        case cq : T => cq
+    def parseIR[T <: CypherStatement : ClassTag](graphsWithSchema: (GraphName, Schema)*)
+      (implicit schema: Schema = Schema.empty): T =
+      ir(graphsWithSchema: _ *) match {
+        case cq: T => cq
         case other => throw new IllegalArgumentException(s"Cannot convert $other")
-    }
+      }
 
-    def asCypherQuery(graphsWithSchema: (GraphName, Schema)*)(implicit schema: Schema = Schema.empty): CypherQuery[Expr] =
-      parseIR[CypherQuery[Expr]](graphsWithSchema: _*)
+    def asCypherQuery(graphsWithSchema: (GraphName, Schema)*)(implicit schema: Schema = Schema.empty): CypherQuery =
+      parseIR[CypherQuery](graphsWithSchema: _*)
 
-    def ir(graphsWithSchema: (GraphName, Schema)*)(implicit schema: Schema = Schema.empty): CypherStatement[Expr] = {
+    def ir(graphsWithSchema: (GraphName, Schema)*)(implicit schema: Schema = Schema.empty): CypherStatement = {
       val stmt = CypherParser(queryText)(CypherParser.defaultContext)
       val parameters = Map.empty[String, CypherValue]
       IRBuilder(stmt)(
@@ -98,11 +99,12 @@ abstract class IrTestSuite extends BaseTestSuite {
           SemanticState.clean,
           testGraph()(schema),
           qgnGenerator,
-          Map.empty.withDefaultValue(testGraphSource(graphsWithSchema :+ (testGraphName -> schema): _*))
+          Map.empty.withDefaultValue(testGraphSource(graphsWithSchema :+ (testGraphName -> schema): _*)),
+          _ => ???
         ))
     }
 
-    def irWithParams(params: (String, CypherValue)*)(implicit schema: Schema = Schema.empty): CypherStatement[Expr] = {
+    def irWithParams(params: (String, CypherValue)*)(implicit schema: Schema = Schema.empty): CypherStatement = {
       val stmt = CypherParser(queryText)(CypherParser.defaultContext)
       IRBuilder(stmt)(
         IRBuilderContext.initial(queryText,
@@ -110,7 +112,10 @@ abstract class IrTestSuite extends BaseTestSuite {
           SemanticState.clean,
           testGraph()(schema),
           qgnGenerator,
-          Map.empty.withDefaultValue(testGraphSource(testGraphName -> schema))))
+          Map.empty.withDefaultValue(testGraphSource(testGraphName -> schema)),
+          _ => ???
+        )
+      )
     }
   }
 
@@ -122,7 +127,8 @@ abstract class IrTestSuite extends BaseTestSuite {
         SemanticState.clean,
         testGraph()(Schema.empty),
         qgnGenerator,
-        Map.empty
+        Map.empty,
+        _ => ???
       )
   }
 }

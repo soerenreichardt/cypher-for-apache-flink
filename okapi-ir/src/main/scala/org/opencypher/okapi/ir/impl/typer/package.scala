@@ -34,7 +34,7 @@ import org.atnos.eff.syntax.all._
 import org.opencypher.okapi.api.schema.Schema
 import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.ir.impl.exception.TyperException
-import org.opencypher.v9_1.expressions.Expression
+import org.opencypher.v9_0.expressions.Expression
 
 package object typer {
 
@@ -117,7 +117,7 @@ package object typer {
   def error[R: _keepsErrors](failure: TyperError): Eff[R, CypherType] =
     wrong[R, TyperError](failure) >> pure(CTWildcard)
 
-  implicit val showExpr = new Show[Expression] {
+  implicit val showExpr: Show[Expression] = new Show[Expression] {
     override def show(it: Expression): String = s"$it [${it.position}]"
   }
 }

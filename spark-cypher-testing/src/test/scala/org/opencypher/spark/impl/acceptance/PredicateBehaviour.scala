@@ -35,12 +35,20 @@ import org.scalatest.DoNotDiscover
 @DoNotDiscover
 class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
 
+  it("can evaluate predicates on non-existing properties") {
+    val given = initGraph("CREATE ()")
+
+    val result = given.cypher("MATCH (n) WHERE n.name = 'foo' RETURN n.id")
+
+    result.records.toMaps should equal(Bag())
+  }
+
   it("exists()") {
     val given = initGraph("CREATE ({id: 1}), ({id: 2}), ({other: 'foo'}), ()")
 
     val result = given.cypher("MATCH (n) WHERE exists(n.id) RETURN n.id")
 
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("n.id" -> 1),
       CypherMap("n.id" -> 2)
     ))
@@ -54,7 +62,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
     val result = given.cypher("MATCH (a:A) WHERE a.val IN [-1, 2, 5, 0] RETURN a.val")
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("a.val" -> 2)
     ))
   }
@@ -67,7 +75,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
     val result = given.cypher("MATCH (a:A) WHERE a.val IN $list RETURN a.val", Map("list" -> CypherList(-1, 2, 5, 0)))
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("a.val" -> 2)
     ))
   }
@@ -80,7 +88,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
     val result = given.cypher("MATCH (a:A) WHERE a.val = 1 OR a.val = 2 RETURN a.val")
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("a.val" -> 1),
       CypherMap("a.val" -> 2)
     ))
@@ -94,7 +102,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
     val result = given.cypher("MATCH (a) WHERE a:A OR a:B RETURN a.val")
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("a.val" -> 1),
       CypherMap("a.val" -> 2)
     ))
@@ -114,7 +122,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
     val result = given.cypher("MATCH (a:A) WHERE a.val = 1 OR (a.val >= 4 AND a.name = 'e') RETURN a.val, a.name")
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("a.val" -> 1, "a.name" -> "a"),
       CypherMap("a.val" -> 5, "a.name" -> "e")
     ))
@@ -123,19 +131,19 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
   it("equality between properties") {
     // Given
     val given = initGraph(
-      """ CREATE (:A {val: 1})-[:REL]->(:B {p: 2})
-        |CREATE (:A {val: 2})-[:REL]->(:B {p: 1})
-        |CREATE (:A {val: 100})-[:REL]->(:B {p: 100})
-        |CREATE (:A {val: 1})-[:REL]->(:B)
-        |CREATE (:A)-[:REL]->(:B {p: 2})
-        |CREATE (:A)-[:REL]->(:B)
+      """|CREATE (:A {val: 1})-[:REL]->(:B {p: 2})
+         |CREATE (:A {val: 2})-[:REL]->(:B {p: 1})
+         |CREATE (:A {val: 100})-[:REL]->(:B {p: 100})
+         |CREATE (:A {val: 1})-[:REL]->(:B)
+         |CREATE (:A)-[:REL]->(:B {p: 2})
+         |CREATE (:A)-[:REL]->(:B)
       """.stripMargin)
 
     // When
     val result = given.cypher("MATCH (a:A)-->(b:B) WHERE a.val = b.p RETURN b.p")
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("b.p" -> 100)
     ))
   }
@@ -150,7 +158,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
       val result = given.cypher("MATCH (n:Node)-->(m:Node) WHERE n.val < m.val RETURN n.val")
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("n.val" -> 4)
       ))
     }
@@ -164,7 +172,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
       val result = given.cypher("MATCH (a:A)-->(b:B) WHERE a.val < b.val2 RETURN a.val")
 
       // Then
-      result.getRecords.collect.toBag shouldBe empty
+      result.records.collect.toBag shouldBe empty
     }
 
     it("less than or equal") {
@@ -179,7 +187,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
       result = given.cypher("MATCH (n:Node)-->(m:Node) WHERE n.val <= m.val RETURN n.id, n.val")
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("n.id" -> 1, "n.val" -> 4),
         CypherMap("n.id" -> 2, "n.val" -> 5)
       ))
@@ -194,7 +202,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
       val result = given.cypher("MATCH (a:A)-->(b:B) WHERE a.val <= b.val2 RETURN a.val")
 
       // Then
-      result.getRecords.collect.toBag shouldBe empty
+      result.records.collect.toBag shouldBe empty
     }
 
     it("greater than") {
@@ -205,7 +213,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
       val result = given.cypher("MATCH (n:Node)<--(m:Node) WHERE n.val > m.val RETURN n.val")
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("n.val" -> 5)
       ))
     }
@@ -219,7 +227,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
       val result = given.cypher("MATCH (a:A)-->(b:B) WHERE a.val > b.val2 RETURN a.val")
 
       // Then
-      result.getRecords.collect.toBag shouldBe empty
+      result.records.collect.toBag shouldBe empty
     }
 
     it("greater than or equal") {
@@ -230,7 +238,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
       val result = given.cypher("MATCH (n:Node)<--(m:Node) WHERE n.val >= m.val RETURN n.id, n.val")
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("n.id" -> 2, "n.val" -> 5),
         CypherMap("n.id" -> 3, "n.val" -> 5)
       ))
@@ -245,7 +253,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
       val result = given.cypher("MATCH (a:A)-->(b:B) WHERE a.val >= b.val2 RETURN a.val")
 
       // Then
-      result.getRecords.collect.toBag shouldBe empty
+      result.records.collect.toBag shouldBe empty
     }
   }
 
@@ -259,7 +267,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
         |RETURN a.val
       """.stripMargin
 
-    graph.cypher(query).getRecords.collect.toBag should equal(Bag(
+    graph.cypher(query).records.collect.toBag should equal(Bag(
       CypherMap("a.val" -> 10)
     ))
   }
@@ -272,7 +280,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
     val result = given.cypher("MATCH (n:Node) WHERE (n.val * 1.0) / n.id >= 2.5 RETURN n.id")
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("n.id" -> 1),
       CypherMap("n.id" -> 2)
     ))
@@ -291,7 +299,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
     val result = given.cypher("MATCH (a)-->(b) WHERE (a)-->()-->(b) RETURN a.id, b.id")
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("a.id" -> 1L, "b.id" -> 3L)
     ))
   }
@@ -304,7 +312,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
     val result = given.cypher("MATCH (a)-->(b) WHERE (a)-[*1..3]->()-->(b) RETURN a.id, b.id")
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("a.id" -> 1L, "b.id" -> 3L)
     ))
   }
@@ -321,7 +329,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
     val result = given.cypher("MATCH (a) WHERE (a)-->({name: 'foo'}) RETURN a.id")
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("a.id" -> 1L)
     ))
   }
@@ -338,7 +346,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
     val result = given.cypher("MATCH (a)-->(b) WHERE (a)-[{val: 'foo'}]->()-->(b) RETURN a.id, b.id")
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("a.id" -> 1L, "b.id" -> 2L)
     ))
   }
@@ -355,7 +363,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
     val result = given.cypher("MATCH (a)-->(b) WHERE (a)-->(:A)-->(b) RETURN a.id, b.id")
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("a.id" -> 1L, "b.id" -> 2L)
     ))
   }
@@ -372,7 +380,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
     val result = given.cypher("MATCH (a)-->(b) WHERE (a)-[:A]->()-->(b) RETURN a.id, b.id")
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("a.id" -> 1L, "b.id" -> 2L)
     ))
   }
@@ -385,7 +393,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
     val result = given.cypher("MATCH (a)-->(b) WHERE NOT (a)-->()-->(b) RETURN a.id, b.id")
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("a.id" -> 1L, "b.id" -> 2L),
       CypherMap("a.id" -> 2L, "b.id" -> 3L)
     ))
@@ -407,7 +415,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
         |RETURN a.id
       """.stripMargin)
 
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("a.id" -> 1),
       CypherMap("a.id" -> 3)
     ))
@@ -425,7 +433,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
     val result = given.cypher("MATCH (a) WHERE (a)-->({val: a.val + 2}) RETURN a.id")
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("a.id" -> 1L)
     ))
   }
@@ -438,7 +446,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
     val result = given.cypher("MATCH (a) WHERE (a)-->({id: 2, foo: true}) RETURN a.id")
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("a.id" -> 1L)
     ))
   }
@@ -457,7 +465,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
       val result = given.cypher("MATCH (a)-->(b) WHERE (a)-->()-->(b) RETURN a.id, b.id")
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("a.id" -> 1L, "b.id" -> 3L)
       ))
     }
@@ -470,7 +478,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
       val result = given.cypher("MATCH (a)-->(b) WHERE (a)-[*1..3]->()-->(b) RETURN a.id, b.id")
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("a.id" -> 1L, "b.id" -> 3L)
       ))
     }
@@ -487,7 +495,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
       val result = given.cypher("MATCH (a) WHERE (a)-->({name: 'foo'}) RETURN a.id")
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("a.id" -> 1L)
       ))
     }
@@ -504,7 +512,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
       val result = given.cypher("MATCH (a)-->(b) WHERE (a)-[{val: 'foo'}]->()-->(b) RETURN a.id, b.id")
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("a.id" -> 1L, "b.id" -> 2L)
       ))
     }
@@ -521,7 +529,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
       val result = given.cypher("MATCH (a)-->(b) WHERE (a)-->(:A)-->(b) RETURN a.id, b.id")
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("a.id" -> 1L, "b.id" -> 2L)
       ))
     }
@@ -538,7 +546,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
       val result = given.cypher("MATCH (a)-->(b) WHERE (a)-[:A]->()-->(b) RETURN a.id, b.id")
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("a.id" -> 1L, "b.id" -> 2L)
       ))
     }
@@ -551,7 +559,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
       val result = given.cypher("MATCH (a)-->(b) WHERE NOT (a)-->()-->(b) RETURN a.id, b.id")
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("a.id" -> 1L, "b.id" -> 2L),
         CypherMap("a.id" -> 2L, "b.id" -> 3L)
       ))
@@ -573,7 +581,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
           |RETURN a.id
         """.stripMargin)
 
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("a.id" -> 1),
         CypherMap("a.id" -> 3)
       ))
@@ -591,7 +599,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
       val result = given.cypher("MATCH (a) WHERE (a)-->({val: a.val + 2}) RETURN a.id")
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("a.id" -> 1L)
       ))
     }
@@ -604,7 +612,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
       val result = given.cypher("MATCH (a) WHERE (a)-->({id: 2, foo: true}) RETURN a.id")
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("a.id" -> 1L)
       ))
     }
@@ -624,7 +632,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
       val result = given.cypher("MATCH (a)-->(b) WHERE EXISTS((a)-->()-->(b)) RETURN a.id, b.id")
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("a.id" -> 1L, "b.id" -> 3L)
       ))
     }
@@ -637,7 +645,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
       val result = given.cypher("MATCH (a)-->(b) WHERE EXISTS((a)-[*1..3]->()-->(b)) RETURN a.id, b.id")
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("a.id" -> 1L, "b.id" -> 3L)
       ))
     }
@@ -654,7 +662,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
       val result = given.cypher("MATCH (a) WHERE EXISTS((a)-->({name: 'foo'})) RETURN a.id")
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("a.id" -> 1L)
       ))
     }
@@ -671,7 +679,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
       val result = given.cypher("MATCH (a)-->(b) WHERE EXISTS((a)-[{val: 'foo'}]->()-->(b)) RETURN a.id, b.id")
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("a.id" -> 1L, "b.id" -> 2L)
       ))
     }
@@ -688,7 +696,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
       val result = given.cypher("MATCH (a)-->(b) WHERE EXISTS((a)-->(:A)-->(b)) RETURN a.id, b.id")
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("a.id" -> 1L, "b.id" -> 2L)
       ))
     }
@@ -705,7 +713,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
       val result = given.cypher("MATCH (a)-->(b) WHERE EXISTS((a)-[:A]->()-->(b)) RETURN a.id, b.id")
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("a.id" -> 1L, "b.id" -> 2L)
       ))
     }
@@ -718,7 +726,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
       val result = given.cypher("MATCH (a)-->(b) WHERE NOT EXISTS((a)-->()-->(b)) RETURN a.id, b.id")
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("a.id" -> 1L, "b.id" -> 2L),
         CypherMap("a.id" -> 2L, "b.id" -> 3L)
       ))
@@ -740,7 +748,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
           |RETURN a.id
         """.stripMargin)
 
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("a.id" -> 1),
         CypherMap("a.id" -> 3)
       ))
@@ -758,7 +766,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
       val result = given.cypher("MATCH (a) WHERE EXISTS((a)-->({val: a.val + 2})) RETURN a.id")
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("a.id" -> 1L)
       ))
     }
@@ -771,7 +779,7 @@ class PredicateBehaviour extends CAPSTestSuite with DefaultGraphInit {
       val result = given.cypher("MATCH (a) WHERE EXISTS((a)-->({id: 2, foo: true})) RETURN a.id")
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("a.id" -> 1L)
       ))
     }

@@ -28,199 +28,19 @@ package org.opencypher.okapi.relational.api.io
 
 import org.opencypher.okapi.api.io.conversion.{EntityMapping, NodeMapping, RelationshipMapping}
 import org.opencypher.okapi.api.schema.Schema
-import org.opencypher.okapi.api.table.{CypherRecords, CypherTable}
-import org.opencypher.okapi.api.types.{CTBoolean, CTInteger, CTNode, CypherType}
-import org.opencypher.okapi.api.value.CypherValue.CypherMap
+import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.impl.exception.IllegalArgumentException
 import org.opencypher.okapi.impl.util.StringEncodingUtilities._
-import org.opencypher.okapi.ir.api.block.{Asc, Desc, SortItem}
 import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.ir.api.{Label, PropertyKey, RelType}
 import org.opencypher.okapi.relational.api.io.RelationalEntityMapping._
-import org.opencypher.okapi.relational.impl.physical._
+import org.opencypher.okapi.relational.api.table.{RelationalCypherRecords, Table}
 import org.opencypher.okapi.relational.impl.table.RecordHeader
-
-trait FlatRelationalTable[T <: FlatRelationalTable[T]] extends CypherTable {
-
-  this: T =>
-
-  def select(cols: String*): T
-
-  def filter(expr: Expr)(implicit header: RecordHeader, parameters: CypherMap): T
-
-  def drop(cols: String*): T
-
-  def unionAll(other: T): T
-
-  def orderBy(sortItems: (String, Order)*): T
-
-  def distinct: T
-
-  def distinct(cols: String*): T
-
-  def withColumn(column: String, expr: Expr)(implicit header: RecordHeader, parameters: CypherMap): T
-
-  def withColumnRenamed(oldColumn: String, newColumn: String): T
-
-  def withNullColumn(col: String): T
-
-  def withTrueColumn(col: String): T
-
-  def withFalseColumn(col: String): T
-
-  def join(other: T, joinType: JoinType, joinCols: (String, String)*): T
-
-}
-
-trait RelationalCypherRecords[T <: FlatRelationalTable[T]] extends CypherRecords {
-
-  type R <: RelationalCypherRecords[T]
-
-  def from(header: RecordHeader, table: T, displayNames: Option[Seq[String]] = None): R
-
-  def relationalTable: T
-
-  override def physicalColumns: Seq[String] = relationalTable.physicalColumns
-
-  def header: RecordHeader
-
-  def select(expr: Expr, epxrs: Expr*): R = {
-    val allExprs = expr +: epxrs
-    val aliasExprs = allExprs.collect { case a: AliasExpr => a }
-
-    val headerWithAliases = header.withAlias(aliasExprs: _*)
-
-    val selectHeader = headerWithAliases.select(allExprs: _*)
-    val logicalColumns = allExprs.flatMap(_.owner).collect{
-      case v: Var => v.withoutType
-    }.distinct
-
-    from(selectHeader, relationalTable.select(allExprs.map(headerWithAliases.column).distinct: _*), Some(logicalColumns))
-  }
-
-  def filter(expr: Expr)(implicit parameters: CypherMap): R = {
-    val filteredTable = relationalTable.filter(expr)(header, parameters)
-    from(header, filteredTable)
-  }
-
-  def drop(exprs: Expr*): R = {
-    val updatedHeader = header -- exprs.toSet
-    if (updatedHeader.columns.size < header.columns.size) {
-      val updatedTable = relationalTable.drop(exprs.map(header.column): _*)
-      from(updatedHeader, updatedTable)
-    } else {
-      from(updatedHeader, relationalTable)
-    }
-  }
-
-  def addColumn(expr: Expr)(implicit parameters: CypherMap): R = {
-    if (header.contains(expr)) {
-      val updatedHeader = expr match {
-        case a: AliasExpr => header.withAlias(a)
-        case _ => header
-      }
-      from(updatedHeader, relationalTable)
-    } else {
-      val updatedHeader = expr match {
-        case a: AliasExpr => header.withExpr(a.expr).withAlias(a)
-        case _ => header.withExpr(expr)
-      }
-      val updatedTable = relationalTable.withColumn(updatedHeader.column(expr), expr)(updatedHeader, parameters)
-      from(updatedHeader, updatedTable)
-    }
-  }
-
-  def copyColumn(fromColumn: Expr, toColumn: Expr)(implicit parameters: CypherMap): R = {
-    val updatedHeader = header.withExpr(toColumn)
-    val updatedData = relationalTable.withColumn(updatedHeader.column(toColumn), fromColumn)(header, parameters)
-    from(updatedHeader, updatedData)
-  }
-
-  def renameColumns(renamings: (Expr, String)*)(headerOpt: Option[RecordHeader] = None): R = {
-    val updatedHeader = headerOpt.getOrElse(renamings.foldLeft(header) {
-      case (currentHeader, (expr, newColumn)) => currentHeader.withColumnRenamed(expr, newColumn)
-    })
-
-    val updatedTable = renamings.foldLeft(relationalTable) {
-      case (currentTable, (expr, newColumn)) => currentTable.withColumnRenamed(header.column(expr), newColumn)
-    }
-    from(updatedHeader, updatedTable)
-  }
-
-  def withColumnRenamed(oldColumn: Expr, newColumn: String): R = {
-    val updatedHeader = header.withColumnRenamed(oldColumn, newColumn)
-    val updatedTable = relationalTable.withColumnRenamed(header.column(oldColumn), newColumn)
-    from(updatedHeader, updatedTable)
-  }
-
-  def orderBy(sortItems: SortItem[Expr]*): R = {
-    val tableSortItems: Seq[(String, Order)] = sortItems.map {
-      case Asc(expr) => header.column(expr) -> Ascending
-      case Desc(expr) => header.column(expr) -> Descending
-    }
-    from(header, relationalTable.orderBy(tableSortItems: _*))
-  }
-
-  def withAliases(originalToAlias: AliasExpr*): R = {
-    val headerWithAliases = header.withAlias(originalToAlias: _*)
-    from(headerWithAliases, relationalTable)
-  }
-
-  def removeVars(vars: Set[Var]): R = {
-    val updatedHeader = header -- vars
-    val keepColumns = updatedHeader.columns.toSeq.sorted
-    val updatedData = relationalTable.select(keepColumns: _*)
-    from(updatedHeader, updatedData)
-  }
-
-  def unionAll(other: R): R = {
-    val leftColumns = relationalTable.physicalColumns
-    val rightColumns = other.relationalTable.physicalColumns
-
-    if (leftColumns.size != rightColumns.size) {
-      throw IllegalArgumentException("same number of columns", s"left: $leftColumns right: $rightColumns")
-    }
-    if (leftColumns.toSet != rightColumns.toSet) {
-      throw IllegalArgumentException("same column names", s"left: $leftColumns right: $rightColumns")
-    }
-
-    val orderedTable = if (leftColumns != rightColumns) {
-      other.relationalTable.select(leftColumns: _*)
-    } else {
-      other.relationalTable
-    }
-    val unionData = relationalTable.unionAll(orderedTable)
-    from(header, unionData)
-  }
-
-  def distinct: R = {
-    from(header, relationalTable.distinct)
-  }
-
-  def distinct(fields: Var*): R = {
-    from(header, relationalTable.distinct(fields.flatMap(header.expressionsFor).map(header.column).sorted: _*))
-  }
-
-  def join(other: R, joinType: JoinType, joinExprs: (Expr, Expr)*): R = {
-    val joinHeader = header join other.header
-
-    val cleanOther = if (relationalTable.physicalColumns.toSet ++ other.relationalTable.physicalColumns.toSet != joinHeader.columns) {
-      val renameColumns = other.header.expressions
-        .filter(expr => other.header.column(expr) != joinHeader.column(expr))
-        .map { expr => expr -> joinHeader.column(expr) }.toSeq
-      other.renameColumns(renameColumns: _*)()
-    } else other
-
-    val joinCols = joinExprs.map { case (l, r) => header.column(l) -> cleanOther.header.column(r) }
-    val joinData = relationalTable.join(cleanOther.relationalTable, joinType, joinCols: _*)
-    from(joinHeader, joinData)
-  }
-}
 
 /**
   * An entity table describes how to map an input data frame to a Cypher entity (i.e. nodes or relationships).
   */
-trait EntityTable[T <: FlatRelationalTable[T]] extends RelationalCypherRecords[T] {
+trait EntityTable[T <: Table[T]] extends RelationalCypherRecords[T] {
 
   verify()
 
@@ -228,16 +48,19 @@ trait EntityTable[T <: FlatRelationalTable[T]] extends RelationalCypherRecords[T
 
   def mapping: EntityMapping
 
+  // TODO: create CTEntity type
+  val entityType: CypherType with DefiniteCypherType = mapping.cypherType
+
   def header: RecordHeader = mapping match {
     case n: NodeMapping => headerFrom(n)
     case r: RelationshipMapping => headerFrom(r)
   }
 
   protected def verify(): Unit = {
-    mapping.idKeys.foreach(key => relationalTable.verifyColumnType(key, CTInteger, "id key"))
-    if (relationalTable.physicalColumns != mapping.allSourceKeys) throw IllegalArgumentException(
+    mapping.idKeys.foreach(key => table.verifyColumnType(key, CTInteger, "id key"))
+    if (table.physicalColumns != mapping.allSourceKeys) throw IllegalArgumentException(
       s"Columns: ${mapping.allSourceKeys.mkString(", ")}",
-      s"Columns: ${relationalTable.physicalColumns.mkString(", ")}",
+      s"Columns: ${table.physicalColumns.mkString(", ")}",
       s"Use CAPS[Node|Relationship]Table#fromMapping to create a valid EntityTable")
   }
 
@@ -246,7 +69,7 @@ trait EntityTable[T <: FlatRelationalTable[T]] extends RelationalCypherRecords[T
 
     val exprToColumn = Map[Expr, String](nodeMapping.id(nodeVar)) ++
       nodeMapping.optionalLabels(nodeVar) ++
-      nodeMapping.properties(nodeVar, relationalTable.columnType)
+      nodeMapping.properties(nodeVar, table.columnType)
 
     RecordHeader(exprToColumn)
   }
@@ -260,9 +83,84 @@ trait EntityTable[T <: FlatRelationalTable[T]] extends RelationalCypherRecords[T
       relationshipMapping.startNode(relVar),
       relationshipMapping.endNode(relVar)) ++
       relationshipMapping.relTypes(relVar) ++
-      relationshipMapping.properties(relVar, relationalTable.columnType)
+      relationshipMapping.properties(relVar, table.columnType)
 
     RecordHeader(exprToColumn)
+  }
+}
+
+/**
+  * A node table describes how to map an input data frame to a Cypher node.
+  *
+  * A node table needs to have the canonical column ordering specified by [[EntityMapping#allSourceKeys]].
+  * The easiest way to transform the table to a canonical column ordering is to use one of the constructors on the
+  * companion object.
+  *
+  * Column names prefixed with `property#` are decoded by [[org.opencypher.okapi.impl.util.StringEncodingUtilities]] to
+  * recover the original property name.
+  *
+  * @param mapping mapping from input data description to a Cypher node
+  * @param table   input data frame
+  */
+abstract class NodeTable[T <: Table[T]](mapping: NodeMapping, table: T)
+  extends EntityTable[T] {
+
+  override lazy val schema: Schema = {
+    val propertyKeys = mapping.propertyMapping.toSeq.map {
+      case (propertyKey, sourceKey) => propertyKey -> table.columnType(sourceKey)
+    }
+
+    mapping.optionalLabelMapping.keys.toSet.subsets
+      .map(_.union(mapping.impliedLabels))
+      .map(combo => Schema.empty.withNodePropertyKeys(combo.toSeq: _*)(propertyKeys: _*))
+      .reduce(_ ++ _)
+  }
+
+  override protected def verify(): Unit = {
+    super.verify()
+    mapping.optionalLabelMapping.values.foreach { optionalLabelKey =>
+      table.verifyColumnType(optionalLabelKey, CTBoolean, "optional label")
+    }
+  }
+}
+
+/**
+  * A relationship table describes how to map an input data frame to a Cypher relationship.
+  *
+  * A relationship table needs to have the canonical column ordering specified by [[EntityMapping#allSourceKeys]].
+  * The easiest way to transform the table to a canonical column ordering is to use one of the constructors on the
+  * companion object.
+  *
+  * @param mapping mapping from input data description to a Cypher relationship
+  * @param table   input data frame
+  */
+abstract class RelationshipTable[T <: Table[T]](mapping: RelationshipMapping, table: T)
+  extends EntityTable[T] {
+
+  override lazy val schema: Schema = {
+    val relTypes = mapping.relTypeOrSourceRelTypeKey match {
+      case Left(name) => Set(name)
+      case Right((_, possibleTypes)) => possibleTypes
+    }
+
+    val propertyKeys = mapping.propertyMapping.toSeq.map {
+      case (propertyKey, sourceKey) => propertyKey -> table.columnType(sourceKey)
+    }
+
+    relTypes.foldLeft(Schema.empty) {
+      case (partialSchema, relType) => partialSchema.withRelationshipPropertyKeys(relType)(propertyKeys: _*)
+    }
+  }
+
+  override protected def verify(): Unit = {
+    super.verify()
+    table.verifyColumnType(mapping.sourceStartNodeKey, CTInteger, "start node")
+    table.verifyColumnType(mapping.sourceEndNodeKey, CTInteger, "end node")
+    mapping.relTypeOrSourceRelTypeKey.right.map { case (_, relTypes) =>
+      relTypes.foreach { relType =>
+        table.verifyColumnType(relType.toRelTypeColumnName, CTBoolean, "relationship type")
+      }
+    }
   }
 }
 

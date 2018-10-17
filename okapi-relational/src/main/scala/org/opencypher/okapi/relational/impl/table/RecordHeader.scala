@@ -26,11 +26,13 @@
  */
 package org.opencypher.okapi.relational.impl.table
 
-import org.opencypher.okapi.api.types.{CTNode, CTRelationship}
+import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.impl.exception.IllegalArgumentException
 import org.opencypher.okapi.impl.util.TablePrinter
-import org.opencypher.okapi.ir.api.RelType
 import org.opencypher.okapi.ir.api.expr._
+import org.opencypher.okapi.ir.api.{Label, RelType}
+
+import scala.annotation.tailrec
 
 object RecordHeader {
 
@@ -42,6 +44,24 @@ object RecordHeader {
 
   def from[T <: Expr](exprs: Seq[T]): RecordHeader = from(exprs.head, exprs.tail: _*)
 
+  def from(relType: CTRelationship): RecordHeader = {
+    val v = RelationshipVar("")(relType)
+
+    from(
+      v,
+      Seq(StartNode(v)(CTInteger), EndNode(v)(CTInteger))
+      ++ relType.types.map(t => HasType(v, RelType(t))(CTBoolean)): _*
+    )
+  }
+
+  def from(nodeType: CTNode): RecordHeader = {
+    val v = NodeVar("")(nodeType)
+
+    from(
+      v,
+      nodeType.labels.map(l => HasLabel(v, Label(l))(CTBoolean)).toSeq: _*
+    )
+  }
 }
 
 case class RecordHeader(exprToColumn: Map[Expr, String]) {
@@ -60,6 +80,7 @@ case class RecordHeader(exprToColumn: Map[Expr, String]) {
 
   def isEmpty: Boolean = exprToColumn.isEmpty
 
+  // TODO: should we verify that if the expr exists, that it has the same type and nullability
   def contains(expr: Expr): Boolean = expr match {
     case AliasExpr(_, alias) => contains(alias)
     case _ => exprToColumn.contains(expr)
@@ -76,7 +97,7 @@ case class RecordHeader(exprToColumn: Map[Expr, String]) {
     val members = exprToColumn.keys.filter(e => e.owner.contains(expr)).toSet
 
     members.flatMap {
-      case e: Var if e==expr => Seq(e)
+      case e: Var if e == expr => Seq(e)
       case e: Var => ownedBy(e) + e
       case other => Seq(other)
     }
@@ -189,7 +210,15 @@ case class RecordHeader(exprToColumn: Map[Expr, String]) {
     }
   }
 
-  def nodesForType[T >: NodeVar <: Var](nodeType: CTNode): Set[T] = {
+  def entitiesForType(ct: CypherType, exactMatch: Boolean = false): Set[Var] = {
+    ct match {
+      case n: CTNode => nodesForType(n, exactMatch)
+      case r: CTRelationship => relationshipsForType(r)
+      case other => throw IllegalArgumentException("Entity", other)
+    }
+  }
+
+  def nodesForType[T >: NodeVar <: Var](nodeType: CTNode, exactMatch: Boolean = false): Set[T] = {
     // and semantics
     val requiredLabels = nodeType.labels
 
@@ -199,7 +228,11 @@ case class RecordHeader(exprToColumn: Map[Expr, String]) {
         case CTNode(labels, _) => labels
         case _ => Set.empty[String]
       }
-      requiredLabels.subsetOf(physicalLabels ++ logicalLabels)
+      if (exactMatch) {
+        requiredLabels == (physicalLabels ++ logicalLabels)
+      } else {
+        requiredLabels.subsetOf(physicalLabels ++ logicalLabels)
+      }
     }
   }
 
@@ -226,13 +259,20 @@ case class RecordHeader(exprToColumn: Map[Expr, String]) {
   def select[T <: Expr](exprs: T*): RecordHeader = select(exprs.toSet)
 
   def select[T <: Expr](exprs: Set[T]): RecordHeader = {
+    val aliasExprs = exprs.collect { case a: AliasExpr => a }
+    val headerWithAliases = withAlias(aliasExprs.toSeq: _*)
     val selectExpressions = exprs.flatMap { e: Expr =>
       e match {
-        case v: Var => ownedBy(v) + v
+        case v: Var => expressionsFor(v)
+        case AliasExpr(expr, alias) =>
+          expr match {
+            case v: Var => expressionsFor(v).map(_.withOwner(alias))
+            case other => other.withOwner(alias)
+          }
         case nonVar => Set(nonVar)
       }
     }
-    val selectMappings = exprToColumn.filterKeys(selectExpressions.contains)
+    val selectMappings = headerWithAliases.exprToColumn.filterKeys(selectExpressions.contains)
     RecordHeader(selectMappings)
   }
 
@@ -251,6 +291,19 @@ case class RecordHeader(exprToColumn: Map[Expr, String]) {
     copy(exprToColumn ++ exprs.map(_ -> newColumn))
   }
 
+  private[opencypher] def newConflictFreeColumnName(expr: Expr, usedColumnNames: Set[String] = columns): String = {
+    @tailrec def recConflictFreeColumnName(candidateName: String): String = {
+      if (usedColumnNames.contains(candidateName)) recConflictFreeColumnName(s"_$candidateName")
+      else candidateName
+    }
+
+    val firstColumnNameCandidate = expr.toString
+      .replaceAll("-", "_")
+      .replaceAll(":", "_")
+      .replaceAll("\\.", "_")
+    recConflictFreeColumnName(firstColumnNameCandidate)
+  }
+
   def withExpr(expr: Expr): RecordHeader = {
     expr match {
       case a: AliasExpr => withAlias(a)
@@ -258,19 +311,7 @@ case class RecordHeader(exprToColumn: Map[Expr, String]) {
         case Some(_) => this
 
         case None =>
-          val newColumnName = expr.withoutType.toString
-            .replaceAll("-", "_")
-            .replaceAll(":", "_")
-            .replaceAll("\\.", "_")
-            .replaceAll("#", "_")
-            .replaceAll("@", "_")
-            .replaceAll(" ", "")
-            .replaceAll("=", "_")
-            .replaceAll("'", "")
-            .replace("(", "_")
-            .replace(")", "_")
-            .replace("|", "_")
-            .replace("?", "")
+          val newColumnName = newConflictFreeColumnName(expr)
 
           // Aliases for (possible) owner of expr need to be updated as well
           val exprsToAdd: Set[Expr] = expr.owner match {
@@ -325,23 +366,12 @@ case class RecordHeader(exprToColumn: Map[Expr, String]) {
       throw IllegalArgumentException("two headers with non overlapping expressions", s"overlapping expressions: $expressionOverlap")
     }
 
-    val cleanOther = if (columns.intersect(other.columns).nonEmpty) {
-      val (rename, keep) = other.expressions.partition(e => this.columns.contains(other.column(e)))
-      val withKept = keep.foldLeft(RecordHeader.empty) {
-        case (acc, next) => acc.addExprToColumn(next, other.column(next))
-      }
+    val columnOverlap = columns intersect other.columns
+    if (columnOverlap.nonEmpty) {
+      throw IllegalArgumentException("two headers with non overlapping columns", s"overlapping columns: $columnOverlap")
+    }
 
-      rename.groupBy(other.column).mapValues(_.toSeq.sorted).foldLeft(withKept) {
-        case (acc, (_, exprs)) =>
-          val add = acc.withExpr(exprs.head)
-          val newColumn = add.column(exprs.head)
-          exprs.tail.foldLeft(add) {
-            case (acc2, expr) => acc2.addExprToColumn(expr, newColumn)
-          }
-      }
-    } else other
-
-    this ++ cleanOther
+    this ++ other
   }
 
   def ++(other: RecordHeader): RecordHeader = copy(exprToColumn = exprToColumn ++ other.exprToColumn)
@@ -352,30 +382,16 @@ case class RecordHeader(exprToColumn: Map[Expr, String]) {
     copy(exprToColumn = updatedExprToColumn)
   }
 
-  def ==(other: RecordHeader): Boolean = {
-    def generalizedExprs(vars: Set[Expr]): Set[Expr] = {
-      vars.map { expr =>
-        val ct = if (expr.cypherType.isNullable) {
-          expr.cypherType
-        } else {
-          expr.cypherType.nullable
-        }
-        Var(expr.withoutType)(ct)
-      }
-    }
-
-    val headerWithNullable = generalizedExprs(this.expressions)
-    val otherWithNullable = generalizedExprs(other.expressions)
-
-    (headerWithNullable diff otherWithNullable).isEmpty
-  }
-
-  def !=(other: RecordHeader): Boolean =
-    !(this == other)
-
   def addExprToColumn(expr: Expr, columnName: String): RecordHeader = {
     copy(exprToColumn = exprToColumn + (expr -> columnName))
   }
+
+  override def toString: String = exprToColumn.keys
+    .map(_.withoutType)
+    .map(e => s"`$e`")
+    .toSeq
+    .sorted
+    .mkString("[", ", ", "]")
 
   def pretty: String = {
     val formatCell: String => String = s => s"'$s'"
@@ -386,6 +402,8 @@ case class RecordHeader(exprToColumn: Map[Expr, String]) {
       .unzip
     TablePrinter.toTable(header, Seq(row))(formatCell)
   }
+
+  def show(): Unit = println(pretty)
 
 }
 

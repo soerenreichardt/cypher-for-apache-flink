@@ -28,24 +28,23 @@ package org.opencypher.okapi.ir.impl.parse
 
 import org.opencypher.okapi.ir.api.expr.Var
 import org.opencypher.okapi.ir.impl.exception.ParsingException
-import org.opencypher.okapi.ir.impl.parse.rewriter.OkapiRewriting
+import org.opencypher.okapi.ir.impl.parse.rewriter.OkapiLateRewriting
 import org.opencypher.okapi.ir.impl.typer.toFrontendType
-import org.opencypher.v9_1.ast._
-import org.opencypher.v9_1.ast.semantics.{SemanticErrorDef, SemanticFeature, SemanticState}
-import org.opencypher.v9_1.frontend.phases._
-import org.opencypher.v9_1.rewriting.RewriterStepSequencer
-import org.opencypher.v9_1.rewriting.rewriters.Forced
+import org.opencypher.v9_0.ast._
+import org.opencypher.v9_0.ast.semantics.{SemanticErrorDef, SemanticFeature, SemanticState}
+import org.opencypher.v9_0.frontend.phases._
+import org.opencypher.v9_0.rewriting.RewriterStepSequencer
+import org.opencypher.v9_0.rewriting.rewriters.Forced
 
 object CypherParser extends CypherParser {
   implicit object defaultContext extends BlankBaseContext {
-    override def errorHandler: (Seq[SemanticErrorDef]) => Unit =
-      (errors) => {
-        // TODO: Remove when frontend supports CLONE clause
-        val filteredErrors = errors.filterNot(_.msg.contains("already declared"))
-        if (filteredErrors.nonEmpty) {
-          throw ParsingException(s"Errors during semantic checking: ${filteredErrors.mkString(", ")}")
-        }
+    override def errorHandler: Seq[SemanticErrorDef] => Unit = errors => {
+      // TODO: Remove when frontend supports CLONE clause
+      val filteredErrors = errors.filterNot(_.msg.contains("already declared"))
+      if (filteredErrors.nonEmpty) {
+        throw ParsingException(s"Errors during semantic checking: ${filteredErrors.mkString(", ")}")
       }
+    }
   }
 }
 
@@ -53,7 +52,8 @@ trait CypherParser {
 
   def apply(query: String)(implicit context: BaseContext): Statement = process(query)._1
 
-  def process(query: String, drivingTableFields: Set[Var] = Set.empty)(implicit context: BaseContext): (Statement, Map[String, Any], SemanticState) = {
+  def process(query: String, drivingTableFields: Set[Var] = Set.empty)
+    (implicit context: BaseContext): (Statement, Map[String, Any], SemanticState) = {
     val fieldsWithFrontendTypes = drivingTableFields.map(v => v.name -> toFrontendType(v.cypherType)).toMap
     val startState = InitialState(query, None, null, fieldsWithFrontendTypes)
     val endState = pipeLine.transform(startState, context)
@@ -65,13 +65,14 @@ trait CypherParser {
   protected val pipeLine: Transformer[BaseContext, BaseState, BaseState] =
     Parsing.adds(BaseContains[Statement]) andThen
       SyntaxDeprecationWarnings andThen
-      PreparatoryRewriting andThen
+      OkapiPreparatoryRewriting andThen
       SemanticAnalysis(warn = true, SemanticFeature.Cypher10Support, SemanticFeature.MultipleGraphs, SemanticFeature.WithInitialQuerySignature)
         .adds(BaseContains[SemanticState]) andThen
       AstRewriting(RewriterStepSequencer.newPlain, Forced, getDegreeRewriting = false) andThen
+      isolateAggregation andThen
       SemanticAnalysis(warn = false, SemanticFeature.Cypher10Support, SemanticFeature.MultipleGraphs, SemanticFeature.WithInitialQuerySignature) andThen
       Namespacer andThen
       CNFNormalizer andThen
       LateAstRewriting andThen
-      OkapiRewriting
+      OkapiLateRewriting
 }

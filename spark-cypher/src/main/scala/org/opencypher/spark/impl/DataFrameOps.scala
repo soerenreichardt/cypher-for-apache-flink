@@ -26,29 +26,28 @@
  */
 package org.opencypher.spark.impl
 
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{Column, DataFrame, Row, functions}
+import org.apache.spark.sql.{Column, DataFrame, Row}
 import org.apache.spark.storage.StorageLevel.MEMORY_ONLY
 import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.api.value.CypherValue
 import org.opencypher.okapi.api.value.CypherValue.CypherValue
 import org.opencypher.okapi.impl.exception.IllegalArgumentException
 import org.opencypher.okapi.impl.util.Measurement.printTiming
-import org.opencypher.okapi.ir.api.expr.{Expr, Param}
+import org.opencypher.okapi.ir.api.expr._
+import org.opencypher.okapi.relational.api.planning.RelationalRuntimeContext
 import org.opencypher.okapi.relational.impl.table.RecordHeader
-import org.opencypher.spark.api.Tags._
 import org.opencypher.spark.impl.convert.SparkConversions._
-import org.opencypher.spark.impl.physical.CAPSRuntimeContext
-import org.opencypher.spark.impl.physical.operators.NamedTableScan
+import org.opencypher.spark.impl.table.SparkTable.DataFrameTable
 
 object DataFrameOps {
 
   implicit class CypherRow(r: Row) {
 
-    def getCypherValue(expr: Expr, header: RecordHeader)(implicit context: CAPSRuntimeContext): CypherValue = {
+    def getCypherValue(expr: Expr, header: RecordHeader)
+      (implicit context: RelationalRuntimeContext[DataFrameTable]): CypherValue = {
       expr match {
         case Param(name) => context.parameters(name)
         case _ =>
@@ -58,40 +57,6 @@ object DataFrameOps {
           }
       }
     }
-  }
-
-  implicit class LongTagging(val l: Long) extends AnyVal {
-
-    def setTag(tag: Int): Long = {
-      (l & invertedTagMask) | (tag.toLong << idBits)
-    }
-
-    def getTag: Int = {
-      // TODO: Verify that the tag actually fits into an Int or by requiring and checking a minimum size of 32 bits for idBits when reading it from config
-      ((l & tagMask) >>> idBits).toInt
-    }
-
-    def replaceTag(from: Int, to: Int): Long = {
-      if (l.getTag == from) l.setTag(to) else l
-    }
-
-  }
-
-  implicit class ColumnTagging(val col: Column) extends AnyVal {
-
-    def replaceTag(from: Int, to: Int): Column = functions
-      .when(getTag === lit(from.toLong), setTag(to))
-      .otherwise(col)
-
-    def setTag(tag: Int): Column = {
-      val tagLit = lit(tag.toLong << idBits)
-      val newId = col
-        .bitwiseAND(invertedTagMaskLit)
-        .bitwiseOR(tagLit)
-      newId
-    }
-
-    def getTag: Column = shiftRightUnsigned(col, idBits)
   }
 
 
@@ -146,7 +111,10 @@ object DataFrameOps {
 
     def setNullability(mapping: Map[String, CypherType]): DataFrame = {
       val newSchema = StructType(df.schema.map {
-        case s@StructField(cn, _, _, _) => mapping(cn).toStructField(cn)
+        case s@StructField(cn, _, _, _) => mapping.get(cn) match {
+          case Some(ct) => ct.toStructField(cn)
+          case None => s
+        }
         case other => throw IllegalArgumentException(s"No mapping provided for $other")
       })
       if (newSchema == df.schema) {
@@ -154,18 +122,6 @@ object DataFrameOps {
       } else {
         df.sparkSession.createDataFrame(df.rdd, newSchema)
       }
-    }
-
-    def safeReplaceTags(columnName: String, replacements: Map[Int, Int]): DataFrame = {
-      val dataType = structFieldForColumn(columnName).dataType
-      require(dataType == LongType, s"Cannot remap long values in Column with type $dataType")
-      val col = df.col(columnName)
-
-      val updatedCol = replacements.foldLeft(col) {
-        case (current, (from, to)) => current.replaceTag(from, to)
-      }
-
-      safeReplaceColumn(columnName, updatedCol)
     }
 
     def safeAddColumn(name: String, col: Column): DataFrame = {
@@ -251,23 +207,11 @@ object DataFrameOps {
     /**
       * Prints Spark physical plan.
       */
-    def printPhysicalPlan(replacePlansForNamedTables: Boolean = true): Unit = {
+    def printPhysicalPlan(): Unit = {
       println("Spark plan:")
-      implicit val sc = df.sparkSession.sparkContext
+      implicit val sc: SparkContext = df.sparkSession.sparkContext
       val sparkPlan: SparkPlan = df.queryExecution.executedPlan
-      // Remove cached inputs from plan
-      val planWithoutCached = sparkPlan.transformDown {
-        case inMemoryTableScan: InMemoryTableScanExec =>
-          val maybeTableName = inMemoryTableScan.relation.tableName
-          if (replacePlansForNamedTables && maybeTableName.isDefined) {
-            // Insert a dummy operator into the plan that is printed with the table name for the scan
-            NamedTableScan(maybeTableName)
-          } else {
-            inMemoryTableScan
-          }
-        case other => other
-      }
-      val planString = planWithoutCached.treeString(verbose = false).flatMap {
+      val planString = sparkPlan.treeString(verbose = false).flatMap {
         case '\n' => Seq('\n', '\t')
         case other => Seq(other)
       }

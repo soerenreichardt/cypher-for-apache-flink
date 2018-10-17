@@ -26,15 +26,17 @@
  */
 package org.opencypher.spark.api.io.csv
 
+import org.opencypher.okapi.relational.api.graph.RelationalCypherGraph
+import org.opencypher.spark.api.io.CsvFormat
 import org.opencypher.spark.api.io.fs.FSGraphSource
 import org.opencypher.spark.api.io.fs.hdfs.HdfsDataSourceAcceptance
-import org.opencypher.spark.impl.CAPSGraph
 import org.opencypher.spark.impl.io.CAPSPropertyGraphDataSource
+import org.opencypher.spark.impl.table.SparkTable.DataFrameTable
 
 class MultipleFilesPerTableDataSourceAcceptance extends HdfsDataSourceAcceptance {
 
-  override protected def createDs(graph: CAPSGraph): CAPSPropertyGraphDataSource = {
-    new FSGraphSource("hdfs:///", "csv",  filesPerTable = Some(10))
+  override protected def createDs(graph: RelationalCypherGraph[DataFrameTable]): CAPSPropertyGraphDataSource = {
+    new FSGraphSource(hdfsURI.toString, CsvFormat, filesPerTable = Some(10))
   }
 
 }

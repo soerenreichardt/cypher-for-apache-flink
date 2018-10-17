@@ -27,10 +27,12 @@
 package org.opencypher.spark.impl.acceptance
 
 import org.opencypher.okapi.api.value.CypherValue
-import org.opencypher.okapi.api.value.CypherValue._
+import org.opencypher.okapi.api.value.CypherValue.CypherMap
 import org.opencypher.okapi.testing.Bag
 import org.opencypher.spark.testing.CAPSTestSuite
 import org.scalatest.DoNotDiscover
+import org.opencypher.okapi.testing.Bag
+import org.opencypher.okapi.testing.Bag._
 
 @DoNotDiscover
 class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
@@ -59,7 +61,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
         """.stripMargin)
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("n.val" -> "foo", "result" -> 1),
         CypherMap("n.val" -> "bar", "result" -> 2),
         CypherMap("n.val" -> "baz", "result" -> 3))
@@ -89,7 +91,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
         """.stripMargin)
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("n.val" -> "foo", "result" -> 1),
         CypherMap("n.val" -> "bar", "result" -> 2),
         CypherMap("n.val" -> "baz", "result" -> 3))
@@ -114,7 +116,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
       )
 
       // Then
-      result.getRecords.toMaps shouldBe empty
+      result.records.toMaps shouldBe empty
     }
 
     it("handles unknown properties") {
@@ -132,7 +134,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
         """.stripMargin)
 
       // Then
-      result.getRecords.toMaps should equal(Bag(CypherMap("a.age" -> null, "a.firstName" -> "Alice")))
+      result.records.toMaps should equal(Bag(CypherMap("a.age" -> null, "a.firstName" -> "Alice")))
     }
 
     it("equality between properties") {
@@ -151,7 +153,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
       val result = given.cypher("MATCH (a:A)-->(b:B) RETURN a.val = b.p AS eq")
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("eq" -> false),
         CypherMap("eq" -> false),
         CypherMap("eq" -> true),
@@ -159,6 +161,78 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
         CypherMap("eq" -> null),
         CypherMap("eq" -> null)
       ))
+    }
+
+    it("filter rels on property regular expression") {
+      // Given
+      val given = initGraph("""CREATE (rachel:Person:Actor {name: 'Rachel Kempson', birthyear: 1910})
+                              |CREATE (michael:Person:Actor {name: 'Michael Redgrave', birthyear: 1908})
+                              |CREATE (corin:Person:Actor {name: 'Corin Redgrave', birthyear: 1939})
+                              |CREATE (liam:Person:Actor {name: 'Liam Neeson', birthyear: 1952})
+                              |CREATE (richard:Person:Actor {name: 'Richard Harris', birthyear: 1930})
+                              |CREATE (dennis:Person:Actor {name: 'Dennis Quaid', birthyear: 1954})
+                              |CREATE (lindsay:Person:Actor {name: 'Lindsay Lohan', birthyear: 1986})
+                              |CREATE (jemma:Person:Actor {name: 'Jemma Redgrave', birthyear: 1965})
+                              |
+                              |CREATE (mrchips:Film {title: 'Goodbye, Mr. Chips'})
+                              |CREATE (batmanbegins:Film {title: 'Batman Begins'})
+                              |CREATE (harrypotter:Film {title: 'Harry Potter and the Sorcerer\'s Stone'})
+                              |CREATE (parent:Film {title: 'The Parent Trap'})
+                              |CREATE (camelot:Film {title: 'Camelot'})
+                              |
+                              |CREATE (michael)-[:ACTED_IN {charactername: 'The Headmaster'}]->(mrchips),
+                              |       (richard)-[:ACTED_IN {charactername: 'King Arthur'}]->(camelot),
+                              |       (richard)-[:ACTED_IN {charactername: 'Albus Dumbledore'}]->(harrypotter),
+                              |       (dennis)-[:ACTED_IN {charactername: 'Nick Parker'}]->(parent),
+                              |       (lindsay)-[:ACTED_IN {charactername: 'Halle/Annie'}]->(parent),
+                              |       (liam)-[:ACTED_IN {charactername: 'Henri Ducard'}]->(batmanbegins)
+                            """.stripMargin)
+
+      // When
+      val query = """MATCH (a:Actor)-[r:ACTED_IN]->() WHERE r.charactername =~ '(\\w+\\s*)*Du\\w+' RETURN r.charactername"""
+      val result = given.cypher(query)
+
+      // Then
+      val records = result.records.collect
+      records.toBag should equal(Bag(CypherMap("r.charactername" -> "Henri Ducard"),
+        CypherMap("r.charactername" -> "Albus Dumbledore")))
+    }
+
+    it("filter nodes on property regular expression") {
+      // Given
+      val given = initGraph("""CREATE (rachel:Person:Actor {name: 'Rachel Kempson', birthyear: 1910})
+                              |CREATE (michael:Person:Actor {name: 'Michael Redgrave', birthyear: 1908})
+                              |CREATE (corin:Person:Actor {name: 'Corin Redgrave', birthyear: 1939})
+                              |CREATE (liam:Person:Actor {name: 'Liam Neeson', birthyear: 1952})
+                              |CREATE (richard:Person:Actor {name: 'Richard Harris', birthyear: 1930})
+                              |CREATE (dennis:Person:Actor {name: 'Dennis Quaid', birthyear: 1954})
+                              |CREATE (lindsay:Person:Actor {name: 'Lindsay Lohan', birthyear: 1986})
+                              |CREATE (jemma:Person:Actor {name: 'Jemma Redgrave', birthyear: 1965})
+                              |
+                              |CREATE (mrchips:Film {title: 'Goodbye, Mr. Chips'})
+                              |CREATE (batmanbegins:Film {title: 'Batman Begins'})
+                              |CREATE (harrypotter:Film {title: 'Harry Potter and the Sorcerer\'s Stone'})
+                              |CREATE (parent:Film {title: 'The Parent Trap'})
+                              |CREATE (camelot:Film {title: 'Camelot'})
+                              |
+                              |CREATE (michael)-[:ACTED_IN {charactername: 'The Headmaster'}]->(mrchips),
+                              |       (richard)-[:ACTED_IN {charactername: 'King Arthur'}]->(camelot),
+                              |       (richard)-[:ACTED_IN {charactername: 'Albus Dumbledore'}]->(harrypotter),
+                              |       (dennis)-[:ACTED_IN {charactername: 'Nick Parker'}]->(parent),
+                              |       (lindsay)-[:ACTED_IN {charactername: 'Halle/Annie'}]->(parent),
+                              |       (liam)-[:ACTED_IN {charactername: 'Henri Ducard'}]->(batmanbegins)
+                            """.stripMargin)
+
+      // When
+      val query = """MATCH (p:Person) WHERE p.name =~ '\\w+ Redgrave' RETURN p.name"""
+      val result = given.cypher(query)
+
+      // Then
+      val records = result.records.collect
+      records.toBag should equal(Bag(CypherMap("p.name" -> "Michael Redgrave"),
+        CypherMap("p.name" -> "Corin Redgrave"),
+        CypherMap("p.name" -> "Jemma Redgrave")))
+
     }
   }
 
@@ -172,7 +246,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
     val result = given.cypher("MATCH (n)-->(m) RETURN n.val < m.val")
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("n.val < m.val" -> true),
       CypherMap("n.val < m.val" -> false),
       CypherMap("n.val < m.val" -> false),
@@ -188,7 +262,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
     val result = given.cypher("MATCH (n)-->(m) RETURN n.val <= m.val")
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("n.val <= m.val" -> true),
       CypherMap("n.val <= m.val" -> true),
       CypherMap("n.val <= m.val" -> false),
@@ -204,7 +278,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
     val result = given.cypher("MATCH (n)-->(m) RETURN n.val > m.val AS gt")
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("gt" -> false),
       CypherMap("gt" -> false),
       CypherMap("gt" -> true),
@@ -220,7 +294,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
     val result = given.cypher("MATCH (n)-->(m) RETURN n.val >= m.val")
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("n.val >= m.val" -> false),
       CypherMap("n.val >= m.val" -> true),
       CypherMap("n.val >= m.val" -> true),
@@ -236,7 +310,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
     val result = given.cypher("MATCH (n)-->(m) RETURN m.other + m.val + n.val AS res")
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("res" -> 12),
       CypherMap("res" -> null)
     ))
@@ -250,7 +324,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
     val result = given.cypher("MATCH (n)-->(m) RETURN m.val - n.val - m.other AS res")
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("res" -> -2),
       CypherMap("res" -> null)
     ))
@@ -264,7 +338,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
     val result = given.cypher("MATCH (n:Node)-->(m:Node) RETURN m.val - n.val")
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("m.val - n.val" -> 1)
     ))
   }
@@ -277,7 +351,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
     val result = given.cypher("MATCH (n:Node)-->(m:Node) RETURN n.val * m.val")
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("n.val * m.val" -> 18),
       CypherMap("n.val * m.val" -> 6)
     ))
@@ -292,7 +366,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
     val result = given.cypher("MATCH (n:Node)-->(m:Node) RETURN n.val * m.val")
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("n.val * m.val" -> 11.25)
     ))
 
@@ -306,7 +380,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
     val result = given.cypher("MATCH (n:Node)-->(m:Node) RETURN n.val * m.val2")
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("n.val * m.val2" -> 22.5)
     ))
 
@@ -320,7 +394,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
     val result = given.cypher("MATCH (n:Node)-->(m:Node) RETURN n.val / m.val")
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("n.val / m.val" -> 3),
       CypherMap("n.val / m.val" -> 1)
     ))
@@ -335,7 +409,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
     val result = given.cypher("MATCH (n:Node)-->(m:Node) RETURN n.val / m.val2")
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("n.val / m.val2" -> 2.0),
       CypherMap("n.val / m.val2" -> null)
     ))
@@ -355,7 +429,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
     val result = given.cypher("MATCH (n:Node)-->(m:Node) RETURN m.val = n.val AS res")
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("res" -> false),
       CypherMap("res" -> true),
       CypherMap("res" -> null)
@@ -370,7 +444,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
     val result = given.cypher("MATCH (p:Person) RETURN p.name")
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("p.name" -> "Mats"),
       CypherMap("p.name" -> "Martin")
     ))
@@ -384,7 +458,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
     val result = given.cypher("MATCH (a:Person)-[r:KNOWS]->(b:Person) RETURN r.since")
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap("r.since" -> 2017)
     ))
   }
@@ -403,7 +477,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
       val result = given.cypher("MATCH (a)-->(b) WITH a, b, EXISTS((a)-->()-->(b)) as con RETURN a.id, b.id, con")
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("a.id" -> 1L, "b.id" -> 3L, "con" -> true),
         CypherMap("a.id" -> 1L, "b.id" -> 2L, "con" -> false),
         CypherMap("a.id" -> 2L, "b.id" -> 3L, "con" -> false),
@@ -423,7 +497,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
           |RETURN a.id, b.id, con""".stripMargin)
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("a.id" -> 1L, "b.id" -> 2L, "con" -> false),
         CypherMap("a.id" -> 1L, "b.id" -> 3L, "con" -> true),
         CypherMap("a.id" -> 2L, "b.id" -> 3L, "con" -> false)
@@ -446,7 +520,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
           |RETURN a.id, con""".stripMargin)
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("a.id" -> 1L, "con" -> true),
         CypherMap("a.id" -> 2L, "con" -> false),
         CypherMap("a.id" -> 3L, "con" -> false),
@@ -471,7 +545,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
           |RETURN a.id, b.id, con""".stripMargin)
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("a.id" -> 1L, "b.id" -> 2L, "con" -> true),
         CypherMap("a.id" -> 3L, "b.id" -> 4L, "con" -> false)
       ))
@@ -493,7 +567,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
           |RETURN a.id, con""".stripMargin)
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("a.id" -> 1L, "con" -> true),
         CypherMap("a.id" -> 2L, "con" -> false)
       ))
@@ -515,7 +589,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
           |RETURN a.id, b.id, con""".stripMargin)
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("a.id" -> 1L, "b.id" -> 2L, "con" -> true),
         CypherMap("a.id" -> 3L, "b.id" -> 4L, "con" -> false)
       ))
@@ -533,7 +607,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
           |RETURN a.id, b.id, con""".stripMargin)
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("a.id" -> 1L, "b.id" -> 1L, "con" -> true),
         CypherMap("a.id" -> 1L, "b.id" -> 2L, "con" -> false),
         CypherMap("a.id" -> 2L, "b.id" -> 1L, "con" -> true),
@@ -555,7 +629,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
           |WITH a, EXISTS((a)-->({val: a.val + 2})) AS other RETURN a.id, other""".stripMargin)
 
       // Then
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("a.id" -> 1L, "other" -> true),
         CypherMap("a.id" -> 2L, "other" -> false),
         CypherMap("a.id" -> 3L, "other" -> false)
@@ -572,7 +646,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
           |WITH [$a, $b] as strings
           |RETURN strings""".stripMargin, Map("a" -> CypherValue("bar"), "b" -> CypherValue("foo")))
 
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("strings" -> Seq("bar", "foo"))
       ))
     }
@@ -585,7 +659,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
           |WITH ["bar", "foo"] as strings
           |RETURN strings""".stripMargin)
 
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("strings" -> Seq("bar", "foo"))
       ))
     }
@@ -599,7 +673,7 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
           |WITH [n.val*10, n.val*100] as vals
           |RETURN vals""".stripMargin)
 
-      result.getRecords.toMaps should equal(Bag(
+      result.records.toMaps should equal(Bag(
         CypherMap("vals" -> Seq(10, 100)),
         CypherMap("vals" -> Seq(20, 200))
       ))
@@ -620,8 +694,246 @@ class ExpressionBehaviour extends CAPSTestSuite with DefaultGraphInit {
           | RETURN n.v1
         """.stripMargin('|')
 
-      graph.cypher(query).getRecords.toMaps should equal(Bag(
+      graph.cypher(query).records.toMaps should equal(Bag(
         CypherMap("n.v1" -> true)
+      ))
+    }
+  }
+
+  describe("ContainerIndex") {
+    it("Can extract the nth element from a list with literal index") {
+      val graph = initGraph(
+        """
+          |CREATE ({v1: [1, 2, 3]})
+        """.stripMargin)
+
+      val query =
+        """
+          | MATCH (n)
+          | RETURN n.v1[1] as val
+        """.stripMargin('|')
+
+      graph.cypher(query).records.toMaps should equal(Bag(
+        CypherMap("val" -> 2)
+      ))
+    }
+
+    it("Can extract the nth element from a list with expression index") {
+      val graph = initGraph(
+        """
+          |CREATE ({v1: [1, 2, 3]})
+        """.stripMargin)
+
+      val query =
+        """
+          | MATCH (n)
+          | UNWIND [0,1,2] as i
+          | RETURN n.v1[i] as val
+        """.stripMargin('|')
+
+      graph.cypher(query).records.toMaps should equal(Bag(
+        CypherMap("val" -> 1),
+        CypherMap("val" -> 2),
+        CypherMap("val" -> 3)
+      ))
+    }
+
+    it("returns null when the index is out of bounds") {
+      val graph = initGraph(
+        """
+          |CREATE ({v1: [1, 2, 3]})
+        """.stripMargin)
+
+      val query =
+        """
+          | MATCH (n)
+          | UNWIND [3,4,5] as i
+          | RETURN n.v1[i] as val
+        """.stripMargin('|')
+
+      graph.cypher(query).records.toMaps should equal(Bag(
+        CypherMap("val" -> null),
+        CypherMap("val" -> null),
+        CypherMap("val" -> null)
+      ))
+    }
+  }
+
+  describe("string concatenation") {
+    it("can concat two strings from literals") {
+      caps.cypher(
+        """
+          |RETURN "Hello" + "World" as hello
+        """.stripMargin).records.toMaps should equal(Bag(
+        CypherMap("hello" -> "HelloWorld")
+      ))
+    }
+
+    it("can concat two properties") {
+      val g = initGraph(
+        """
+          |CREATE (:A {a: "Hello"})
+          |CREATE (:B {b: "World"})
+        """.stripMargin)
+
+      g.cypher(
+        """
+          |MATCH (a:A), (b:B)
+          |RETURN a.a + b.b AS hello
+        """.stripMargin).records.toMaps should equal(Bag(
+        CypherMap("hello" -> "HelloWorld")
+      ))
+    }
+
+    it("can concat a string and an integer") {
+      val g = initGraph(
+        """
+          |CREATE (:A {a1: "Hello", a2: 42})
+          |CREATE (:B {b1: 42, b2: "Hello"})
+        """.stripMargin)
+
+      g.cypher(
+        """
+          |MATCH (a:A), (b:B)
+          |RETURN a.a1 + b.b1 AS hello, a.a2 + b.b2 as world
+        """.stripMargin).records.toMaps should equal(Bag(
+        CypherMap("hello" -> "Hello42", "world" -> "42Hello")
+      ))
+    }
+
+    it("can concat a string and a float") {
+      val g = initGraph(
+        """
+          |CREATE (:A {a1: "Hello", a2: 42.0})
+          |CREATE (:B {b1: 42.0, b2: "Hello"})
+        """.stripMargin)
+
+      g.cypher(
+        """
+          |MATCH (a:A), (b:B)
+          |RETURN a.a1 + b.b1 AS hello, a.a2 + b.b2 as world
+        """.stripMargin).records.toMaps should equal(Bag(
+        CypherMap("hello" -> "Hello42.0", "world" -> "42.0Hello")
+      ))
+    }
+  }
+
+  describe("STARTS WITH") {
+    it("returns true for matching strings"){
+      caps.cypher(
+        """
+          |RETURN "foobar" STARTS WITH "foo" as x
+        """.stripMargin
+      ).records.toMaps should equal(Bag(
+        CypherMap("x" -> true)
+      ))
+    }
+
+    it("returns false for not matching strings"){
+      caps.cypher(
+        """
+          |RETURN "foobar" STARTS WITH "bar" as x
+        """.stripMargin
+      ).records.toMaps should equal(Bag(
+        CypherMap("x" -> false)
+      ))
+    }
+
+    it("can handle nulls") {
+      val g = initGraph(
+        """
+          |CREATE ({s: "foobar", r: null})
+          |CREATE ({s: null, r: "foo"})
+        """.stripMargin)
+
+      g.cypher(
+        """
+          |MATCH (n)
+          |RETURN n.s STARTS WITh n.r as x
+        """.stripMargin
+      ).records.toMaps should equal(Bag(
+        CypherMap("x" -> null),
+        CypherMap("x" -> null)
+      ))
+    }
+  }
+
+  describe("ENDS WITH") {
+    it("returns true for matching strings"){
+      caps.cypher(
+        """
+          |RETURN "foobar" ENDS WITH "bar" as x
+        """.stripMargin
+      ).records.toMaps should equal(Bag(
+        CypherMap("x" -> true)
+      ))
+    }
+
+    it("returns false for not matching strings"){
+      caps.cypher(
+        """
+          |RETURN "foobar" ENDS WITH "foo" as x
+        """.stripMargin
+      ).records.toMaps should equal(Bag(
+        CypherMap("x" -> false)
+      ))
+    }
+
+    it("can handle nulls") {
+      val g = initGraph(
+        """
+          |CREATE ({s: "foobar", r: null})
+          |CREATE ({s: null, r: "bar"})
+        """.stripMargin)
+
+      g.cypher(
+        """
+          |MATCH (n)
+          |RETURN n.s STARTS WITh n.r as x
+        """.stripMargin
+      ).records.toMaps should equal(Bag(
+        CypherMap("x" -> null),
+        CypherMap("x" -> null)
+      ))
+    }
+  }
+
+  describe("CONTAINS") {
+    it("returns true for matching strings"){
+      caps.cypher(
+        """
+          |RETURN "foobarbaz" CONTAINS "baz" as x
+        """.stripMargin
+      ).records.toMaps should equal(Bag(
+        CypherMap("x" -> true)
+      ))
+    }
+
+    it("returns false for not matching strings"){
+      caps.cypher(
+        """
+          |RETURN "foobarbaz" CONTAINS "abc" as x
+        """.stripMargin
+      ).records.toMaps should equal(Bag(
+        CypherMap("x" -> false)
+      ))
+    }
+
+    it("can handle nulls") {
+      val g = initGraph(
+        """
+          |CREATE ({s: "foobar", r: null})
+          |CREATE ({s: null, r: "bar"})
+        """.stripMargin)
+
+      g.cypher(
+        """
+          |MATCH (n)
+          |RETURN n.s STARTS WITh n.r as x
+        """.stripMargin
+      ).records.toMaps should equal(Bag(
+        CypherMap("x" -> null),
+        CypherMap("x" -> null)
       ))
     }
   }

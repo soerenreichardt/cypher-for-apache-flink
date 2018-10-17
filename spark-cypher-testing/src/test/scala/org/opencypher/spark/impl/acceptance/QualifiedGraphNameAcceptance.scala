@@ -29,15 +29,17 @@ package org.opencypher.spark.impl.acceptance
 import org.opencypher.okapi.api.graph.{GraphName, Namespace}
 import org.opencypher.okapi.api.value.CypherValue.CypherMap
 import org.opencypher.okapi.impl.io.SessionGraphDataSource
+import org.opencypher.okapi.relational.api.graph.RelationalCypherGraph
 import org.opencypher.okapi.testing.Bag
 import org.opencypher.okapi.testing.Bag._
+import org.opencypher.spark.impl.table.SparkTable
 import org.opencypher.spark.testing.CAPSTestSuite
 
 class QualifiedGraphNameAcceptance extends CAPSTestSuite with DefaultGraphInit {
 
-  val defaultGraph = initGraph("CREATE (:A)-[:REL]->(:B)")
+  val defaultGraph: RelationalCypherGraph[SparkTable.DataFrameTable] = initGraph("CREATE (:A)-[:REL]->(:B)")
 
-  def defaultDS = {
+  def defaultDS: SessionGraphDataSource = {
     val ds = new SessionGraphDataSource()
     ds.store(GraphName("foo"), defaultGraph)
     ds.store(GraphName("foo.bar"), defaultGraph)
@@ -57,7 +59,7 @@ class QualifiedGraphNameAcceptance extends CAPSTestSuite with DefaultGraphInit {
            |MATCH (n)
            |RETURN COUNT(n) as cnt
         """.stripMargin
-      ).getRecords.iterator.toBag should equal(Bag(
+      ).records.iterator.toBag should equal(Bag(
         CypherMap("cnt" -> 2)
       ))
     }
@@ -87,7 +89,7 @@ class QualifiedGraphNameAcceptance extends CAPSTestSuite with DefaultGraphInit {
            |MATCH (n)
            |RETURN COUNT(n) as cnt
         """.stripMargin
-      ).getRecords.iterator.toBag should equal(Bag(
+      ).records.iterator.toBag should equal(Bag(
         CypherMap("cnt" -> 2)
       ))
     }
@@ -101,7 +103,7 @@ class QualifiedGraphNameAcceptance extends CAPSTestSuite with DefaultGraphInit {
            |MATCH (n)
            |RETURN COUNT(n) as cnt
         """.stripMargin
-      ).getRecords.iterator.toBag should equal(Bag(
+      ).records.iterator.toBag should equal(Bag(
         CypherMap("cnt" -> 2)
       ))
     }
@@ -131,17 +133,17 @@ class QualifiedGraphNameAcceptance extends CAPSTestSuite with DefaultGraphInit {
            |MATCH (n)
            |RETURN COUNT(n) as cnt
         """.stripMargin
-      ).getRecords.iterator.toBag should equal(Bag(
+      ).records.iterator.toBag should equal(Bag(
         CypherMap("cnt" -> 2)
       ))
     }
   }
 
-  describe("CREATE GRAPH") {
+  describe("CATALOG CREATE GRAPH") {
     def assertCreateGraph(namespace: String, graphName: String) = {
       caps.cypher(
         s"""
-           |CREATE GRAPH $namespace.$graphName {
+           |CATALOG CREATE GRAPH $namespace.$graphName {
            | CONSTRUCT ON foo.foo
            | RETURN GRAPH
            |}
@@ -171,7 +173,7 @@ class QualifiedGraphNameAcceptance extends CAPSTestSuite with DefaultGraphInit {
     it("can create a graph with escaped graph name in default source ") {
       caps.cypher(
         s"""
-           |CREATE GRAPH `my best constructed graph` {
+           |CATALOG CREATE GRAPH `my best constructed graph` {
            | CONSTRUCT ON foo.foo
            | RETURN GRAPH
            |}

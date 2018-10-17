@@ -7,7 +7,7 @@
   <parent>
     <groupId>org.opencypher</groupId>
     <artifactId>okapi</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>0.2.1-SNAPSHOT</version>
   </parent>
 
   <artifactId>okapi-testing</artifactId>
@@ -28,14 +28,14 @@
 
     <dependency>
       <groupId>org.opencypher</groupId>
-      <artifactId>front-end-9.1</artifactId>
+      <artifactId>front-end-9.0</artifactId>
       <version>${dep.opencypher.front-end.version}</version>
     </dependency>
 
     <dependency>
       <groupId>org.neo4j.test</groupId>
-      <artifactId>neo4j-harness</artifactId>
-      <version>${dep.neo4j.harness.version}</version>
+      <artifactId>neo4j-harness-enterprise</artifactId>
+      <version>${dep.neo4j.version}</version>
     </dependency>
 
     <dependency>

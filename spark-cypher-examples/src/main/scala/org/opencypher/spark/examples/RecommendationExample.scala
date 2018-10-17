@@ -24,12 +24,15 @@
  * described as "implementation extensions to Cypher" or as "proposed changes to
  * Cypher that are not yet approved by the openCypher community".
  */
+// tag::full-example[]
 package org.opencypher.spark.examples
 
 import org.neo4j.harness.ServerControls
 import org.opencypher.okapi.api.graph.Namespace
+import org.opencypher.okapi.neo4j.io.MetaLabelSupport._
+import org.opencypher.okapi.neo4j.io.testing.Neo4jHarnessUtils._
 import org.opencypher.spark.api.{CAPSSession, GraphSources}
-import org.opencypher.spark.util.Neo4jHelpers._
+import org.opencypher.spark.testing.support.creation.CAPSNeo4jHarnessUtils._
 import org.opencypher.spark.util.ConsoleApp
 
 /**
@@ -43,15 +46,15 @@ object RecommendationExample extends ConsoleApp {
   implicit val caps: CAPSSession = CAPSSession.local()
 
   // Start two Neo4j instances and populate them with social network data
-  implicit val neo4jServerUS: ServerControls = startNeo4j(socialNetworkUS)
-  implicit val neo4jServerEU: ServerControls = startNeo4j(socialNetworkEU)
+  implicit val neo4jServerUS: ServerControls = startNeo4j(socialNetworkUS).withSchemaProcedure
+  implicit val neo4jServerEU: ServerControls = startNeo4j(socialNetworkEU).withSchemaProcedure
 
   // Register Property Graph Data Sources (PGDS)
 
   // The graph within Neo4j is partitioned into regions using a property key. Within the data source, we map each
   // partition to a separate graph name (i.e. US and EU)
-  caps.registerSource(Namespace("usSocialNetwork"), GraphSources.cypher.neo4jReadOnlyNamedQuery(neo4jServerUS.dataSourceConfig))
-  caps.registerSource(Namespace("euSocialNetwork"), GraphSources.cypher.neo4jReadOnlyNamedQuery(neo4jServerEU.dataSourceConfig))
+  caps.registerSource(Namespace("usSocialNetwork"), GraphSources.cypher.neo4j(neo4jServerUS.dataSourceConfig))
+  caps.registerSource(Namespace("euSocialNetwork"), GraphSources.cypher.neo4j(neo4jServerEU.dataSourceConfig))
 
   // File-based CSV GDS
   caps.registerSource(Namespace("purchases"), GraphSources.fs(rootPath = s"${getClass.getResource("/csv").getFile}").csv)
@@ -69,14 +72,14 @@ object RecommendationExample extends ConsoleApp {
        |      (a)-[:KNOWS*1..2]->(b)
        |CONSTRUCT
        |  ON $fromGraph
-       |  NEW (a)-[:CLOSE_TO]->(b)
+       |  CREATE (a)-[:CLOSE_TO]->(b)
        |RETURN GRAPH
       """.stripMargin
 
   // Find persons that are close to each other in the US social network
-  val usFriends = caps.cypher(cityFriendsQuery("usSocialNetwork.graph")).getGraph
+  val usFriends = caps.cypher(cityFriendsQuery(s"usSocialNetwork.$entireGraphName")).graph
   // Find persons that are close to each other in the EU social network
-  val euFriends = caps.cypher(cityFriendsQuery("euSocialNetwork.graph")).getGraph
+  val euFriends = caps.cypher(cityFriendsQuery(s"euSocialNetwork.$entireGraphName")).graph
 
   // Union the US and EU graphs into a single graph 'allFriends' and store it in the session
   caps.catalog.store("allFriends", usFriends.unionAll(euFriends))
@@ -90,9 +93,9 @@ object RecommendationExample extends ConsoleApp {
        |WHERE c.name = p.name
        |CONSTRUCT ON purchases.products, allFriends
        |  CLONE c, p
-       |  NEW (c)-[:IS]->(p)
+       |  CREATE (c)-[:IS]->(p)
        |RETURN GRAPH
-      """.stripMargin).getGraph
+      """.stripMargin).graph
 
   // Compute recommendations for 'target' based on their interests and what persons close to the
   // 'target' have already bought and given a helpful and positive rating
@@ -104,7 +107,7 @@ object RecommendationExample extends ConsoleApp {
         |WITH * ORDER BY product.rank
         |RETURN DISTINCT product.title AS product, target.name AS name
         |LIMIT 3
-      """.stripMargin).getRecords
+      """.stripMargin).records
 
   // Print the results
   recommendationTable.show
@@ -167,3 +170,4 @@ object RecommendationExample extends ConsoleApp {
     """
 
 }
+// end::full-example[]

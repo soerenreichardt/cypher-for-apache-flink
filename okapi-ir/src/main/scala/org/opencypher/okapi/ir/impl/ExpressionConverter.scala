@@ -29,19 +29,20 @@ package org.opencypher.okapi.ir.impl
 import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.impl.exception.NotImplementedException
 import org.opencypher.okapi.ir.api.expr._
-import org.opencypher.okapi.ir.api.{CypherQuery, Label, PropertyKey, RelType}
+import org.opencypher.okapi.ir.api._
 import org.opencypher.okapi.ir.impl.FunctionUtils._
-import org.opencypher.v9_1.expressions.functions
-import org.opencypher.v9_1.util.Ref
-import org.opencypher.v9_1.{expressions => ast}
+import org.opencypher.v9_0.expressions.{RegexMatch, functions}
+import org.opencypher.v9_0.util.Ref
+import org.opencypher.v9_0.{expressions => ast}
 
 import scala.language.implicitConversions
+import scala.util.parsing.combinator.token.StdTokens
 
 final class ExpressionConverter(implicit context: IRBuilderContext) {
 
   implicit def toRef(e: ast.Expression): Ref[ast.Expression] = Ref(e)
 
-  def convert(e: ast.Expression)(implicit typings: (Ref[ast.Expression]) => CypherType): Expr = e match {
+  def convert(e: ast.Expression)(implicit typings: Ref[ast.Expression] => CypherType): Expr = e match {
     case ast.Variable(name) =>
       Var(name)(typings(e))
     case ast.Parameter(name, _) =>
@@ -58,6 +59,8 @@ final class ExpressionConverter(implicit context: IRBuilderContext) {
       FalseLit
     case ast.ListLiteral(exprs) =>
       ListLit(exprs.map(convert).toIndexedSeq)(typings(e))
+    case ast.ContainerIndex(container, index) =>
+      ContainerIndex(convert(container), convert(index))(typings(e))
 
     case ast.Property(m, ast.PropertyKeyName(name)) => Property(convert(m), PropertyKey(name))(typings(e))
 
@@ -67,7 +70,7 @@ final class ExpressionConverter(implicit context: IRBuilderContext) {
     case ast.Ors(exprs) =>
       Ors(exprs.map(convert))
     case ast.HasLabels(node, labels) =>
-      val exprs = labels.map { (l: ast.LabelName) =>
+      val exprs = labels.map { l: ast.LabelName =>
         HasLabel(convert(node), Label(l.name))(typings(e))
       }
       if (exprs.size == 1) exprs.head else Ands(exprs.toSet)
@@ -95,6 +98,12 @@ final class ExpressionConverter(implicit context: IRBuilderContext) {
       IsNull(convert(expr))(typings(e))
     case ast.IsNotNull(expr) =>
       IsNotNull(convert(expr))(typings(e))
+    case ast.StartsWith(lhs, rhs) =>
+      StartsWith(convert(lhs), convert(rhs))
+    case ast.EndsWith(lhs, rhs) =>
+      EndsWith(convert(lhs), convert(rhs))
+    case ast.Contains(lhs, rhs) =>
+      Contains(convert(lhs), convert(rhs))
 
     // Arithmetics
     case ast.Add(lhs, rhs) =>
@@ -115,7 +124,7 @@ final class ExpressionConverter(implicit context: IRBuilderContext) {
     // Exists (rewritten Pattern Expressions)
     case org.opencypher.okapi.ir.impl.parse.rewriter.ExistsPattern(subquery, trueVar) =>
       val innerModel = IRBuilder(subquery)(context) match {
-        case cq: CypherQuery[Expr] => cq
+        case cq: CypherQuery => cq
         case _ => throw new IllegalArgumentException("ExistsPattern only accepts SingleQuery")
       }
       ExistsPatternExpr(
@@ -134,6 +143,10 @@ final class ExpressionConverter(implicit context: IRBuilderContext) {
         case (key, value) => key.name -> convert(value)
       }.toMap
       MapExpression(convertedItems)(typings(e))
+
+    case ast.Null() => NullLit(typings(e))
+
+    case RegexMatch(lhs, rhs) => expr.RegexMatch(convert(lhs), convert(rhs))
 
     case _ =>
       throw NotImplementedException(s"Not yet able to convert expression: $e")

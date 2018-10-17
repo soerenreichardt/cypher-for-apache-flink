@@ -28,12 +28,12 @@ package org.opencypher.okapi.ir.impl.typer
 
 import cats.syntax.show._
 import org.opencypher.okapi.api.types._
-import org.opencypher.v9_1.expressions.Expression
+import org.opencypher.v9_0.expressions.Expression
 
 sealed trait TyperError
 
 case class UnsupportedExpr(expr: Expression) extends TyperError {
-  override def toString = s"Don't know how to type ${expr.show}"
+  override def toString = s"The expression ${expr.show} is not supported by the system"
 }
 
 case class UnTypedExpr(it: Expression) extends TyperError {

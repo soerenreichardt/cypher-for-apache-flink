@@ -26,13 +26,15 @@
  */
 package org.opencypher.spark.api.io.fs
 
+import java.net.URI
+
 import org.apache.hadoop.fs.FileSystem
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
 import org.opencypher.okapi.api.graph.GraphName
 import org.opencypher.spark.api.CAPSSession
-import org.opencypher.spark.api.io.AbstractDataSource
-import org.opencypher.spark.api.io.fs.DefaultFileSystem._
+import org.opencypher.spark.api.io.{AbstractPropertyGraphDataSource, StorageFormat}
+import org.opencypher.spark.api.io.fs.HadoopFSHelpers._
 import org.opencypher.spark.api.io.json.JsonSerialization
 
 /**
@@ -48,18 +50,18 @@ import org.opencypher.spark.api.io.json.JsonSerialization
   */
 class FSGraphSource(
   val rootPath: String,
-  val tableStorageFormat: String,
-  val customFileSystem: Option[CAPSFileSystem] = None,
-  val filesPerTable: Option[Int] = Some(1)
-)(implicit session: CAPSSession)
-  extends AbstractDataSource with JsonSerialization {
+  val tableStorageFormat: StorageFormat,
+  val filesPerTable: Option[Int] = None
+)(override implicit val caps: CAPSSession)
+  extends AbstractPropertyGraphDataSource with JsonSerialization {
 
   protected val directoryStructure = DefaultGraphDirectoryStructure(rootPath)
 
   import directoryStructure._
 
-  protected lazy val fileSystem: CAPSFileSystem = customFileSystem.getOrElse(
-    FileSystem.get(session.sparkSession.sparkContext.hadoopConfiguration))
+  protected lazy val fileSystem: FileSystem = {
+    FileSystem.get(new URI(rootPath), caps.sparkSession.sparkContext.hadoopConfiguration)
+  }
 
   protected def listDirectories(path: String): List[String] = fileSystem.listDirectories(path)
 
@@ -70,7 +72,7 @@ class FSGraphSource(
   protected def writeFile(path: String, content: String): Unit = fileSystem.writeFile(path, content)
 
   protected def readTable(path: String, schema: StructType): DataFrame = {
-    session.sparkSession.read.format(tableStorageFormat).schema(schema).load(path)
+    caps.sparkSession.read.format(tableStorageFormat.name).schema(schema).load(path)
   }
 
   protected def writeTable(path: String, table: DataFrame): Unit = {
@@ -78,7 +80,7 @@ class FSGraphSource(
       case None => table
       case Some(numFiles) => table.coalesce(numFiles)
     }
-    coalescedTable.write.format(tableStorageFormat).save(path)
+    coalescedTable.write.format(tableStorageFormat.name).save(path)
   }
 
   override protected def listGraphNames: List[String] = {
@@ -89,7 +91,11 @@ class FSGraphSource(
     deleteDirectory(pathToGraphDirectory(graphName))
   }
 
-  override protected def readNodeTable(graphName: GraphName, labels: Set[String], sparkSchema: StructType): DataFrame = {
+  override protected def readNodeTable(
+    graphName: GraphName,
+    labels: Set[String],
+    sparkSchema: StructType
+  ): DataFrame = {
     readTable(pathToNodeTable(graphName, labels), sparkSchema)
   }
 
@@ -97,7 +103,11 @@ class FSGraphSource(
     writeTable(pathToNodeTable(graphName, labels), table)
   }
 
-  override protected def readRelationshipTable(graphName: GraphName, relKey: String, sparkSchema: StructType): DataFrame = {
+  override protected def readRelationshipTable(
+    graphName: GraphName,
+    relKey: String,
+    sparkSchema: StructType
+  ): DataFrame = {
     readTable(pathToRelationshipTable(graphName, relKey), sparkSchema)
   }
 

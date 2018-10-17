@@ -24,6 +24,7 @@
  * described as "implementation extensions to Cypher" or as "proposed changes to
  * Cypher that are not yet approved by the openCypher community".
  */
+// tag::full-example[]
 package org.opencypher.spark.examples
 
 import org.opencypher.okapi.api.graph.Namespace
@@ -57,7 +58,7 @@ object CypherSQLRoundtripExample extends ConsoleApp {
   )
 
   // 5) Register the result as a table called people
-  result.getRecords.asCaps.toDF("age", "name").createOrReplaceTempView("people")
+  result.records.asCaps.df.toDF("age", "name").createOrReplaceTempView("people")
 
   // 6) Query the registered table using SQL
   val sqlResults = session.sql("SELECT age, name FROM people")
@@ -72,3 +73,4 @@ object CypherSQLRoundtripExample extends ConsoleApp {
   // 8) Print the results
   result2.show
 }
+// end::full-example[]

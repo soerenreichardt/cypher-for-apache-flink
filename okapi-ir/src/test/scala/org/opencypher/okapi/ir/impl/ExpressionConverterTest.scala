@@ -29,16 +29,16 @@ package org.opencypher.okapi.ir.impl
 import org.opencypher.okapi.api.graph.{GraphName, Namespace, QualifiedGraphName}
 import org.opencypher.okapi.api.schema.Schema
 import org.opencypher.okapi.api.types._
-import org.opencypher.okapi.api.value.CypherValue.CypherMap
+import org.opencypher.okapi.api.value.CypherValue.{CypherMap, CypherString}
 import org.opencypher.okapi.ir.api._
 import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.ir.impl.util.VarConverters.{toVar, _}
 import org.opencypher.okapi.ir.test.support.Neo4jAstTestSupport
 import org.opencypher.okapi.testing.BaseTestSuite
 import org.opencypher.okapi.testing.MatchHelper.equalWithTracing
-import org.opencypher.v9_1.ast.semantics.SemanticState
-import org.opencypher.v9_1.util.{Ref, symbols}
-import org.opencypher.v9_1.{expressions => ast}
+import org.opencypher.v9_0.ast.semantics.SemanticState
+import org.opencypher.v9_0.util.{Ref, symbols}
+import org.opencypher.v9_0.{expressions => ast}
 
 class ExpressionConverterTest extends BaseTestSuite with Neo4jAstTestSupport {
 
@@ -98,6 +98,36 @@ class ExpressionConverterTest extends BaseTestSuite with Neo4jAstTestSupport {
     convert(parseExpr("count(*)")) should equal(
       CountStar()
     )
+  }
+
+  describe("range") {
+
+    it("can convert range") {
+      convert(parseExpr("range(0, 10, 2)")) should equal(
+        Range(IntegerLit(0)(), IntegerLit(10)(), Some(IntegerLit(2)()))
+      )
+    }
+
+    it("can convert range with missing step size") {
+      convert(parseExpr("range(0, 10)")) should equal(
+        Range(IntegerLit(0)(), IntegerLit(10)(), None)
+      )
+    }
+  }
+
+  describe("substring") {
+
+    it("can convert substring") {
+      convert(parseExpr("substring('foobar', 0, 3)")) should equal(
+        Substring(StringLit("foobar")(), IntegerLit(0)(), Some(IntegerLit(3)()))
+      )
+    }
+
+    it("can convert substring with missing length") {
+      convert(parseExpr("substring('foobar', 0)")) should equal(
+        Substring(StringLit("foobar")(), IntegerLit(0)(), None)
+      )
+    }
   }
 
   test("can convert less than") {
@@ -224,13 +254,14 @@ class ExpressionConverterTest extends BaseTestSuite with Neo4jAstTestSupport {
     )
   }
 
-  lazy val testContext = IRBuilderContext.initial(
+  lazy val testContext: IRBuilderContext = IRBuilderContext.initial(
     "",
     CypherMap.empty,
     SemanticState.clean,
     IRCatalogGraph(QualifiedGraphName(Namespace(""), GraphName("")), Schema.empty),
     qgnGenerator,
-    Map.empty
+    Map.empty,
+    _ => ???
   )
   private def convert(e: ast.Expression): Expr =
     new ExpressionConverter()(testContext).convert(e)(testTypes)

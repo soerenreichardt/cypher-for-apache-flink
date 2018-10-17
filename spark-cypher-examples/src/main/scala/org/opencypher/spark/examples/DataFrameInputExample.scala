@@ -24,6 +24,7 @@
  * described as "implementation extensions to Cypher" or as "proposed changes to
  * Cypher that are not yet approved by the openCypher community".
  */
+// tag::full-example[]
 package org.opencypher.spark.examples
 
 import org.apache.spark.sql.types._
@@ -61,9 +62,9 @@ object DataFrameInputExample extends ConsoleApp {
   // 6) Collect results into string by selecting a specific column.
   //    This operation may be very expensive as it materializes results locally.
   // 6a) type safe version, discards values with wrong type
-  val safeNames: Set[String] = result.getRecords.collect.flatMap(_ ("n.name").as[String]).toSet
+  val safeNames: Set[String] = result.records.collect.flatMap(_ ("n.name").as[String]).toSet
   // 6b) unsafe version, throws an exception when value cannot be cast
-  val unsafeNames: Set[String] = result.getRecords.collect.map(_ ("n.name").cast[String]).toSet
+  val unsafeNames: Set[String] = result.records.collect.map(_ ("n.name").cast[String]).toSet
 
   println(safeNames)
 }
@@ -97,3 +98,4 @@ object SocialNetworkDataFrames {
     session.createDataFrame(rels, relSchema)
   }
 }
+// end::full-example[]

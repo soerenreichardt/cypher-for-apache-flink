@@ -24,6 +24,7 @@
  * described as "implementation extensions to Cypher" or as "proposed changes to
  * Cypher that are not yet approved by the openCypher community".
  */
+// tag::full-example[]
 package org.opencypher.spark.examples
 
 import org.apache.spark.sql.Dataset
@@ -53,7 +54,7 @@ object UpdateExample extends ConsoleApp {
        |RETURN p""".stripMargin)
 
   // 4) Extract Dataset representing the query result
-  val ds = results.getRecords.asDataset
+  val ds = results.records.asDataset
 
   // 5) Add a new label and property to the nodes
   val adults: Dataset[CAPSNode] = ds.map { record: CypherMap =>
@@ -63,3 +64,4 @@ object UpdateExample extends ConsoleApp {
   // 6) Print updated nodes
   println(adults.toLocalIterator.asScala.toList.mkString("\n"))
 }
+// end::full-example[]

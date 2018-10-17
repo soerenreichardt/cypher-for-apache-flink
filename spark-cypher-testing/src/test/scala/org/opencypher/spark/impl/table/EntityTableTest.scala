@@ -38,10 +38,9 @@ import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.ir.api.{Label, PropertyKey, RelType}
 import org.opencypher.okapi.relational.impl.table.RecordHeader
 import org.opencypher.spark.api.io._
-import org.opencypher.spark.impl.CAPSGraph
+import org.opencypher.spark.api.value.CAPSNode
 import org.opencypher.spark.impl.DataFrameOps._
 import org.opencypher.spark.impl.convert.SparkConversions
-import org.opencypher.spark.schema.CAPSSchema._
 import org.opencypher.spark.testing.CAPSTestSuite
 
 case class Person(id: Long, name: String, age: Int) extends Node
@@ -117,8 +116,7 @@ class EntityTableTest extends CAPSTestSuite {
     nodeTable.schema should equal(
       Schema.empty
         .withNodePropertyKeys("A", "B")("foo" -> CTString.nullable, "bar" -> CTInteger)
-        .withNodePropertyKeys("A", "B", "C")("foo" -> CTString.nullable, "bar" -> CTInteger)
-        .asCaps)
+        .withNodePropertyKeys("A", "B", "C")("foo" -> CTString.nullable, "bar" -> CTInteger))
   }
 
   it("NodeTable should create correct header from given mapping") {
@@ -146,8 +144,7 @@ class EntityTableTest extends CAPSTestSuite {
 
     relationshipTable.schema should equal(
       Schema.empty
-        .withRelationshipPropertyKeys("A")("foo" -> CTString.nullable, "bar" -> CTInteger)
-        .asCaps)
+        .withRelationshipPropertyKeys("A")("foo" -> CTString.nullable, "bar" -> CTInteger))
   }
 
   it("Relationship table should create correct header from given mapping") {
@@ -199,21 +196,20 @@ class EntityTableTest extends CAPSTestSuite {
     nodeTable.schema should equal(
       Schema.empty
         .withNodePropertyKeys("A", "B")("foo" -> CTInteger, "bar" -> CTFloat)
-        .withNodePropertyKeys("A", "B", "C")("foo" -> CTInteger, "bar" -> CTFloat)
-        .asCaps)
+        .withNodePropertyKeys("A", "B", "C")("foo" -> CTInteger, "bar" -> CTFloat))
 
-    nodeTable.records.toDF().collect().toSet should equal(Set(Row(1L, true, (23.1f).toDouble, 10L)))
+    nodeTable.records.df.collect().toSet should equal(Set(Row(1L, true, 23.1f.toDouble, 10L)))
   }
 
   it("NodeTable can handle shuffled columns due to cast") {
-    val df = sparkSession.createDataFrame(Seq((1, true, 10.toShort, 23.1f))).toDF("ID", "IS_C", "FOO", "BAR")
+    val df = sparkSession.createDataFrame(Seq((1L, true, 10.toShort, 23.1f))).toDF("ID", "IS_C", "FOO", "BAR")
 
     val nodeTable = CAPSNodeTable.fromMapping(nodeMapping, df)
 
-    val graph = CAPSGraph.create(nodeTable)
-    graph.nodes("n").collect.toSet {
-      CypherMap("n" -> "1")
-    }
+    val graph = caps.graphs.create(nodeTable)
+    graph.nodes("n").collect.toSet should equal(Set(
+      CypherMap("n" -> CAPSNode(1, Set("A", "B", "C"), CypherMap("bar" -> 23.1f, "foo" -> 10)))
+    ))
   }
 
   it("NodeTable should not accept wrong source id key type (should be compatible to LongType)") {
@@ -276,8 +272,7 @@ class EntityTableTest extends CAPSTestSuite {
         "name" -> CTString.nullable,
         "birthYear" -> CTInteger,
         "isGood" -> CTBoolean,
-        "luckyNumber" -> CTFloat)
-      .asCaps)
+        "luckyNumber" -> CTFloat))
   }
 
   it("NodeTable should infer the correct schema including optional labels") {
@@ -287,8 +282,7 @@ class EntityTableTest extends CAPSTestSuite {
 
     nodeTable.schema should equal(Schema.empty
       .withNodePropertyKeys("Person", "Swede")("name" -> CTString.nullable)
-      .withNodePropertyKeys("Person")("name" -> CTString.nullable)
-      .asCaps)
+      .withNodePropertyKeys("Person")("name" -> CTString.nullable))
   }
 
   it("RelationshipTable should infer the correct schema") {
@@ -302,7 +296,6 @@ class EntityTableTest extends CAPSTestSuite {
         "name" -> CTString.nullable,
         "birthYear" -> CTInteger,
         "isGood" -> CTBoolean,
-        "luckyNumber" -> CTFloat)
-      .asCaps)
+        "luckyNumber" -> CTFloat))
   }
 }

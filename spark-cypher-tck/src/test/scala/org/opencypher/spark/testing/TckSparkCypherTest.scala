@@ -30,12 +30,12 @@ import java.io.File
 
 import org.opencypher.okapi.tck.test.Tags.{BlackList, WhiteList}
 import org.opencypher.okapi.tck.test.{ScenariosFor, TCKGraph}
-import org.opencypher.spark.impl.CAPSGraph
 import org.opencypher.spark.testing.support.creation.caps.{CAPSScanGraphFactory, CAPSTestGraphFactory}
 import org.opencypher.tools.tck.api.CypherTCK
 import org.scalatest.Tag
 import org.scalatest.prop.TableDrivenPropertyChecks._
 
+import scala.io.Source
 import scala.util.{Failure, Success, Try}
 
 class TckSparkCypherTest extends CAPSTestSuite {
@@ -50,15 +50,18 @@ class TckSparkCypherTest extends CAPSTestSuite {
 
   private val defaultFactory: CAPSTestGraphFactory = CAPSScanGraphFactory
 
-  private val blacklistFile = getClass.getResource("/scenario_blacklist").getFile
-  private val scenarios = ScenariosFor(blacklistFile)
+  private val failingBlacklist = getClass.getResource("/failing_blacklist").getFile
+  private val temporalBlacklist = getClass.getResource("/temporal_blacklist").getFile
+  private val wontFixBlacklistFile = getClass.getResource("/wont_fix_blacklist").getFile
+  private val failureReportingBlacklistFile = getClass.getResource("/failure_reporting_blacklist").getFile
+  private val scenarios = ScenariosFor(failingBlacklist, temporalBlacklist, wontFixBlacklistFile, failureReportingBlacklistFile)
 
   // white list tests are run on all factories
   forAll(factories) { (factory, additional_blacklist) =>
     forAll(scenarios.whiteList) { scenario =>
       if (!additional_blacklist.contains(scenario.toString)) {
         test(s"[${factory.name}, ${WhiteList.name}] $scenario", WhiteList, TckCapsTag, Tag(factory.name)) {
-          scenario(TCKGraph(factory, CAPSGraph.empty)).execute()
+          scenario(TCKGraph(factory, caps.graphs.empty)).execute()
         }
       }
     }
@@ -67,7 +70,7 @@ class TckSparkCypherTest extends CAPSTestSuite {
   // black list tests are run on default factory
   forAll(scenarios.blackList) { scenario =>
     test(s"[${defaultFactory.name}, ${BlackList.name}] $scenario", BlackList, TckCapsTag) {
-      val tckGraph = TCKGraph(defaultFactory, CAPSGraph.empty)
+      val tckGraph = TCKGraph(defaultFactory, caps.graphs.empty)
 
       Try(scenario(tckGraph).execute()) match {
         case Success(_) =>
@@ -78,17 +81,42 @@ class TckSparkCypherTest extends CAPSTestSuite {
     }
   }
 
-  ignore("run Custom Scenario") {
+  it("computes the TCK coverage") {
+    val failingScenarios = Source.fromFile(failingBlacklist).getLines().size
+    val failingTemporalScenarios = Source.fromFile(temporalBlacklist).getLines().size
+    val failureReportingScenarios = Source.fromFile(failureReportingBlacklistFile).getLines().size
+
+    val allScenarios = scenarios.blacklist.size + scenarios.whiteList.size.toFloat
+    val readOnlyScenarios = scenarios.whiteList.size + failingScenarios + failureReportingScenarios.toFloat + failingTemporalScenarios
+    val smallReadOnlyScenarios = scenarios.whiteList.size + failingScenarios.toFloat
+
+    val overallCoverage = scenarios.whiteList.size / allScenarios
+    val readOnlyCoverage = scenarios.whiteList.size / readOnlyScenarios
+    val smallReadOnlyCoverage = scenarios.whiteList.size / smallReadOnlyScenarios
+
+    val report = s"""
+      |TCK Coverage
+      |------------
+      |
+      | Complete: ${overallCoverage * 100}%
+      | Read Only: ${readOnlyCoverage * 100}%
+      | Read Only (without Failure case Scenarios and temporal): ${smallReadOnlyCoverage * 100}%
+    """.stripMargin
+
+    println(report)
+  }
+
+  ignore("run custom scenario") {
     val file = new File(getClass.getResource("CustomTest.feature").toURI)
 
     CypherTCK
       .parseFilesystemFeature(file)
       .scenarios
-      .foreach(scenario => scenario(TCKGraph(defaultFactory, CAPSGraph.empty)).execute())
+      .foreach(scenario => scenario(TCKGraph(defaultFactory, caps.graphs.empty)).execute())
   }
 
-  ignore("run Single Scenario") {
-    scenarios.get("A simple pattern with one bound endpoint")
-      .foreach(scenario => scenario(TCKGraph(defaultFactory, CAPSGraph.empty)).execute())
+  ignore("run single scenario") {
+    scenarios.get("Ordering with aggregation")
+      .foreach(scenario => scenario(TCKGraph(defaultFactory, caps.graphs.empty)).execute())
   }
 }

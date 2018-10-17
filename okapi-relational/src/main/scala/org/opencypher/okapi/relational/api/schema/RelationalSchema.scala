@@ -37,29 +37,41 @@ object RelationalSchema {
 
   implicit class SchemaOps(val schema: Schema) {
 
-    def headerForNode(node: Var): RecordHeader = {
+    def headerForEntity(entity: Var, exactLabelMatch: Boolean = false): RecordHeader = {
+      entity.cypherType match {
+        case _: CTNode => schema.headerForNode(entity, exactLabelMatch)
+        case _: CTRelationship => schema.headerForRelationship(entity)
+        case other => throw IllegalArgumentException("Entity", other)
+      }
+    }
+
+    def headerForNode(node: Var, exactLabelMatch: Boolean = false): RecordHeader = {
       val labels: Set[String] = node.cypherType match {
         case CTNode(l, _) => l
         case other => throw IllegalArgumentException(CTNode, other)
       }
-      headerForNode(node, labels)
+      headerForNode(node, labels, exactLabelMatch)
     }
 
-    def headerForNode(node: Var, labels: Set[String]): RecordHeader = {
-      val labelCombos = if (labels.isEmpty) {
-        // all nodes scan
-        schema.allLabelCombinations
+    def headerForNode(node: Var, labels: Set[String], exactLabelMatch: Boolean): RecordHeader = {
+      val labelCombos = if (exactLabelMatch) {
+        Set(labels)
       } else {
-        // label scan
-        val impliedLabels = schema.impliedLabels.transitiveImplicationsFor(labels)
-        schema.combinationsFor(impliedLabels)
+        if (labels.isEmpty) {
+          // all nodes scan
+          schema.allCombinations
+        } else {
+          // label scan
+          val impliedLabels = schema.impliedLabels.transitiveImplicationsFor(labels)
+          schema.combinationsFor(impliedLabels)
+        }
       }
 
       val labelExpressions: Set[Expr] = labelCombos.flatten.map { label =>
         HasLabel(node, Label(label))(CTBoolean)
       }
 
-      val propertyExpressions = schema.keysFor(labelCombos).map {
+      val propertyExpressions = schema.nodePropertyKeysForCombinations(labelCombos).map {
         case (k, t) => Property(node, PropertyKey(k))(t)
       }
 
@@ -81,7 +93,7 @@ object RelationalSchema {
 
     def headerForRelationship(rel: Var, relTypes: Set[String]): RecordHeader = {
       val relKeyHeaderProperties = relTypes
-        .flatMap(t => schema.relationshipKeys(t))
+        .flatMap(t => schema.relationshipPropertyKeys(t))
         .groupBy { case (propertyKey, _) => propertyKey }
         .mapValues { keysWithType =>
           keysWithType.toSeq.unzip match {

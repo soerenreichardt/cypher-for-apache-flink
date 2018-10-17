@@ -47,7 +47,7 @@ class CAPSRecordsPrinterTest extends CAPSTestSuite with GraphConstructionFixture
 
   it("prints the unit table") {
     // Given
-    val records = CAPSRecords.unit()
+    val records = caps.records.unit()
 
     // When
     print(records)
@@ -88,7 +88,7 @@ class CAPSRecordsPrinterTest extends CAPSTestSuite with GraphConstructionFixture
   it("prints a single column with three rows") {
     // Given
     val df = sparkSession.createDataFrame(Seq(Row1("myString"), Row1("foo"), Row1(null))).toDF("foo")
-    val records = CAPSRecords.wrap(df)
+    val records = caps.records.wrap(df)
 
     // When
     print(records)
@@ -114,7 +114,7 @@ class CAPSRecordsPrinterTest extends CAPSTestSuite with GraphConstructionFixture
       Row3("foo", 99999999L, true),
       Row3(null, -1L, true)
     )).toDF("foo", "v", "veryLongColumnNameWithBoolean")
-    val records = CAPSRecords.wrap(df)
+    val records = caps.records.wrap(df)
 
     // When
     print(records)
@@ -134,6 +134,7 @@ class CAPSRecordsPrinterTest extends CAPSTestSuite with GraphConstructionFixture
   }
 
   it("prints return property values without alias") {
+
     val given =
       initGraph(
         """
@@ -146,7 +147,7 @@ class CAPSRecordsPrinterTest extends CAPSTestSuite with GraphConstructionFixture
         |ORDER BY a.name
       """.stripMargin)
 
-    print(when.getRecords)
+    print(when.records)
 
     getString should equal(
       """|╔═════════╤═════════╗
@@ -162,6 +163,7 @@ class CAPSRecordsPrinterTest extends CAPSTestSuite with GraphConstructionFixture
   var baos: ByteArrayOutputStream = _
 
   override def beforeEach(): Unit = {
+    super.beforeEach()
     baos = new ByteArrayOutputStream()
   }
 

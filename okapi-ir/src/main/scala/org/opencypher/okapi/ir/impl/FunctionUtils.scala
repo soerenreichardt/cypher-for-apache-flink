@@ -29,7 +29,8 @@ package org.opencypher.okapi.ir.impl
 import org.opencypher.okapi.api.types.CypherType
 import org.opencypher.okapi.impl.exception.NotImplementedException
 import org.opencypher.okapi.ir.api.expr._
-import org.opencypher.v9_1.expressions.{FunctionInvocation, functions}
+import org.opencypher.okapi.ir.impl.parse.{functions => f}
+import org.opencypher.v9_0.expressions.{FunctionInvocation, functions}
 
 object FunctionUtils {
 
@@ -38,22 +39,52 @@ object FunctionUtils {
       val distinct = functionInvocation.distinct
 
       functionInvocation.function match {
-        case functions.Id        => Id(expr.head)(cypherType)
-        case functions.Labels    => Labels(expr.head)(cypherType)
-        case functions.Type      => Type(expr.head)(cypherType)
-        case functions.Avg       => Avg(expr.head)(cypherType)
-        case functions.Count     => Count(expr.head, distinct)(cypherType)
-        case functions.Max       => Max(expr.head)(cypherType)
-        case functions.Min       => Min(expr.head)(cypherType)
-        case functions.Sum       => Sum(expr.head)(cypherType)
-        case functions.Exists    => Exists(expr.head)(cypherType)
-        case functions.Size      => Size(expr.head)(cypherType)
-        case functions.Keys      => Keys(expr.head)(cypherType)
+        case functions.Id => Id(expr.head)(cypherType)
+        case functions.Labels => Labels(expr.head)(cypherType)
+        case functions.Type => Type(expr.head)(cypherType)
+        case functions.Avg => Avg(expr.head)(cypherType)
+        case functions.Count => Count(expr.head, distinct)(cypherType)
+        case functions.Max => Max(expr.head)(cypherType)
+        case functions.Min => Min(expr.head)(cypherType)
+        case functions.Sum => Sum(expr.head)(cypherType)
+        case functions.Exists => Exists(expr.head)(cypherType)
+        case functions.Size => Size(expr.head)(cypherType)
+        case functions.Keys => Keys(expr.head)(cypherType)
         case functions.StartNode => StartNodeFunction(expr.head)(cypherType)
-        case functions.EndNode   => EndNodeFunction(expr.head)(cypherType)
-        case functions.ToFloat   => ToFloat(expr.head)(cypherType)
-        case functions.Collect   => Collect(expr.head, distinct)(cypherType)
-        case functions.Coalesce  => Coalesce(expr)(cypherType)
+        case functions.EndNode => EndNodeFunction(expr.head)(cypherType)
+        case functions.ToFloat => ToFloat(expr.head)(cypherType)
+        case functions.ToInteger => ToInteger(expr.head)(cypherType)
+        case functions.Collect => Collect(expr.head, distinct)(cypherType)
+        case functions.Coalesce => Coalesce(expr)(cypherType)
+        case functions.ToString => ToString(expr.head)(cypherType)
+        case functions.ToBoolean => ToBoolean(expr.head)(cypherType)
+        case functions.Range => Range(expr(0), expr(1), expr.lift(2))
+        case functions.Substring => Substring(expr(0), expr(1), expr.lift(2))
+
+        // Logarithmic functions
+        case functions.Sqrt => Sqrt(expr.head)(cypherType)
+        case functions.Log => Log(expr.head)(cypherType)
+        case functions.Log10 => Log10(expr.head)(cypherType)
+        case functions.Exp => Exp(expr.head)(cypherType)
+        case functions.E => E()(cypherType)
+        case functions.Pi => Pi()(cypherType)
+
+        // Numeric functions
+        case functions.Abs => Abs(expr.head)(cypherType)
+        case functions.Ceil => Ceil(expr.head)(cypherType)
+        case functions.Floor => Floor(expr.head)(cypherType)
+        case functions.Rand => Rand()(cypherType)
+        case functions.Round => Round(expr.head)(cypherType)
+        case functions.Sign => Sign(expr.head)(cypherType)
+
+        // Match by name
+        case functions.UnresolvedFunction => functionInvocation.name match {
+          // Time functions
+          case f.Timestamp.name => Timestamp()(cypherType)
+
+          case name => throw NotImplementedException(s"Support for converting ${name} function not yet implemented")
+        }
+
         case a: functions.Function =>
           throw NotImplementedException(s"Support for converting ${a.name} function not yet implemented")
       }

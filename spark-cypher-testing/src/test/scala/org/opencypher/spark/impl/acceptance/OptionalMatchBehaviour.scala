@@ -55,7 +55,7 @@ class OptionalMatchBehaviour extends CAPSTestSuite with DefaultGraphInit {
       """.stripMargin)
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap(
         "p1.name" -> "Eve",
         "p2.name" -> null,
@@ -92,7 +92,7 @@ class OptionalMatchBehaviour extends CAPSTestSuite with DefaultGraphInit {
       """.stripMargin)
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap(
         "p1.name" -> "Bob",
         "p2.name" -> null
@@ -125,7 +125,7 @@ class OptionalMatchBehaviour extends CAPSTestSuite with DefaultGraphInit {
       """.stripMargin)
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap(
         "p1.name" -> "Alice",
         "p2.name" -> "Bob",
@@ -175,7 +175,7 @@ class OptionalMatchBehaviour extends CAPSTestSuite with DefaultGraphInit {
       """.stripMargin)
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap(
         "p1.name" -> "Alice",
         "p2.name" -> "Bob",
@@ -209,7 +209,7 @@ class OptionalMatchBehaviour extends CAPSTestSuite with DefaultGraphInit {
       """.stripMargin)
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap(
         "p1.name" -> "Alice",
         "p2.name" -> "Bob",
@@ -250,7 +250,7 @@ class OptionalMatchBehaviour extends CAPSTestSuite with DefaultGraphInit {
       """.stripMargin)
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap(
         "b.name" -> "Eve",
         "c.name" -> "Paul"
@@ -289,7 +289,7 @@ class OptionalMatchBehaviour extends CAPSTestSuite with DefaultGraphInit {
       """.stripMargin)
 
     // Then
-    result.getRecords.toMaps should equal(Bag(
+    result.records.toMaps should equal(Bag(
       CypherMap(
         "a.name" -> "Alice",
         "b.name" -> "Eve",
@@ -331,8 +331,27 @@ class OptionalMatchBehaviour extends CAPSTestSuite with DefaultGraphInit {
         |RETURN b,c
       """.stripMargin)
 
-    result.getRecords.collect.toBag should equal(Bag(
+    result.records.collect.toBag should equal(Bag(
       CypherMap("b" -> CypherNull, "c" -> CypherNull)
     ))
+  }
+
+  it("can start with an optional match") {
+    val g = initGraph("""
+      |CREATE (p1:Person {name: "Alice"})
+      |CREATE (p2:Person {name: "Bob"})
+    """.stripMargin)
+
+    // When
+    val result = g.cypher(
+      """
+        |OPTIONAL MATCH (a:Foo)
+        |WITH a
+        |MATCH (b:Person)
+        |RETURN *
+      """.stripMargin)
+
+    // Then
+    result.records.toMaps should equal(Bag())
   }
 }

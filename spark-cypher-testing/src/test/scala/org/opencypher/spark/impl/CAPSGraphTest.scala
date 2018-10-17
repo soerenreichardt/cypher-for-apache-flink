@@ -29,20 +29,36 @@ package org.opencypher.spark.impl
 import org.apache.spark.sql.Row
 import org.opencypher.okapi.api.io.conversion.RelationshipMapping
 import org.opencypher.okapi.api.types._
+import org.opencypher.okapi.relational.api.planning.RelationalRuntimeContext
+import org.opencypher.okapi.relational.api.table.RelationalCypherRecords
+import org.opencypher.okapi.relational.impl.operators.Start
 import org.opencypher.okapi.testing.Bag
 import org.opencypher.spark.api.io.{CAPSNodeTable, CAPSRelationshipTable}
 import org.opencypher.spark.impl.DataFrameOps._
+import org.opencypher.spark.impl.table.SparkTable.DataFrameTable
 import org.opencypher.spark.testing.CAPSTestSuite
 import org.opencypher.spark.testing.fixture.{GraphConstructionFixture, RecordsVerificationFixture, TeamDataFixture}
+
+import scala.reflect.runtime.universe
 
 abstract class CAPSGraphTest extends CAPSTestSuite
   with GraphConstructionFixture
   with RecordsVerificationFixture
   with TeamDataFixture {
 
+  object CAPSGraphTest {
+    implicit class RecordOps(records: RelationalCypherRecords[DataFrameTable]) {
+      def planStart: Start[DataFrameTable] = {
+        implicit val tableTypeTag: universe.TypeTag[DataFrameTable] = caps.tableTypeTag
+        implicit val context: RelationalRuntimeContext[DataFrameTable] = caps.basicRuntimeContext()
+        Start(records)
+      }
+    }
+  }
+
   it("should return only nodes with that exact label (single label)") {
     val graph = initGraph(dataFixtureWithoutArrays)
-    val nodes = graph.nodesWithExactLabels("n", Set("Person"))
+    val nodes = graph.nodes("n", CTNode("Person"), exactLabelMatch = true)
     val cols = Seq(
       n,
       nHasLabelPerson,
@@ -54,7 +70,7 @@ abstract class CAPSGraphTest extends CAPSTestSuite
 
   it("should return only nodes with that exact label (multiple labels)") {
     val graph = initGraph(dataFixtureWithoutArrays)
-    val nodes = graph.nodesWithExactLabels("n", Set("Person", "German"))
+    val nodes = graph.nodes("n", CTNode("Person", "German"), exactLabelMatch = true)
     val cols = Seq(
       n,
       nHasLabelGerman,
@@ -80,7 +96,7 @@ abstract class CAPSGraphTest extends CAPSTestSuite
 
     val personTable2 = CAPSNodeTable.fromMapping(personTable.mapping, personsPart2)
 
-    val graph = CAPSGraph.create(personTable, personTable2)
+    val graph = caps.graphs.create(personTable, personTable2)
     graph.nodes("n").size shouldBe 6
   }
 
@@ -94,12 +110,12 @@ abstract class CAPSGraphTest extends CAPSTestSuite
 
     val knowsTable2 = CAPSRelationshipTable.fromMapping(knowsTable.mapping, knowsParts2)
 
-    val graph = CAPSGraph.create(personTable, knowsTable, knowsTable2)
+    val graph = caps.graphs.create(personTable, knowsTable, knowsTable2)
     graph.relationships("r").size shouldBe 8
   }
 
   it("should return an empty result for non-present types") {
-    val graph = CAPSGraph.create(personTable, knowsTable)
+    val graph = caps.graphs.create(personTable, knowsTable)
     graph.nodes("n", CTNode("BAR")).size shouldBe 0
     graph.relationships("r", CTRelationship("FOO")).size shouldBe 0
   }
@@ -122,7 +138,7 @@ abstract class CAPSGraphTest extends CAPSTestSuite
 
     val relTable = CAPSRelationshipTable.fromMapping(relMapping, yingYang)
 
-    val graph = CAPSGraph.create(personTable, relTable)
+    val graph = caps.graphs.create(personTable, relTable)
 
     graph.relationships("l", CTRelationship("LOVES")).size shouldBe 3
     graph.relationships("h", CTRelationship("HATES")).size shouldBe 2

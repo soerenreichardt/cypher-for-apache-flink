@@ -26,17 +26,25 @@
  */
 package org.opencypher.spark.examples
 
-import java.io.ByteArrayOutputStream
+import java.io.{ByteArrayOutputStream, PrintStream}
+import java.net.URI
 
 import org.scalatest.{BeforeAndAfterAll, FunSpec, Matchers}
+
+import scala.io.Source
 
 abstract class ExampleTest extends FunSpec with Matchers with BeforeAndAfterAll {
 
   private val oldStdOut = System.out
 
+  protected def validate(app: => Unit, expectedOut: URI): Unit = {
+    validate(app, Source.fromFile(expectedOut).mkString)
+  }
+
   protected def validate(app: => Unit, expectedOut: String): Unit = {
     val outCapture = new ByteArrayOutputStream()
-    Console.withOut(outCapture)(app)
+    val printer = new PrintStream(outCapture, true, "UTF-8")
+    Console.withOut(printer)(app)
     outCapture.toString("UTF-8") shouldEqual expectedOut
   }
 

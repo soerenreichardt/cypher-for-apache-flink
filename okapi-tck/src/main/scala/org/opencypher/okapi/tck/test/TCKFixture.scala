@@ -37,7 +37,7 @@ import org.opencypher.okapi.ir.impl.typer.exception.TypingException
 import org.opencypher.okapi.tck.test.TCKFixture._
 import org.opencypher.okapi.tck.test.support.creation.neo4j.Neo4JGraphFactory
 import org.opencypher.okapi.testing.propertygraph.CypherTestGraphFactory
-import org.opencypher.tools.tck.api.{ExecutionFailed, _}
+import org.opencypher.tools.tck.api._
 import org.opencypher.tools.tck.constants.{TCKErrorDetails, TCKErrorPhases, TCKErrorTypes}
 import org.opencypher.tools.tck.values.{CypherValue => TCKCypherValue, _}
 import org.scalatest.Tag
@@ -78,7 +78,8 @@ object TCKFixture {
   }
 }
 
-case class TCKGraph[C <: CypherSession](testGraphFactory: CypherTestGraphFactory[C], graph: PropertyGraph)(implicit OKAPI: C) extends Graph {
+case class TCKGraph[C <: CypherSession](testGraphFactory: CypherTestGraphFactory[C], graph: PropertyGraph)
+  (implicit OKAPI: C) extends Graph {
 
   override def execute(query: String, params: Map[String, TCKCypherValue], queryType: QueryType): (Graph, Result) = {
     queryType match {
@@ -92,12 +93,14 @@ case class TCKGraph[C <: CypherSession](testGraphFactory: CypherTestGraphFactory
         // mapValues is lazy, so we force it for debug purposes
         val result = Try(graph.cypher(query, params.mapValues(tckValueToCypherValue).view.force))
         result match {
-          case Success(r) => this -> convertToTckStrings(r.getRecords)
+          case Success(r) => this -> convertToTckStrings(r.records)
           case Failure(e) =>
             val phase = TCKErrorPhases.RUNTIME // We have no way to detect errors during compile time yet
             e match {
-              case t: TypingException => this ->
+              case _: TypingException => this ->
                 ExecutionFailed(TCKErrorTypes.TYPE_ERROR, phase, TCKErrorDetails.INVALID_ARGUMENT_VALUE)
+              case ex: NotImplementedException => throw new RuntimeException(s"Unsupported feature in $query", ex)
+              case _ => throw new RuntimeException(s"Unknown engine failure for query: $query", e)
             }
         }
     }
@@ -159,7 +162,7 @@ case class TCKGraph[C <: CypherSession](testGraphFactory: CypherTestGraphFactory
   }
 }
 
-case class ScenariosFor(blacklist: Set[String])  {
+case class ScenariosFor(blacklist: Set[String]) {
 
   def whiteList = Table(
     "scenario",
@@ -182,8 +185,8 @@ case class ScenariosFor(blacklist: Set[String])  {
 
 object ScenariosFor {
 
-  def apply(backlistFile: String) : ScenariosFor = {
-    val blacklistIter = Source.fromFile(backlistFile).getLines().toSeq
+  def apply(blacklistFiles: String*): ScenariosFor = {
+    val blacklistIter = blacklistFiles.flatMap(Source.fromFile(_).getLines())
     val blacklistSet = blacklistIter.toSet
 
     lazy val errorMessage =

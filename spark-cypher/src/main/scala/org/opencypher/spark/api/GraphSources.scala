@@ -26,38 +26,78 @@
  */
 package org.opencypher.spark.api
 
-import org.opencypher.spark.api.io.fs.{CAPSFileSystem, FSGraphSource}
-import org.opencypher.spark.api.io.neo4j.{Neo4jConfig, Neo4jReadOnlyNamedQueryGraphSource}
+import java.nio.file.Paths
+
+import org.opencypher.okapi.api.schema.Schema
+import org.opencypher.okapi.neo4j.io.Neo4jConfig
+import org.opencypher.spark.api.io.fs.{EscapeAtSymbol, FSGraphSource}
+import org.opencypher.spark.api.io.neo4j.{Neo4jBulkCSVDataSink, Neo4jPropertyGraphDataSource}
+import org.opencypher.spark.api.io.{CsvFormat, OrcFormat, ParquetFormat}
+
+import scala.io.Source
 
 object GraphSources {
   def fs(
     rootPath: String,
-    customFileSystem: Option[CAPSFileSystem] = None,
     filesPerTable: Option[Int] = Some(1)
-  ) = FSGraphSources(rootPath, customFileSystem, filesPerTable)
+  )(implicit session: CAPSSession) = FSGraphSources(rootPath, filesPerTable)
 
-  def cypher = CypherGraphSources
+  def cypher: CypherGraphSources.type = CypherGraphSources
 }
 
 object FSGraphSources {
   def apply(
     rootPath: String,
-    customFileSystem: Option[CAPSFileSystem] = None,
     filesPerTable: Option[Int] = Some(1)
-  ): FSGraphSourceFactory = FSGraphSourceFactory(rootPath, customFileSystem, filesPerTable)
+  )(implicit session: CAPSSession): FSGraphSourceFactory = FSGraphSourceFactory(rootPath, filesPerTable)
 
   case class FSGraphSourceFactory(
     rootPath: String,
-    customFileSystem: Option[CAPSFileSystem] = None,
     filesPerTable: Option[Int] = Some(1)
-  ) {
+  )(implicit session: CAPSSession) {
 
-    def csv(implicit session: CAPSSession): FSGraphSource =
-      new FSGraphSource(rootPath, "csv", customFileSystem, filesPerTable)
+    def csv: FSGraphSource = new FSGraphSource(rootPath, CsvFormat, filesPerTable)
+
+    def parquet: FSGraphSource = new FSGraphSource(rootPath, ParquetFormat, filesPerTable)
+
+    def orc: FSGraphSource = new FSGraphSource(rootPath, OrcFormat, filesPerTable) with EscapeAtSymbol
+  }
+
+  /**
+    * Creates a data sink that is capable of writing a property graph into the Neo4j bulk import CSV format
+    * (see [[https://neo4j.com/docs/operations-manual/current/tools/import/]]). The data sink generates a shell script
+    * within the graph output folder that simplifies the import process.
+    *
+    * @param rootPath       Directory where the graph is being stored in
+    * @param arrayDelimiter Delimiter for array properties
+    * @param session        CAPS session
+    * @return Neo4j Bulk CSV data sink
+    */
+  def neo4jBulk(rootPath: String, arrayDelimiter: String = "|")(implicit session: CAPSSession): Neo4jBulkCSVDataSink = {
+    new Neo4jBulkCSVDataSink(rootPath, arrayDelimiter)
   }
 }
 
 object CypherGraphSources {
-  def neo4jReadOnlyNamedQuery(config: Neo4jConfig)(implicit session: CAPSSession): Neo4jReadOnlyNamedQueryGraphSource =
-    Neo4jReadOnlyNamedQueryGraphSource(config)
+  /**
+    * Creates a Neo4j Property Graph Data Source
+    *
+    * @param config                     Neo4j connection configuration
+    * @param maybeSchema                Optional Neo4j schema to avoid computation on Neo4j server
+    * @param omitIncompatibleProperties If set to true, import failures do not throw runtime exceptions but omit the unsupported
+    *                                   properties instead and log warnings
+    * @param session                    CAPS session
+    * @return Neo4j Property Graph Data Source
+    */
+  def neo4j(config: Neo4jConfig, maybeSchema: Option[Schema] = None, omitIncompatibleProperties: Boolean = false)
+    (implicit session: CAPSSession): Neo4jPropertyGraphDataSource =
+    Neo4jPropertyGraphDataSource(config, maybeSchema = maybeSchema, omitIncompatibleProperties = omitIncompatibleProperties)
+
+  // TODO: document
+  def neo4j(config: Neo4jConfig, schemaFile: String, omitIncompatibleProperties: Boolean)
+    (implicit session: CAPSSession): Neo4jPropertyGraphDataSource = {
+    val schemaString = Source.fromFile(Paths.get(schemaFile).toUri).getLines().mkString("\n")
+
+    Neo4jPropertyGraphDataSource(config, maybeSchema = Some(Schema.fromJson(schemaString)), omitIncompatibleProperties = omitIncompatibleProperties)
+  }
 }

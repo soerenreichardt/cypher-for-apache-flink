@@ -33,22 +33,22 @@ import cats.data.State
 import cats.data.State._
 import cats.instances.list._
 import cats.syntax.all._
-import org.opencypher.v9_1.ast._
+import org.opencypher.v9_0.ast._
 import org.opencypher.okapi.api.value.CypherValue.{CypherEntity, CypherMap, CypherNode, CypherRelationship}
 import org.opencypher.okapi.impl.exception.{IllegalArgumentException, UnsupportedOperationException}
-import org.opencypher.v9_1.ast.semantics.{SemanticErrorDef, SemanticState}
-import org.opencypher.v9_1.expressions._
-import org.opencypher.v9_1.frontend.phases._
-import org.opencypher.v9_1.rewriting.rewriters.Never
-import org.opencypher.v9_1.rewriting.{AstRewritingMonitor, RewriterStepSequencer}
-import org.opencypher.v9_1.util.{ASTNode, CypherException, InputPosition}
+import org.opencypher.v9_0.ast.semantics.{SemanticErrorDef, SemanticState}
+import org.opencypher.v9_0.expressions._
+import org.opencypher.v9_0.frontend.phases._
+import org.opencypher.v9_0.rewriting.rewriters.Never
+import org.opencypher.v9_0.rewriting.{AstRewritingMonitor, RewriterStepSequencer}
+import org.opencypher.v9_0.util.{ASTNode, CypherException, InputPosition}
 
 import scala.collection.TraversableOnce
 import scala.reflect.ClassTag
 
 object CreateQueryParser {
 
-  val defaultContext = new BaseContext {
+  val defaultContext: BaseContext = new BaseContext {
     override def tracer: CompilationPhaseTracer = CompilationPhaseTracer.NO_TRACING
 
     override def notificationLogger: InternalNotificationLogger = devNullLogger

@@ -26,159 +26,35 @@
  */
 package org.opencypher.spark.api.io
 
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.{DataFrame, functions}
-import org.apache.spark.storage.StorageLevel
-import org.opencypher.okapi.api.io.conversion.{EntityMapping, NodeMapping, RelationshipMapping}
-import org.opencypher.okapi.api.schema.Schema
-import org.opencypher.okapi.api.types.{DefiniteCypherType, _}
-import org.opencypher.okapi.api.value.CypherValue
-import org.opencypher.okapi.api.value.CypherValue.{CypherMap, CypherValue}
+import org.apache.spark.sql.{DataFrame, _}
+import org.opencypher.okapi.api.io.conversion.{NodeMapping, RelationshipMapping}
+import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.impl.util.StringEncodingUtilities._
-import org.opencypher.okapi.ir.api.expr.Expr
-import org.opencypher.okapi.relational.api.io.{EntityTable, FlatRelationalTable}
-import org.opencypher.okapi.relational.impl.physical._
-import org.opencypher.okapi.relational.impl.table.RecordHeader
+import org.opencypher.okapi.relational.api.io.{EntityTable, NodeTable, RelationshipTable}
 import org.opencypher.spark.api.CAPSSession
-import org.opencypher.spark.api.io.SparkCypherTable.DataFrameTable
 import org.opencypher.spark.impl.DataFrameOps._
-import org.opencypher.spark.impl.SparkSQLExprMapper._
+import org.opencypher.spark.impl.table.SparkTable.DataFrameTable
 import org.opencypher.spark.impl.util.Annotation
 import org.opencypher.spark.impl.{CAPSRecords, RecordBehaviour}
-import org.opencypher.spark.schema.CAPSSchema
-import org.opencypher.spark.schema.CAPSSchema._
 
-import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe._
 
-object SparkCypherTable {
-
-  implicit class DataFrameTable(val df: DataFrame) extends FlatRelationalTable[DataFrameTable] {
-
-    override def physicalColumns: Seq[String] = df.columns
-
-    override def columnType: Map[String, CypherType] = physicalColumns.map(c => c -> df.cypherTypeForColumn(c)).toMap
-
-    override def rows: Iterator[String => CypherValue] = df.toLocalIterator.asScala.map { row =>
-      physicalColumns.map(c => c -> CypherValue(row.get(row.fieldIndex(c)))).toMap
-    }
-
-    override def size: Long = df.count()
-
-    override def select(cols: String*): DataFrameTable = {
-      if (cols.nonEmpty) {
-        df.select(cols.head, cols.tail: _*)
-      } else {
-        // TODO: this is used in Construct, check why this is necessary
-        df.select()
-      }
-    }
-
-    override def filter(expr: Expr)(implicit header: RecordHeader, parameters: CypherMap): DataFrameTable = {
-      df.where(expr.asSparkSQLExpr(header, df, parameters))
-    }
-
-    override def withColumn(column: String, expr: Expr)
-      (implicit header: RecordHeader, parameters: CypherMap): DataFrameTable = {
-      df.withColumn(column, expr.asSparkSQLExpr(header, df, parameters))
-    }
-
-    override def drop(cols: String*): DataFrameTable = {
-      df.drop(cols: _*)
-    }
-
-    override def orderBy(sortItems: (String, Order)*): DataFrameTable = {
-      val sortExpression = sortItems.map {
-        case (column, Ascending) => asc(column)
-        case (column, Descending) => desc(column)
-      }
-
-      df.sort(sortExpression: _*)
-    }
-
-    override def unionAll(other: DataFrameTable): DataFrameTable = {
-      df.union(other.df)
-    }
-
-    override def join(other: DataFrameTable, joinType: JoinType, joinCols: (String, String)*): DataFrameTable = {
-      val joinTypeString = joinType match {
-        case InnerJoin => "inner"
-        case LeftOuterJoin => "left_outer"
-        case RightOuterJoin => "right_outer"
-        case FullOuterJoin => "full_outer"
-        case CrossJoin => "cross"
-      }
-
-
-      val overlap = this.physicalColumns.toSet.intersect(other.physicalColumns.toSet)
-      assert(overlap.isEmpty, s"overlapping columns: $overlap")
-
-      joinType match {
-        case CrossJoin =>
-          df.crossJoin(other.df)
-
-        case _ =>
-          val joinExpr = joinCols.map {
-            case (l, r) => df.col(l) === other.df.col(r)
-          }.reduce((acc, expr) => acc && expr)
-
-          // TODO: the join produced corrupt data when the previous operator was a cross. We work around that by using a
-          // subsequent select. This can be removed, once https://issues.apache.org/jira/browse/SPARK-23855 is solved or we
-          // upgrade to Spark 2.3.0
-          val potentiallyCorruptedResult = df.join(other.df, joinExpr, joinTypeString)
-          potentiallyCorruptedResult.select("*")
-      }
-    }
-
-    override def distinct: DataFrameTable =
-      df.distinct
-
-    override def distinct(cols: String*): DataFrameTable =
-      df.dropDuplicates(cols)
-
-    override def withColumnRenamed(oldColumn: String, newColumn: String): DataFrameTable =
-      df.safeRenameColumn(oldColumn, newColumn)
-
-    override def withNullColumn(col: String): DataFrameTable = df.withColumn(col, functions.lit(null))
-
-    override def withTrueColumn(col: String): DataFrameTable = df.withColumn(col, functions.lit(true))
-
-    override def withFalseColumn(col: String): DataFrameTable = df.withColumn(col, functions.lit(false))
-
-    def cache(): DataFrameTable = df.cache()
-
-    def persist(): DataFrameTable = df.persist()
-
-    def persist(newLevel: StorageLevel): DataFrameTable = df.persist(newLevel)
-
-    def unpersist(): DataFrameTable = df.unpersist()
-
-    def unpersist(blocking: Boolean): DataFrameTable = df.unpersist(blocking)
-  }
-
-}
-
 trait CAPSEntityTable extends EntityTable[DataFrameTable] {
-  // TODO: create CTEntity type
-  private[spark] def entityType: CypherType with DefiniteCypherType
 
-  private[spark] def records(implicit caps: CAPSSession): CAPSRecords = CAPSRecords.create(this)
+  private[spark] def records(implicit caps: CAPSSession): CAPSRecords = caps.records.fromEntityTable(entityTable = this)
 }
 
 case class CAPSNodeTable(
   override val mapping: NodeMapping,
-  override val relationalTable: DataFrameTable
-) extends NodeTable(mapping, relationalTable) with CAPSEntityTable {
+  override val table: DataFrameTable
+) extends NodeTable(mapping, table) with CAPSEntityTable with RecordBehaviour {
 
-  override type R = CAPSNodeTable
+  override type Records = CAPSNodeTable
 
-  override def from(
-    header: RecordHeader,
-    table: DataFrameTable,
-    columnNames: Option[Seq[String]] = None
-  ): CAPSNodeTable = CAPSNodeTable(mapping, table)
-
-  override private[spark] def entityType = mapping.cypherType
+  override def cache(): CAPSNodeTable = {
+    table.df.cache()
+    this
+  }
 }
 
 object CAPSNodeTable {
@@ -245,18 +121,15 @@ object CAPSNodeTable {
 
 case class CAPSRelationshipTable(
   override val mapping: RelationshipMapping,
-  override val relationalTable: DataFrameTable
-) extends RelationshipTable(mapping, relationalTable) with CAPSEntityTable {
+  override val table: DataFrameTable
+) extends RelationshipTable(mapping, table) with CAPSEntityTable with RecordBehaviour {
 
-  override type R = CAPSRelationshipTable
+  override type Records = CAPSRelationshipTable
 
-  override def from(
-    header: RecordHeader,
-    table: DataFrameTable,
-    columnNames: Option[Seq[String]] = None
-  ): CAPSRelationshipTable = CAPSRelationshipTable(mapping, table)
-
-  override private[spark] def entityType = mapping.cypherType
+  override def cache(): CAPSRelationshipTable = {
+    table.df.cache()
+    this
+  }
 }
 
 object CAPSRelationshipTable {
@@ -340,78 +213,4 @@ object CAPSRelationshipTable {
   }
 }
 
-/**
-  * A node table describes how to map an input data frame to a Cypher node.
-  *
-  * A node table needs to have the canonical column ordering specified by [[EntityMapping#allSourceKeys]].
-  * The easiest way to transform the table to a canonical column ordering is to use one of the constructors on the
-  * companion object.
-  *
-  * Column names prefixed with `property#` are decoded by [[org.opencypher.okapi.impl.util.StringEncodingUtilities]] to
-  * recover the original property name.
-  *
-  * @param mapping mapping from input data description to a Cypher node
-  * @param table   input data frame
-  */
-abstract class NodeTable(mapping: NodeMapping, table: DataFrameTable)
-  extends EntityTable[DataFrameTable] with RecordBehaviour {
 
-  override lazy val schema: CAPSSchema = {
-    val propertyKeys = mapping.propertyMapping.toSeq.map {
-      case (propertyKey, sourceKey) => propertyKey -> table.columnType(sourceKey)
-    }
-
-    mapping.optionalLabelMapping.keys.toSet.subsets
-      .map(_.union(mapping.impliedLabels))
-      .map(combo => Schema.empty.withNodePropertyKeys(combo.toSeq: _*)(propertyKeys: _*))
-      .reduce(_ ++ _)
-      .asCaps
-  }
-
-  override protected def verify(): Unit = {
-    super.verify()
-    mapping.optionalLabelMapping.values.foreach { optionalLabelKey =>
-      table.verifyColumnType(optionalLabelKey, CTBoolean, "optional label")
-    }
-  }
-}
-
-/**
-  * A relationship table describes how to map an input data frame to a Cypher relationship.
-  *
-  * A relationship table needs to have the canonical column ordering specified by [[EntityMapping#allSourceKeys]].
-  * The easiest way to transform the table to a canonical column ordering is to use one of the constructors on the
-  * companion object.
-  *
-  * @param mapping mapping from input data description to a Cypher relationship
-  * @param table   input data frame
-  */
-abstract class RelationshipTable(mapping: RelationshipMapping, table: DataFrameTable)
-  extends EntityTable[DataFrameTable] with RecordBehaviour {
-
-  override lazy val schema: CAPSSchema = {
-    val relTypes = mapping.relTypeOrSourceRelTypeKey match {
-      case Left(name) => Set(name)
-      case Right((_, possibleTypes)) => possibleTypes
-    }
-
-    val propertyKeys = mapping.propertyMapping.toSeq.map {
-      case (propertyKey, sourceKey) => propertyKey -> table.columnType(sourceKey)
-    }
-
-    relTypes.foldLeft(Schema.empty) {
-      case (partialSchema, relType) => partialSchema.withRelationshipPropertyKeys(relType)(propertyKeys: _*)
-    }.asCaps
-  }
-
-  override protected def verify(): Unit = {
-    super.verify()
-    table.verifyColumnType(mapping.sourceStartNodeKey, CTInteger, "start node")
-    table.verifyColumnType(mapping.sourceEndNodeKey, CTInteger, "end node")
-    mapping.relTypeOrSourceRelTypeKey.right.map { case (_, relTypes) =>
-      relTypes.foreach { relType =>
-        table.verifyColumnType(relType.toRelTypeColumnName, CTBoolean, "relationship type")
-      }
-    }
-  }
-}

@@ -26,20 +26,28 @@
  */
 package org.opencypher.okapi.impl.schema
 
+import cats.instances.all._
+import cats.syntax.semigroup._
+import org.opencypher.okapi.api.schema.LabelPropertyMap._
 import org.opencypher.okapi.api.schema.PropertyKeys.PropertyKeys
-import org.opencypher.okapi.api.schema.{LabelPropertyMap, PropertyKeys, RelTypePropertyMap, Schema}
-import org.opencypher.okapi.api.types._
+import org.opencypher.okapi.api.schema.RelTypePropertyMap._
+import org.opencypher.okapi.api.schema.{LabelPropertyMap, RelTypePropertyMap, _}
+import org.opencypher.okapi.api.types.CypherType.joinMonoid
+import org.opencypher.okapi.api.types.{CypherType, _}
 import org.opencypher.okapi.impl.exception.SchemaException
 import org.opencypher.okapi.impl.schema.SchemaImpl._
-import org.opencypher.okapi.impl.schema.SchemaUtils._
+import ujson.Js.Obj
 import upickle.Js
-import upickle.default._
+import upickle.default.{macroRW, _}
 
 object SchemaImpl {
 
   val VERSION = "version"
   val LABEL_PROPERTY_MAP = "labelPropertyMap"
   val REL_TYPE_PROPERTY_MAP = "relTypePropertyMap"
+  val NODE_KEYS = "nodeKeys"
+  val REL_KEYS = "relKeys"
+  val SCHEMA_PATTERNS = "schemaPatterns"
 
   val LABELS = "labels"
   val REL_TYPE = "relType"
@@ -47,61 +55,111 @@ object SchemaImpl {
 
 
   implicit def rw: ReadWriter[Schema] = readwriter[Js.Value].bimap[Schema](
-    schema => Js.Obj(
-      VERSION -> Js.Num(1),
-      LABEL_PROPERTY_MAP -> writeJs(schema.labelPropertyMap),
-      REL_TYPE_PROPERTY_MAP -> writeJs(schema.relTypePropertyMap)),
+    schema => {
+      val tuples: Seq[(String, Js.Value)] = Seq[(String, Js.Value)](
+        VERSION -> Js.Num(1),
+        LABEL_PROPERTY_MAP -> writeJs(schema.labelPropertyMap),
+        REL_TYPE_PROPERTY_MAP -> writeJs(schema.relTypePropertyMap)) ++ {
+        if (schema.explicitSchemaPatterns.nonEmpty) {
+          Some(SCHEMA_PATTERNS -> writeJs(schema.explicitSchemaPatterns))
+        } else {
+          None
+        }
+      } ++ {
+        if (schema.nodeKeys.nonEmpty) {
+          Some(NODE_KEYS -> writeJs(schema.nodeKeys))
+        } else {
+          None
+        }
+      } ++ {
+        if (schema.relationshipKeys.nonEmpty) {
+          Some(REL_KEYS -> writeJs(schema.relationshipKeys))
+        } else {
+          None
+        }
+      }
+      Js.Obj.from(tuples)
+    }
+    ,
     json => {
       val labelPropertyMap = readJs[LabelPropertyMap](json.obj(LABEL_PROPERTY_MAP))
       val relTypePropertyMap = readJs[RelTypePropertyMap](json.obj(REL_TYPE_PROPERTY_MAP))
-      SchemaImpl(labelPropertyMap, relTypePropertyMap)
+      val explicitSchemaPatterns = json match {
+        case Obj(m) if m.keySet.contains(SCHEMA_PATTERNS) => readJs[Set[SchemaPattern]](json.obj(SCHEMA_PATTERNS))
+        case _ => Set.empty[SchemaPattern]
+      }
+      val nodeKeys = json match {
+        case Obj(m) if m.keySet.contains(NODE_KEYS) => readJs[Map[String, Set[String]]](json.obj(NODE_KEYS))
+        case _ => Map.empty[String, Set[String]]
+      }
+      val relKeys = json match {
+        case Obj(m) if m.keySet.contains(REL_KEYS) => readJs[Map[String, Set[String]]](json.obj(REL_KEYS))
+        case _ => Map.empty[String, Set[String]]
+      }
+      SchemaImpl(labelPropertyMap, relTypePropertyMap, explicitSchemaPatterns, nodeKeys, relKeys)
     }
   )
 
   implicit def lpmRw: ReadWriter[LabelPropertyMap] = readwriter[Js.Value].bimap[LabelPropertyMap](
-    labelPropertyMap => {
-      val jsonEntries = labelPropertyMap.map.map {
+    labelPropertyMap =>
+      labelPropertyMap.map {
         case (labelCombo, propKeys) => Js.Obj(LABELS -> writeJs(labelCombo), PROPERTIES -> writeJs(propKeys))
-      }
-      jsonEntries
-    },
-    json => {
-      val content = json.arr
-        .map(value => readJs[Set[String]](value.obj(LABELS)) -> readJs[PropertyKeys](value.obj(PROPERTIES)))
-      LabelPropertyMap(content.toMap)
-    }
+      },
+    json =>
+      json.arr.map { value =>
+        readJs[Set[String]](value.obj(LABELS)) -> readJs[PropertyKeys](value.obj(PROPERTIES))
+      }.toMap
   )
 
   implicit def rpmRw: ReadWriter[RelTypePropertyMap] = readwriter[Js.Value].bimap[RelTypePropertyMap](
-    relTypePropertyMap => {
-      val jsonEntries = relTypePropertyMap.map.map {
+    relTypePropertyMap =>
+      relTypePropertyMap.map {
         case (relType, propKeys) => Js.Obj(REL_TYPE -> writeJs(relType), PROPERTIES -> writeJs(propKeys))
-      }
-      jsonEntries
-    },
-    json => {
-      val content = json.arr
-        .map(value => readJs[String](value.obj(REL_TYPE)) -> readJs[PropertyKeys](value.obj(PROPERTIES)))
-      RelTypePropertyMap(content.toMap)
-    }
+      },
+    json =>
+      json.arr.map { value =>
+        readJs[String](value.obj(REL_TYPE)) -> readJs[PropertyKeys](value.obj(PROPERTIES))
+      }.toMap
   )
+
+  implicit def spRW: ReadWriter[SchemaPattern] = macroRW
 }
 
 final case class SchemaImpl(
   labelPropertyMap: LabelPropertyMap,
-  relTypePropertyMap: RelTypePropertyMap) extends Schema {
+  relTypePropertyMap: RelTypePropertyMap,
+  explicitSchemaPatterns: Set[SchemaPattern] = Set.empty,
+  override val nodeKeys: Map[String, Set[String]] = Map.empty,
+  override val relationshipKeys: Map[String, Set[String]] = Map.empty
+) extends Schema {
 
   self: Schema =>
 
-  lazy val labels: Set[String] = labelPropertyMap.map.keySet.flatten
+  lazy val labels: Set[String] = labelPropertyMap.keySet.flatten
 
-  lazy val relationshipTypes: Set[String] = relTypePropertyMap.map.keySet
+  lazy val relationshipTypes: Set[String] = relTypePropertyMap.keySet
 
-  private def graphContainsNodeWithoutLabel: Boolean = labelPropertyMap.map.keySet.contains(Set.empty)
+  override lazy val schemaPatterns: Set[SchemaPattern] = {
+    if (explicitSchemaPatterns.nonEmpty) {
+      explicitSchemaPatterns
+    } else {
+      for {
+        source <- labelCombinations.combos
+        relType <- relationshipTypes
+        target <- labelCombinations.combos
+      } yield SchemaPattern(source, relType, target)
+    }
+  }
 
   override lazy val impliedLabels: ImpliedLabels = {
-    val implications = self.foldAndProduce(Map.empty[String, Set[String]])(_ intersect _ - _, _ - _)
-
+    val implications = self.labelCombinations.combos.foldLeft(Map.empty[String, Set[String]]) {
+      case (currentMap, combo) => combo.foldLeft(currentMap) {
+        case (innerMap, label) => innerMap.get(label) match {
+          case Some(innerCombo) => innerMap.updated(label, (innerCombo intersect combo) - label)
+          case None => innerMap.updated(label, combo - label)
+        }
+      }
+    }
     ImpliedLabels(implications)
   }
 
@@ -111,41 +169,21 @@ final case class SchemaImpl(
   override def impliedLabels(knownLabels: Set[String]): Set[String] =
     impliedLabels.transitiveImplicationsFor(knownLabels.intersect(labels))
 
-  override def nodeKeys(labels: Set[String]): PropertyKeys = labelPropertyMap.properties(labels)
+  override def nodePropertyKeys(labelCombination: Set[String]): PropertyKeys = labelPropertyMap.properties(labelCombination)
 
-  override def allNodeKeys: PropertyKeys = {
-    val keyToTypes = allLabelCombinations
-      .map(nodeKeys)
-      .toSeq
-      .flatten
-      .groupBy(_._1)
-      .map {
-        case (k, v) => k -> v.map(_._2)
-      }
-
-    keyToTypes
-      .mapValues(types => types.foldLeft[CypherType](CTVoid)(_ join _))
-      .map {
-        case (key, tpe) =>
-          if (allLabelCombinations.map(nodeKeys).forall(_.get(key).isDefined))
-            key -> tpe
-          else key -> tpe.nullable
-      }
-  }
-
-  override def allLabelCombinations: Set[Set[String]] =
+  override def allCombinations: Set[Set[String]] =
     combinationsFor(Set.empty)
 
   override def combinationsFor(knownLabels: Set[String]): Set[Set[String]] =
     labelCombinations.combinationsFor(knownLabels)
 
-  override def nodeKeyType(labels: Set[String], key: String): Option[CypherType] = {
-    val combos = combinationsFor(labels)
-    keysFor(combos).get(key)
+  override def nodePropertyKeyType(knownLabels: Set[String], key: String): Option[CypherType] = {
+    val combos = combinationsFor(knownLabels)
+    nodePropertyKeysForCombinations(combos).get(key)
   }
 
-  override def keysFor(labelCombinations: Set[Set[String]]): PropertyKeys = {
-    val allKeys = labelCombinations.toSeq.flatMap(nodeKeys)
+  override def nodePropertyKeysForCombinations(labelCombinations: Set[Set[String]]): PropertyKeys = {
+    val allKeys = labelCombinations.toSeq.flatMap(nodePropertyKeys)
     val propertyKeys = allKeys.groupBy(_._1).mapValues { seq =>
       if (seq.size == labelCombinations.size && seq.forall(seq.head == _)) {
         seq.head._2
@@ -159,11 +197,11 @@ final case class SchemaImpl(
     propertyKeys
   }
 
-  override def relationshipKeyType(types: Set[String], key: String): Option[CypherType] = {
+  override def relationshipPropertyKeyType(types: Set[String], key: String): Option[CypherType] = {
     // relationship types have OR semantics: empty set means all types
     val relevantTypes = if (types.isEmpty) relationshipTypes else types
 
-    relevantTypes.map(relationshipKeys).foldLeft(CTVoid: CypherType) {
+    relevantTypes.map(relationshipPropertyKeys).foldLeft(CTVoid: CypherType) {
       case (inferred, next) => inferred.join(next.getOrElse(key, CTNull))
     } match {
       case CTNull => None
@@ -171,17 +209,92 @@ final case class SchemaImpl(
     }
   }
 
-  override def relationshipKeys(typ: String): PropertyKeys = relTypePropertyMap.properties(typ)
+  override def relationshipPropertyKeys(typ: String): PropertyKeys = relTypePropertyMap.properties(typ)
 
-  override def withNodePropertyKeys(nodeLabels: Set[String], keys: PropertyKeys): Schema = {
-    if (nodeLabels.exists(_.isEmpty))
+  override def schemaPatternsFor(
+    knownSourceLabels: Set[String],
+    knownRelTypes: Set[String],
+    knownTargetLabels: Set[String]
+  ): Set[SchemaPattern] = {
+    val possibleSourcePatterns = schemaPatterns.filter(p => knownSourceLabels.subsetOf(p.sourceLabelCombination))
+    val possibleRelTypePatterns = possibleSourcePatterns.filter(p => knownRelTypes.contains(p.relType) || knownRelTypes.isEmpty)
+    val possibleTargetPatterns = possibleRelTypePatterns.filter(p => knownTargetLabels.subsetOf(p.targetLabelCombination))
+
+    possibleTargetPatterns
+  }
+
+  override def withNodePropertyKeys(labelCombination: Set[String], keys: PropertyKeys): Schema = {
+    if (labelCombination.exists(_.isEmpty))
       throw SchemaException("Labels must be non-empty")
-    val propertyKeys = if (labelPropertyMap.labelCombinations(nodeLabels)) {
-      computePropertyTypes(labelPropertyMap.properties(nodeLabels), keys)
+    val propertyKeys = if (labelPropertyMap.labelCombinations(labelCombination)) {
+      computePropertyTypes(labelPropertyMap.properties(labelCombination), keys)
     } else {
       keys
     }
-    copy(labelPropertyMap = labelPropertyMap.register(nodeLabels, propertyKeys))
+    copy(labelPropertyMap = labelPropertyMap.register(labelCombination, propertyKeys))
+  }
+
+  override def withNodeKey(label: String, nodeKey: Set[String]): Schema = {
+    if (!labels.contains(label)) {
+      throw SchemaException(
+        s"""|Invalid node key.
+            |Unknown node label `$label`.
+            |Should be one of: ${labels.mkString("[", ", ", "]")}""".stripMargin)
+    }
+
+    val propertyKeys = nodePropertyKeysForCombinations(combinationsFor(Set(label)))
+
+    if (!nodeKey.subsetOf(propertyKeys.keySet)) {
+      throw SchemaException(
+        s"""|Invalid node key.
+            |Not all combinations that contain `$label` have all the properties for ${nodeKey.mkString("[", ", ", "]")}.
+            |Available keys: ${propertyKeys.keySet.mkString("[", ", ", "]")}""".stripMargin)
+    }
+
+    val nullableProperties = propertyKeys.filter {
+      case (key, tpe) => nodeKey.contains(key) && tpe.isNullable
+    }
+
+    if (nullableProperties.nonEmpty) {
+      throw SchemaException(
+        s"""|Invalid node key.
+            |Properties ${nullableProperties.keySet.mkString("[", ", ", "]")} have nullable types.
+            |Nullable properties can not be part of a node key.""".stripMargin)
+    }
+
+    copy(nodeKeys = nodeKeys.updated(label, nodeKey))
+
+  }
+
+  override def withRelationshipKey(relationshipType: String, relationshipKey: Set[String]): Schema = {
+    if (!relationshipTypes.contains(relationshipType)) {
+      throw SchemaException(
+        s"""|Invalid relationship key.
+            |Unknown relationship type `$relationshipType`.
+            |Should be one of: ${relationshipTypes.mkString("[", ", ", "]")}.""".stripMargin)
+    }
+
+    val propertyKeys = relationshipPropertyKeys(relationshipType)
+
+    if (!relationshipKey.subsetOf(propertyKeys.keySet)) {
+      throw SchemaException(
+        s"""|Invalid relationship key.
+            |Relationship type `$relationshipType` does not have all the properties for ${relationshipKey.mkString("[", ", ", "]")}.
+            |Available keys: ${propertyKeys.keySet.mkString("[", ", ", "]")}""".stripMargin)
+    }
+
+    val nullableProperties = propertyKeys.filter {
+      case (key, tpe) => relationshipKey.contains(key) && tpe.isNullable
+    }
+
+    if (nullableProperties.nonEmpty) {
+      throw SchemaException(
+        s"""|Invalid relationship key.
+            |Properties ${nullableProperties.keySet.mkString("[", ", ", "]")} have nullable types.
+            |Nullable properties can not be part of a relationship key.""".stripMargin)
+    }
+
+    copy(relationshipKeys = relationshipKeys.updated(relationshipType, relationshipKey))
   }
 
   private def computePropertyTypes(existing: PropertyKeys, input: PropertyKeys): PropertyKeys = {
@@ -211,6 +324,16 @@ final case class SchemaImpl(
     }
   }
 
+  override def withSchemaPatterns(patterns: SchemaPattern*): Schema = {
+    patterns.foreach { p =>
+      if (!labelCombinations.combos.contains(p.sourceLabelCombination)) throw SchemaException(s"Unknown source node label combination: `${p.sourceLabelCombination}`. Should be one of: ${labelCombinations.combos.mkString("[", ",", "]")}")
+      if (!relationshipTypes.contains(p.relType)) throw SchemaException(s"Unknown relationship type: `${p.relType}`. Should be one of ${relationshipTypes.mkString("[", ",", "]")}")
+      if (!labelCombinations.combos.contains(p.targetLabelCombination)) throw SchemaException(s"Unknown target node label combination: `${p.targetLabelCombination}`. Should be one of: ${labelCombinations.combos.mkString("[", ",", "]")}")
+    }
+
+    copy(explicitSchemaPatterns = explicitSchemaPatterns ++ patterns.toSet)
+  }
+
   override def ++(other: Schema): SchemaImpl = {
     val conflictingLabels = labelPropertyMap.labelCombinations intersect other.labelPropertyMap.labelCombinations
     val nulledOut = conflictingLabels.foldLeft(Map.empty[Set[String], PropertyKeys]) {
@@ -218,8 +341,7 @@ final case class SchemaImpl(
         val keys = computePropertyTypes(labelPropertyMap.properties(next), other.labelPropertyMap.properties(next))
         acc + (next -> keys)
     }
-    val newNodeKeyMap = labelPropertyMap ++ other.labelPropertyMap ++ LabelPropertyMap(nulledOut)
-
+    val newLabelPropertyMap = labelPropertyMap |+| other.labelPropertyMap |+| nulledOut
 
     val conflictingRelTypes = relationshipTypes intersect other.relationshipTypes
     val nulledRelProps = conflictingRelTypes.foldLeft(Map.empty[String, PropertyKeys]) {
@@ -227,9 +349,20 @@ final case class SchemaImpl(
         val keys = computePropertyTypes(relTypePropertyMap.properties(next), other.relTypePropertyMap.properties(next))
         acc + (next -> keys)
     }
-    val newRelTypePropertyMap = relTypePropertyMap ++ other.relTypePropertyMap ++ RelTypePropertyMap(nulledRelProps)
+    val newRelTypePropertyMap = relTypePropertyMap |+| other.relTypePropertyMap |+| nulledRelProps
 
-    copy(labelPropertyMap = newNodeKeyMap, relTypePropertyMap = newRelTypePropertyMap)
+    val newExplicitSchemaPatterns = explicitSchemaPatterns ++ other.explicitSchemaPatterns
+
+    val newNodeKeys = nodeKeys |+| other.nodeKeys
+    val newRelationshipKeys = relationshipKeys |+| other.relationshipKeys
+
+    copy(
+      labelPropertyMap = newLabelPropertyMap,
+      relTypePropertyMap = newRelTypePropertyMap,
+      explicitSchemaPatterns = newExplicitSchemaPatterns,
+      nodeKeys = newNodeKeys,
+      relationshipKeys = newRelationshipKeys
+    )
   }
 
   def forNode(labelConstraints: Set[String]): Schema = {
@@ -240,14 +373,14 @@ final case class SchemaImpl(
     }
 
     val possibleLabels = if (labelConstraints.isEmpty) {
-      allLabelCombinations
+      allCombinations
     } else {
       // add required labels because they might not be present in the schema already (newly created)
       combinationsFor(requiredLabels) + requiredLabels
     }
 
     // take all label properties that might appear on the possible labels
-    val newLabelPropertyMap = LabelPropertyMap(this.labelPropertyMap.map.filterKeys(possibleLabels.contains))
+    val newLabelPropertyMap: LabelPropertyMap = this.labelPropertyMap.filterKeys(possibleLabels.contains)
 
     // add labels that were specified in the constraints but are not present in source schema
     val updatedLabelPropertyMap = possibleLabels.foldLeft(newLabelPropertyMap) {
@@ -268,14 +401,14 @@ final case class SchemaImpl(
     }
 
     val updatedRelTypePropertyMap = this.relTypePropertyMap.filterForRelTypes(givenRelTypes)
-    val updatedMap = givenRelTypes.foldLeft(updatedRelTypePropertyMap.map) {
+    val updatedMap = givenRelTypes.foldLeft(updatedRelTypePropertyMap) {
       case (map, givenRelType) =>
         if (!map.contains(givenRelType)) map.updated(givenRelType, PropertyKeys.empty) else map
     }
 
     SchemaImpl(
       labelPropertyMap = LabelPropertyMap.empty,
-      relTypePropertyMap = RelTypePropertyMap(updatedMap)
+      relTypePropertyMap = updatedMap
     )
   }
 
@@ -291,7 +424,7 @@ final case class SchemaImpl(
         labelPropertyMap.labelCombinations.foreach { combo =>
           val labelStr = if (combo eq Set.empty) "(no label)" else combo.mkString(":", ":", "")
           builder.append(s"\t$labelStr$EOL")
-          nodeKeys(combo).foreach {
+          nodePropertyKeys(combo).foreach {
             case (key, typ) => builder.append(s"\t\t$key: $typ$EOL")
           }
         }
@@ -315,13 +448,21 @@ final case class SchemaImpl(
         builder.append(s"Rel types {$EOL")
         relationshipTypes.foreach { relType =>
           builder.append(s"\t:$relType$EOL")
-          relationshipKeys(relType).foreach {
+          relationshipPropertyKeys(relType).foreach {
             case (key, typ) => builder.append(s"\t\t$key: $typ$EOL")
           }
         }
         builder.append(s"}$EOL")
       } else {
         builder.append(s"no relationship types$EOL")
+      }
+
+      if (explicitSchemaPatterns.nonEmpty) {
+        builder.append(s"Explicit schema patterns {$EOL")
+        explicitSchemaPatterns.foreach(p =>
+          builder.append(s"\t$p$EOL")
+        )
+        builder.append(s"}$EOL")
       }
 
       builder.toString
@@ -332,10 +473,16 @@ final case class SchemaImpl(
   override private[opencypher] def dropPropertiesFor(combo: Set[String]) =
     copy(labelPropertyMap - combo)
 
-  override private[opencypher] def withOverwrittenNodePropertyKeys(nodeLabels: Set[String], propertyKeys: PropertyKeys) =
+  override private[opencypher] def withOverwrittenNodePropertyKeys(
+    nodeLabels: Set[String],
+    propertyKeys: PropertyKeys
+  ) =
     copy(labelPropertyMap = labelPropertyMap.register(nodeLabels, propertyKeys))
 
-  override private[opencypher] def withOverwrittenRelationshipPropertyKeys(relType: String, propertyKeys: PropertyKeys) =
+  override private[opencypher] def withOverwrittenRelationshipPropertyKeys(
+    relType: String,
+    propertyKeys: PropertyKeys
+  ) =
     copy(relTypePropertyMap = relTypePropertyMap.register(relType, propertyKeys))
 
   override def toJson: String = upickle.default.write[Schema](this, indent = 4)

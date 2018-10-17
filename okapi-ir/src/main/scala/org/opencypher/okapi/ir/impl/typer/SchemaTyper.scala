@@ -36,17 +36,20 @@ import org.atnos.eff.all._
 import org.opencypher.okapi.api.schema.Schema
 import org.opencypher.okapi.api.types.CypherType.joinMonoid
 import org.opencypher.okapi.api.types._
+import org.opencypher.okapi.ir.impl.parse.functions.Timestamp
 import org.opencypher.okapi.ir.impl.parse.rewriter.ExistsPattern
-import org.opencypher.v9_1.expressions._
-import org.opencypher.v9_1.expressions.functions.{Coalesce, Collect, Exists, Max, Min}
+import org.opencypher.okapi.ir.impl.typer.SignatureConverter._
+import org.opencypher.v9_0.expressions._
+import org.opencypher.v9_0.expressions.functions.{Abs, Ceil, Coalesce, Collect, Exists, Exp, Floor, Log, Log10, Max, Min, Round, Sign, Sqrt, ToBoolean, ToString, UnresolvedFunction}
 
 import scala.util.Try
 
 final case class SchemaTyper(schema: Schema) {
 
   def infer(
-      expr: Expression,
-      tracker: TypeTracker = TypeTracker.empty): Either[NonEmptyList[TyperError], TyperResult[CypherType]] =
+    expr: Expression,
+    tracker: TypeTracker = TypeTracker.empty
+  ): Either[NonEmptyList[TyperError], TyperResult[CypherType]] =
     SchemaTyper.processInContext[TyperStack[CypherType]](expr, tracker).run(schema)
 
   def inferOrThrow(expr: Expression, tracker: TypeTracker = TypeTracker.empty): TyperResult[CypherType] =
@@ -55,15 +58,16 @@ final case class SchemaTyper(schema: Schema) {
 
 object SchemaTyper {
 
-  def processInContext[R: _hasSchema: _keepsErrors: _hasTracker: _logsTypes](
-      expr: Expression,
-      tracker: TypeTracker): Eff[R, CypherType] =
+  def processInContext[R: _hasSchema : _keepsErrors : _hasTracker : _logsTypes](
+    expr: Expression,
+    tracker: TypeTracker
+  ): Eff[R, CypherType] =
     for {
       _ <- put[R, TypeTracker](tracker)
       result <- process[R](expr)
     } yield result
 
-  def process[R: _hasSchema: _keepsErrors: _hasTracker: _logsTypes](expr: Expression): Eff[R, CypherType] = expr match {
+  def process[R: _hasSchema : _keepsErrors : _hasTracker : _logsTypes](expr: Expression): Eff[R, CypherType] = expr match {
 
     case _: Variable =>
       for {
@@ -85,18 +89,18 @@ object SchemaTyper {
 
           // This means that the node can have any possible label combination, as the user did not specify any constraints
           case n: CTNode if n.labels.isEmpty =>
-            val propType = schema.allLabelCombinations
-              .map(l => schema.nodeKeyType(l, name).getOrElse(CTNull))
+            val propType = schema.allCombinations
+              .map(l => schema.nodePropertyKeyType(l, name).getOrElse(CTNull))
               .foldLeft(CTVoid: CypherType)(_ join _)
             recordType(v -> varTyp) >> recordAndUpdate(expr -> propType)
 
           // User specified label constraints - we can use those for type inference
           case CTNode(labels, _) =>
-            val propType = schema.nodeKeyType(labels, name).getOrElse(CTNull)
+            val propType = schema.nodePropertyKeyType(labels, name).getOrElse(CTNull)
             recordType(v -> varTyp) >> recordAndUpdate(expr -> propType)
 
           case CTRelationship(types, _) =>
-            val propType = schema.relationshipKeyType(types, name).getOrElse(CTNull)
+            val propType = schema.relationshipPropertyKeyType(types, name).getOrElse(CTNull)
             recordType(v -> varTyp) >> recordAndUpdate(expr -> propType)
 
           case CTMap =>
@@ -136,7 +140,7 @@ object SchemaTyper {
       for {
         innerType <- process[R](inner)
         result <- innerType.material match {
-          case CTBoolean =>
+          case CTBoolean | CTVoid =>
             recordType(inner -> innerType) >>
               recordAndUpdate(expr -> CTBoolean)
 
@@ -163,7 +167,7 @@ object SchemaTyper {
       for {
         lhsType <- process[R](lhs)
         rhsType <- process[R](rhs)
-        result <- recordTypes(lhs -> lhsType, rhs -> rhsType) >> recordAndUpdate(expr -> CTBoolean)
+        result <- recordTypes(lhs -> lhsType, rhs -> rhsType) >> recordAndUpdate(expr -> CTBoolean.asNullableAs(lhsType join rhsType))
       } yield result
 
     case cmp: InequalityExpression =>
@@ -183,7 +187,7 @@ object SchemaTyper {
         result <- rhsType match {
           case _: CTList | _: CTListOrNull | CTNull =>
             recordTypes(lhs -> lhsType, rhs -> rhsType) >> recordAndUpdate(expr -> CTBoolean)
-          case x         =>
+          case x =>
             error(InvalidType(rhs, CTList(CTWildcard), x))
         }
       } yield result
@@ -234,13 +238,25 @@ object SchemaTyper {
           error(WrongNumberOfArguments(expr, 1, seq.size))
       }
 
+    // TODO: Remove as soon as FunctionInvocationTyper is capable of supporting all Neo4j front end types
+    case expr: FunctionInvocation if expr.function == ToString =>
+      expr.arguments match {
+        case Seq(first) =>
+          for {
+            inner <- process[R](first)
+            existsType <- recordAndUpdate(expr -> CTString.asNullableAs(inner))
+          } yield existsType
+        case seq =>
+          error(WrongNumberOfArguments(expr, 1, seq.size))
+      }
+
     case expr: FunctionInvocation if expr.function == Collect =>
       for {
         argExprs <- pure(expr.arguments)
         argTypes <- argExprs.toList.traverse(process[R])
         computedType <- argTypes.reduceLeftOption(_ join _) match {
           case Some(innerType) =>
-            pure[R, CypherType](CTList(innerType.nullable).nullable)
+            pure[R, CypherType](CTList(innerType).nullable)
           case None =>
             error(NoSuitableSignatureForExpr(expr, argTypes))
         }
@@ -266,8 +282,11 @@ object SchemaTyper {
         result <- recordAndUpdate(expr -> computedType)
       } yield result
 
+    case expr: FunctionInvocation if expr.function == UnresolvedFunction =>
+      UnresolvedFunctionSignatureTyper(expr)
+
     case expr: FunctionInvocation =>
-      FunctionInvocationTyper(expr)
+      BasicSignatureBasedTyper(expr)
 
     case CountStar() =>
       recordAndUpdate(expr -> CTInteger)
@@ -284,21 +303,21 @@ object SchemaTyper {
     case div: Divide =>
       processArithmeticExpressions(div)
 
-    case indexing @ ContainerIndex(list @ ListLiteral(exprs), index: SignedDecimalIntegerLiteral)
-        if Try(parseInt(index.stringVal)).nonEmpty =>
+    case indexing@ContainerIndex(list@ListLiteral(exprs), index: SignedDecimalIntegerLiteral)
+      if Try(parseInt(index.stringVal)).nonEmpty =>
       for {
-        listType <- process[R](list)
-        indexType <- process[R](index)
+        _ <- process[R](list)
+        _ <- process[R](index)
         eltType <- {
           Try(parseInt(index.stringVal)).map { rawPos =>
             val pos = if (rawPos < 0) exprs.size + rawPos else rawPos
             typeOf[R](exprs(pos))
           }.getOrElse(pure[R, CypherType](CTVoid))
         }
-        result <- updateTyping(indexing -> eltType)
+        result <- recordAndUpdate(indexing -> eltType)
       } yield result
 
-    case indexing @ ContainerIndex(list, index) =>
+    case indexing@ContainerIndex(list, index) =>
       for {
         listTyp <- process[R](list)
         indexTyp <- process[R](index)
@@ -306,13 +325,13 @@ object SchemaTyper {
 
           // TODO: Test all cases
           case (CTList(eltTyp), CTInteger) =>
-            updateTyping(expr -> eltTyp.asNullableAs(indexTyp join eltTyp))
+            recordAndUpdate(expr -> eltTyp.nullable)
 
           case (CTListOrNull(eltTyp), CTInteger) =>
-            updateTyping(expr -> eltTyp.nullable)
+            recordAndUpdate(expr -> eltTyp.nullable)
 
           case (typ, CTString) if typ.subTypeOf(CTMap).maybeTrue =>
-            updateTyping(expr -> CTWildcard.nullable)
+            recordAndUpdate(expr -> CTWildcard.nullable)
 
           case _ =>
             error(InvalidContainerAccess(indexing))
@@ -320,7 +339,7 @@ object SchemaTyper {
       } yield result
 
     // generic CASE case (https://neo4j.com/docs/developer-manual/current/cypher/syntax/expressions/#query-syntax-case)
-    case expr@ CaseExpression(None, alternatives, default) =>
+    case expr@CaseExpression(None, alternatives, default) =>
       for {
         // get types for predicates of each alternative
         _ <- alternatives.map(_._1).toVector.traverse(process[R])
@@ -332,12 +351,16 @@ object SchemaTyper {
         result <- recordAndUpdate(expr -> alternativeType.join(defaultType))
       } yield result
 
+    case operatorExpression: OperatorExpression =>
+      BasicSignatureBasedTyper(operatorExpression)
+
     case _ =>
       error(UnsupportedExpr(expr))
   }
 
-  private def processArithmeticExpressions[R: _hasSchema: _keepsErrors: _hasTracker: _logsTypes](
-      expr: Expression with BinaryOperatorExpression): Eff[R, CypherType] = {
+  private def processArithmeticExpressions[R: _hasSchema : _keepsErrors : _hasTracker : _logsTypes](
+    expr: Expression with BinaryOperatorExpression
+  ): Eff[R, CypherType] = {
     for {
       lhsType <- process[R](expr.lhs)
       rhsType <- process[R](expr.rhs)
@@ -355,29 +378,31 @@ object SchemaTyper {
   }
 
   private def numericTypeOrError(
-      expr: Expression with BinaryOperatorExpression,
-      lhsType: CypherType,
-      rhsType: CypherType) = (lhsType.material, rhsType.material) match {
-    case (CTInteger, CTInteger)                        => Right(CTInteger)
-    case (CTFloat, CTInteger)                          => Right(CTFloat)
-    case (CTInteger, CTFloat)                          => Right(CTFloat)
-    case (CTFloat, CTFloat)                            => Right(CTFloat)
+    expr: Expression with BinaryOperatorExpression,
+    lhsType: CypherType,
+    rhsType: CypherType
+  ) = (lhsType.material, rhsType.material) match {
+    case (CTInteger, CTInteger) => Right(CTInteger)
+    case (CTFloat, CTInteger) => Right(CTFloat)
+    case (CTInteger, CTFloat) => Right(CTFloat)
+    case (CTFloat, CTFloat) => Right(CTFloat)
     case (CTNumber, y) if y.subTypeOf(CTNumber).isTrue => Right(CTNumber)
     case (x, CTNumber) if x.subTypeOf(CTNumber).isTrue => Right(CTNumber)
-    case (x, _) if !x.couldBeSameTypeAs(CTNumber)      => Left(expr.lhs -> lhsType)
-    case (_, y) if !y.couldBeSameTypeAs(CTNumber)      => Left(expr.rhs -> rhsType)
-    case _                                             => Right(CTAny)
+    case (x, _) if !x.couldBeSameTypeAs(CTNumber) => Left(expr.lhs -> lhsType)
+    case (_, y) if !y.couldBeSameTypeAs(CTNumber) => Left(expr.rhs -> rhsType)
+    case _ => Right(CTAny)
   }
 
-  private def processAndsOrs[R: _hasSchema: _keepsErrors: _hasTracker: _logsTypes](
-      expr: Expression,
-      orderedExprs: Vector[Expression]): Eff[R, CypherType] = {
+  private def processAndsOrs[R: _hasSchema : _keepsErrors : _hasTracker : _logsTypes](
+    expr: Expression,
+    orderedExprs: Vector[Expression]
+  ): Eff[R, CypherType] = {
     for {
-        // We have to process label predicates first in order to use label information on node
-        // variables for looking up the type of property expressions on these variables.
+      // We have to process label predicates first in order to use label information on node
+      // variables for looking up the type of property expressions on these variables.
       hasLabelPreds <- orderedExprs.collect { case h: HasLabels => h }.traverse(process[R])
       otherTypes <- orderedExprs.filter {
-        case h: HasLabels => false
+        case _: HasLabels => false
         case _ => true
       }.traverse(process[R])
       result <- {
@@ -400,16 +425,16 @@ object SchemaTyper {
       pure(monoid.empty)
 
     override def combine(x: Eff[R, A], y: Eff[R, A]): Eff[R, A] =
-      for { xTyp <- x; yTyp <- y } yield monoid.combine(xTyp, yTyp)
+      for {xTyp <- x; yTyp <- y} yield monoid.combine(xTyp, yTyp)
   }
 
   private sealed trait ExpressionTyper[T <: Expression] {
-    def apply[R: _hasSchema: _keepsErrors: _hasTracker: _logsTypes](expr: T): Eff[R, CypherType]
+    def apply[R: _hasSchema : _keepsErrors : _hasTracker : _logsTypes](expr: T): Eff[R, CypherType]
   }
 
   private sealed trait SignatureBasedInvocationTyper[T <: Expression] extends ExpressionTyper[T] {
 
-    def apply[R: _hasSchema: _keepsErrors: _hasTracker: _logsTypes](expr: T): Eff[R, CypherType] =
+    def apply[R: _hasSchema : _keepsErrors : _hasTracker : _logsTypes](expr: T): Eff[R, CypherType] =
       for {
         argExprs <- pure(expr.arguments)
         argTypes <- argExprs.toList.traverse(process[R])
@@ -425,83 +450,141 @@ object SchemaTyper {
         resultType <- recordAndUpdate(expr -> computedType)
       } yield resultType
 
-    protected def selectSignaturesFor[R: _hasSchema: _keepsErrors: _hasTracker: _logsTypes](
-        expr: T,
-        args: Seq[(Expression, CypherType)]): Eff[R, Set[(Seq[CypherType], CypherType)]] =
+    protected def selectSignaturesFor[R: _hasSchema : _keepsErrors : _hasTracker : _logsTypes](
+      expr: T,
+      args: Seq[(Expression, CypherType)]
+    ): Eff[R, Set[(Seq[CypherType], CypherType)]] =
       for {
         signatures <- generateSignaturesFor(expr, args)
         eligible <- pure(signatures.flatMap { sig =>
-          val (sigInputTypes, sigOutputType) = sig
+          val sigInputTypes = sig.input
+          val sigOutputType = sig.output
 
           def compatibleArity = sigInputTypes.size == args.size
+
           def sigArgTypes = sigInputTypes.zip(args.map(_._2))
+
           def compatibleTypes = sigArgTypes.forall(((_: CypherType) couldBeSameTypeAs (_: CypherType)).tupled)
 
           if (compatibleArity && compatibleTypes) Some(sigInputTypes -> sigOutputType) else None
         })
       } yield eligible
 
-    protected def generateSignaturesFor[R: _hasSchema: _keepsErrors: _hasTracker: _logsTypes](
-        expr: T,
-        args: Seq[(Expression, CypherType)]): Eff[R, Set[(Seq[CypherType], CypherType)]]
+    protected def generateSignaturesFor[R: _hasSchema : _keepsErrors : _hasTracker : _logsTypes](
+      expr: T,
+      args: Seq[(Expression, CypherType)]
+    ): Eff[R, Set[FunctionSignature]]
   }
 
-  private case object FunctionInvocationTyper extends SignatureBasedInvocationTyper[FunctionInvocation] {
-    override protected def generateSignaturesFor[R: _hasSchema: _keepsErrors: _hasTracker: _logsTypes](
-        expr: FunctionInvocation,
-        args: Seq[(Expression, CypherType)]): Eff[R, Set[(Seq[CypherType], CypherType)]] =
-      expr.function match {
-        case f: TypeSignatures =>
-          pure(f.signatures.map { sig =>
-            val sigInputTypes = sig.argumentTypes.map(fromFrontendType).map(_.nullable)
-            val sigOutputType = fromFrontendType(sig.outputType)
-            sigInputTypes -> sigOutputType
-          }.toSet)
+  private case object UnresolvedFunctionSignatureTyper extends SignatureBasedInvocationTyper[Expression] {
+    override protected def generateSignaturesFor[R: _hasSchema : _keepsErrors : _hasTracker : _logsTypes](
+      expr: Expression,
+      args: Seq[(Expression, CypherType)]
+    ): Eff[R, Set[FunctionSignature]] = expr match {
+      case f: FunctionInvocation => f.name match {
+        case Timestamp.name =>
+          val set = Timestamp.signatures.flatMap(_.convert).toSet
+          pure(set)
+        case _ =>
+          wrong[R, TyperError](UnsupportedExpr(expr)) >> pure(Set.empty)
+      }
+    }
+  }
 
+  private case object BasicSignatureBasedTyper extends SignatureBasedInvocationTyper[Expression] {
+    override protected def generateSignaturesFor[R: _hasSchema : _keepsErrors : _hasTracker : _logsTypes](
+      expr: Expression,
+      args: Seq[(Expression, CypherType)]
+    ): Eff[R, Set[FunctionSignature]] = expr match {
+      case f: FunctionInvocation => f.function match {
         case Min | Max =>
-          pure[R, Set[(Seq[CypherType], CypherType)]](
+          pure[R, Set[FunctionSignature]](
             Set(
-              Seq(CTInteger) -> CTInteger,
-              Seq(CTFloat) -> CTFloat
+              FunctionSignature(Seq(CTInteger), CTInteger),
+              FunctionSignature(Seq(CTFloat), CTFloat)
             ))
+
+        case ToBoolean =>
+          pure[R, Set[FunctionSignature]](
+            Set(
+              FunctionSignature(Seq(CTString), CTBoolean.nullable),
+              FunctionSignature(Seq(CTBoolean), CTBoolean)
+            ))
+
+        // TODO: remove as soon as https://github.com/opencypher/front-end/issues/27 is fixed
+        case Sqrt | Log | Log10 | Exp | Ceil | Floor | Round =>
+          pure[R, Set[FunctionSignature]](
+            Set(
+              FunctionSignature(Seq(CTNull), CTNull),
+              FunctionSignature(Seq(CTFloat), CTFloat),
+              FunctionSignature(Seq(CTInteger), CTFloat)
+            ))
+
+        case Abs =>
+          pure[R, Set[FunctionSignature]](
+            Set(
+              FunctionSignature(Seq(CTNull), CTNull),
+              FunctionSignature(Seq(CTFloat), CTFloat),
+              FunctionSignature(Seq(CTInteger), CTInteger)
+            ))
+
+        case Sign =>
+          pure[R, Set[FunctionSignature]](
+            Set(
+              FunctionSignature(Seq(CTNull), CTNull),
+              FunctionSignature(Seq(CTFloat), CTInteger),
+              FunctionSignature(Seq(CTInteger), CTInteger)
+            ))
+        case f: TypeSignatures =>
+          val set = f.signatures.flatMap(_.convert).toSet
+          pure(set)
 
         case _ =>
           wrong[R, TyperError](UnsupportedExpr(expr)) >> pure(Set.empty)
       }
+
+      case f: OperatorExpression =>
+        val set = f.signatures.flatMap(_.convert).toSet
+        pure(set)
+
+      case _ =>
+        wrong[R, TyperError](UnsupportedExpr(expr)) >> pure(Set.empty)
+    }
   }
 
   private case object AddTyper extends SignatureBasedInvocationTyper[Add] {
-    override protected def generateSignaturesFor[R: _hasSchema: _keepsErrors: _hasTracker: _logsTypes](
-        expr: Add,
-        args: Seq[(Expression, CypherType)]): Eff[R, Set[(Seq[CypherType], CypherType)]] = {
+    override protected def generateSignaturesFor[R: _hasSchema : _keepsErrors : _hasTracker : _logsTypes](
+      expr: Add,
+      args: Seq[(Expression, CypherType)]
+    ): Eff[R, Set[FunctionSignature]] = {
       val (_, left) = args.head
       val (_, right) = args(1)
       (left.material -> right.material match {
-        case (left: CTList, _)                                    => Some(left listConcatJoin right)
-        case (_, right: CTList)                                   => Some(right listConcatJoin left)
+        case (left: CTList, _) => Some(left listConcatJoin right)
+        case (_, right: CTList) => Some(right listConcatJoin left)
         case (CTString, _) if right.subTypeOf(CTNumber).maybeTrue => Some(CTString)
-        case (_, CTString) if left.subTypeOf(CTNumber).maybeTrue  => Some(CTString)
-        case (CTString, CTString)                                 => Some(CTString)
+        case (_, CTString) if left.subTypeOf(CTNumber).maybeTrue => Some(CTString)
+        case (CTString, CTString) => Some(CTString)
         case (l, r) =>
           numericTypeOrError(expr, l, r) match {
             case Right(t) => Some(t)
-            case _        => None
+            case _ => None
           }
       }) match {
-        case Some(CTVoid) => wrong[R, TyperError](UnsupportedExpr(expr)) >> pure(Set(Seq(left, right) -> CTVoid))
-        case Some(t)      => pure(Set(Seq(left, right) -> t.asNullableAs(left join right)))
-        case None         => pure(Set.empty)
+        case Some(CTVoid) => wrong[R, TyperError](UnsupportedExpr(expr)) >> pure(Set(FunctionSignature(Seq(left, right), CTVoid)))
+        case Some(t) => pure(Set(FunctionSignature(Seq(left, right), t.asNullableAs(left join right))))
+        case None => pure(Set.empty)
       }
     }
 
     private implicit class RichCTList(val left: CTList) extends AnyVal {
       def listConcatJoin(right: CypherType): CypherType = (left, right) match {
         case (CTList(lInner), CTList(rInner)) => CTList(lInner join rInner)
-        case (CTList(CTString), CTString)     => left
-        case (CTList(CTInteger), CTInteger)   => left
-        case (CTList(CTFloat), CTInteger)     => CTList(CTNumber)
-        case (CTList(CTVoid), _)              => CTList(right)
-        case _                                => CTVoid
+        case (CTList(CTString), CTString) => left
+        case (CTList(CTInteger), CTInteger) => left
+        case (CTList(CTFloat), CTInteger) => CTList(CTNumber)
+        case (CTList(CTVoid), _) => CTList(right)
+        case _ => CTVoid
       }
     }
   }

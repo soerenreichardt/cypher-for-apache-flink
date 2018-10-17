@@ -26,8 +26,8 @@
  */
 package org.opencypher.okapi.ir.impl.parse.rewriter
 
-import org.opencypher.v9_1.expressions.{CaseExpression, Equals}
-import org.opencypher.v9_1.util.{Rewriter, topDown}
+import org.opencypher.v9_0.expressions.{CaseExpression, Equals}
+import org.opencypher.v9_0.util.{Rewriter, topDown}
 
 /*
   Rewrites special CASE expressions to generic CASE expressions, e.g
@@ -54,7 +54,7 @@ case object normalizeCaseExpression extends Rewriter {
     case c: CaseExpression => rewriteCase(c)
   })
 
-  private def rewriteCase: (CaseExpression => CaseExpression) = {
+  private def rewriteCase: CaseExpression => CaseExpression = {
     case expr@CaseExpression(Some(inputExpr), alternatives, default) =>
       val inlineAlternatives = alternatives.map {
         case (predicate, action) => Equals(inputExpr, predicate)(predicate.position) -> action

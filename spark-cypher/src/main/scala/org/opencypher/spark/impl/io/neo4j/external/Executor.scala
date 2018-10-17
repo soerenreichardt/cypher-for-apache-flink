@@ -30,12 +30,13 @@ import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Row, types}
 import org.neo4j.driver.internal.types.InternalTypeSystem
-import org.neo4j.driver.internal.value.ListValue
 import org.neo4j.driver.v1.types.{Type, TypeSystem}
-import org.neo4j.driver.v1.{Driver, Session, StatementResult, Value}
-import org.opencypher.spark.api.io.neo4j.Neo4jConfig
+import org.neo4j.driver.v1.{StatementResult, Value}
+import org.opencypher.okapi.neo4j.io.Neo4jConfig
+import org.opencypher.okapi.neo4j.io.Neo4jHelpers._
 
 import scala.collection.JavaConverters._
+import scala.util.Try
 
 private object Executor {
 
@@ -45,7 +46,7 @@ private object Executor {
 
   private def toJava(x: Any): AnyRef = x match {
     case y: Seq[_] => y.asJava
-    case _         => x.asInstanceOf[AnyRef]
+    case _ => x.asInstanceOf[AnyRef]
   }
 
   val EMPTY = Array.empty[Any]
@@ -63,27 +64,9 @@ private object Executor {
   }
 
   def execute(config: Neo4jConfig, query: String, parameters: Map[String, Any]): Neo4jQueryResult = {
-
-    def close(driver: Driver, session: Session): Unit = {
-      try {
-        if (session.isOpen) {
-          session.close()
-        }
-        driver.close()
-      } catch {
-        case _: Throwable => // ignore
-      }
-    }
-
-    val driver: Driver = config.driver()
-    val session = driver.session()
-
-    try {
+    config.withSession { session =>
       val result: StatementResult = session.run(query, toJava(parameters))
       if (!result.hasNext) {
-        result.consume()
-        session.close()
-        driver.close()
         return new Neo4jQueryResult(new StructType(), Iterator.empty)
       }
       val peek = result.peek()
@@ -92,36 +75,28 @@ private object Executor {
         val res: Neo4jQueryResult =
           new Neo4jQueryResult(new StructType(), Array.fill[Array[Any]](rows(result))(EMPTY).toIterator)
         result.consume()
-        close(driver, session)
         return res
       }
       val keys = peek.keys().asScala
       val fields = keys.map(k => (k, peek.get(k).`type`())).map(keyType => CypherTypes.field(keyType))
       val schema = StructType(fields)
 
-      val it = result.asScala.map((record) => {
+      val it = result.asScala.map { record =>
         val row = new Array[Any](keyCount)
         var i = 0
         while (i < keyCount) {
           row.update(i, convertLists(record.get(i)))
           i = i + 1
         }
-        if (!result.hasNext) {
-          result.consume()
-          close(driver, session)
-        }
         row
-      })
+      }
       new Neo4jQueryResult(schema, it)
-    } finally {
-      close(driver, session)
     }
   }
 
-  private def convertLists(v: Value): AnyRef = v match {
-    case list: ListValue =>
-      list.asList().toArray
-    case other => other.asObject()
+  private def convertLists(v: Value): AnyRef = Try(v.asList()).toOption match {
+    case Some(list) => list.toArray
+    case None => v.asObject()
   }
 }
 
@@ -133,17 +108,17 @@ private object CypherTypes {
   val NULL: NullType.type = types.NullType
 
   def apply(typ: String): DataType = typ.toUpperCase match {
-    case "LONG"    => INTEGER
-    case "INT"     => INTEGER
+    case "LONG" => INTEGER
+    case "INT" => INTEGER
     case "INTEGER" => INTEGER
-    case "FLOAT"   => FlOAT
-    case "DOUBLE"  => FlOAT
+    case "FLOAT" => FlOAT
+    case "DOUBLE" => FlOAT
     case "NUMERIC" => FlOAT
-    case "STRING"  => STRING
+    case "STRING" => STRING
     case "BOOLEAN" => BOOLEAN
-    case "BOOL"    => BOOLEAN
-    case "NULL"    => NULL
-    case _         => STRING
+    case "BOOL" => BOOLEAN
+    case "NULL" => NULL
+    case _ => STRING
   }
 
   def toSparkType(typeSystem: TypeSystem, typ: Type): org.apache.spark.sql.types.DataType =
