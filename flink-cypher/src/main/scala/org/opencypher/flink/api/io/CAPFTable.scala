@@ -1,158 +1,34 @@
-/*
- * Copyright (c) 2016-2018 "Neo4j Sweden, AB" [https://neo4j.com]
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- * Attribution Notice under the terms of the Apache License 2.0
- *
- * This work was created by the collective efforts of the openCypher community.
- * Without limiting the terms of Section 6, any Derivative Work that is not
- * approved by the public consensus process of the openCypher Implementers Group
- * should not be described as “Cypher” (and Cypher® is a registered trademark of
- * Neo4j Inc.) or as "openCypher". Extensions by implementers or prototypes or
- * proposals for change that have been documented or implemented should only be
- * described as "implementation extensions to Cypher" or as "proposed changes to
- * Cypher that are not yet approved by the openCypher community".
- */
 package org.opencypher.flink.api.io
 
 import org.apache.flink.table.api.scala._
 import org.apache.flink.table.api.{Table, Types}
-import org.apache.flink.table.expressions._
-import org.opencypher.flink.api.io.FlinkCypherTable.FlinkTable
-import org.opencypher.flink.impl.FlinkSQLExprMapper._
+import org.apache.flink.table.expressions
+import org.apache.flink.table.expressions.UnresolvedFieldReference
+import org.opencypher.flink.api.CAPFSession
+import org.opencypher.flink.impl.table.FlinkCypherTable.FlinkTable
 import org.opencypher.flink.impl.TableOps._
-import org.opencypher.flink.impl.{CAPFRecords, CAPFSession, RecordBehaviour}
-import org.opencypher.flink.schema.CAPFSchema
-import org.opencypher.flink.schema.CAPFSchema._
+import org.opencypher.flink.impl.{CAPFRecords, RecordBehaviour}
 import org.opencypher.okapi.api.io.conversion.{NodeMapping, RelationshipMapping}
-import org.opencypher.okapi.api.schema.Schema
-import org.opencypher.okapi.api.table.CypherTable._
-import org.opencypher.okapi.api.types._
-import org.opencypher.okapi.api.value.CypherValue
-import org.opencypher.okapi.api.value.CypherValue.{CypherMap, CypherValue}
-import org.opencypher.okapi.impl.exception.IllegalArgumentException
+import org.opencypher.okapi.api.types.CTString
 import org.opencypher.okapi.impl.util.StringEncodingUtilities._
-import org.opencypher.okapi.ir.api.expr.Expr
-import org.opencypher.okapi.relational.api.io.{EntityTable, FlatRelationalTable}
-import org.opencypher.okapi.relational.impl.physical._
-import org.opencypher.okapi.relational.impl.table.RecordHeader
-
-object FlinkCypherTable {
-
-  implicit class FlinkTable(val table: Table) extends FlatRelationalTable[FlinkTable] {
-
-    override def physicalColumns: Seq[String] = table.getSchema.getColumnNames
-
-    override def columnType: Map[String, CypherType] = physicalColumns.map(c => c -> table.cypherTypeForColumn(c)).toMap
-
-    override def rows: Iterator[String => CypherValue] = table.collect().iterator.map { row =>
-      physicalColumns.map(c => c -> CypherValue(row.getField(table.getSchema.columnNameToIndex(c)))).toMap
-    }
-
-    override def size: Long = table.count()
-
-    override def select(cols: String*): FlinkTable = {
-      if (cols.nonEmpty) {
-        table.select(cols.map(UnresolvedFieldReference): _*)
-      } else {
-        table.select()
-      }
-    }
-
-    override def drop(cols: String*): FlinkTable = {
-      val columnsLeft = table.physicalColumns.diff(cols)
-      select(columnsLeft: _*)
-    }
-
-    override def orderBy(sortItems: (String, Order)*): FlinkTable = {
-      val sortExpression = sortItems.map {
-        case (column, Ascending) => UnresolvedFieldReference(column).asc
-        case (column, Descending) => UnresolvedFieldReference(column).desc
-      }
-
-      table.orderBy(sortExpression: _*)
-    }
-
-    override def unionAll(other: FlinkTable): FlinkTable = {
-      table.union(other.table)
-    }
-
-    override def join(other: FlinkTable, joinType: JoinType, joinCols: (String, String)*): FlinkTable = {
-
-      val overlap = this.physicalColumns.toSet.intersect(other.physicalColumns.toSet)
-      assert(overlap.isEmpty, s"overlapping columns: $overlap")
-
-      val joinExpr = joinCols.map {
-        case (l, r) => UnresolvedFieldReference(l) === UnresolvedFieldReference(r)
-      }.foldLeft(Literal(true, Types.BOOLEAN): Expression) { (acc, expr) => acc && expr }
-
-      joinType match {
-        case InnerJoin => table.join(other.table, joinExpr)
-        case LeftOuterJoin => table.leftOuterJoin(other.table, joinExpr)
-        case RightOuterJoin => table.rightOuterJoin(other.table, joinExpr)
-        case FullOuterJoin => table.fullOuterJoin(other.table, joinExpr)
-        case CrossJoin => throw IllegalArgumentException("An implementation of cross that is called earlier.", "")
-      }
-    }
-
-    override def distinct: FlinkTable =
-      table.distinct()
-
-    override def distinct(cols: String*): FlinkTable =
-      table.distinct()
-
-    override def withColumnRenamed(oldColumn: String, newColumn: String): FlinkTable =
-      table.safeRenameColumn(oldColumn, newColumn)
-
-    override def withNullColumn(col: String): FlinkTable = table.select('*, Null(Types.BOOLEAN) as Symbol(col))
-
-    override def withTrueColumn(col: String): FlinkTable = table.select('*, Literal(true, Types.BOOLEAN) as Symbol(col))
-
-    override def withFalseColumn(col: String): FlinkTable = table.select('*, Literal(false, Types.BOOLEAN) as Symbol(col))
-
-    override def filter(expr: Expr)(implicit header: RecordHeader, parameters: CypherValue.CypherMap): FlinkTable = {
-      table.filter(expr.asFlinkSQLExpr(header, table, parameters))
-    }
-
-    override def withColumn(column: String, expr: Expr)(implicit header: RecordHeader, parameters: CypherMap): FlinkTable = {
-      table.safeUpsertColumn(column, expr.asFlinkSQLExpr(header, table, parameters))
-    }
-  }
-
-}
+import org.opencypher.okapi.relational.api.io.{EntityTable, NodeTable, RelationshipTable}
 
 trait CAPFEntityTable extends EntityTable[FlinkTable] {
 
-  private[flink] def entityType: CypherType with DefiniteCypherType
-
-  private[flink] def records(implicit capf: CAPFSession): CAPFRecords = CAPFRecords.create(this)
+  private[flink] def records(implicit capf: CAPFSession): CAPFRecords = capf.records.fromEntityTable(entityTable = this)
 }
 
 case class CAPFNodeTable(
   override val mapping: NodeMapping,
-  override val relationalTable: FlinkTable
-) extends NodeTable(mapping, relationalTable) with CAPFEntityTable {
+  override val table: FlinkTable
+) extends NodeTable(mapping, table) with CAPFEntityTable with RecordBehaviour {
 
-  override type R = CAPFNodeTable
+  override type Records = CAPFNodeTable
 
-  override def from(
-    header: RecordHeader,
-    table: FlinkTable,
-    columnNames: Option[Seq[String]] = None): CAPFNodeTable = CAPFNodeTable(mapping, table)
-
-  override private[flink] def entityType = mapping.cypherType
-
+  override def cache(): CAPFNodeTable = {
+    table.table.cache()
+    this
+  }
 }
 
 object CAPFNodeTable {
@@ -161,7 +37,7 @@ object CAPFNodeTable {
     CAPFNodeTable(impliedLabels, Map.empty, nodeTable)
 
   def apply(impliedLabels: Set[String], optionalLabels: Map[String, String], nodeTable: Table): CAPFNodeTable = {
-    val propertyColumnNames = properties(nodeTable.physicalColumns) -- optionalLabels.values
+    val propertyColumnNames = properties(nodeTable.columns) -- optionalLabels.values
 
     val baseMapping = NodeMapping(GraphEntity.sourceIdKey, impliedLabels, optionalLabels)
 
@@ -177,30 +53,28 @@ object CAPFNodeTable {
     CAPFNodeTable(mapping, initialTable.select(colsToSelect.map(UnresolvedFieldReference): _*))
   }
 
-  private def properties(nodeColumnNames: Seq[String]): Set[String] =
+  private def properties(nodeColumnNames: Seq[String]): Set[String] = {
     nodeColumnNames.filter(_ != GraphEntity.sourceIdKey).toSet
+  }
 }
 
 case class CAPFRelationshipTable(
   override val mapping: RelationshipMapping,
-  override val relationalTable: FlinkTable
-) extends RelationshipTable(mapping, relationalTable) with CAPFEntityTable {
+  override val table: FlinkTable
+) extends RelationshipTable(mapping, table) with CAPFEntityTable with RecordBehaviour {
 
-  override type R = CAPFRelationshipTable
+  override type Records = CAPFRelationshipTable
 
-  override def from(
-    header: RecordHeader,
-    table: FlinkTable,
-    columnNames: Option[Seq[String]] = None
-  ): CAPFRelationshipTable = CAPFRelationshipTable(mapping, table)
-
-  override private[flink] def entityType = mapping.cypherType
+  override def cache(): CAPFRelationshipTable = {
+    table.table.cache()
+    this
+  }
 }
 
 object CAPFRelationshipTable {
 
   def apply(relationshipType: String, relationshipTable: Table): CAPFRelationshipTable = {
-    val propertyColumnNames = properties(relationshipTable.physicalColumns)
+    val propertyColumnNames = properties(relationshipTable.columns)
 
     val baseMapping = RelationshipMapping.create(GraphEntity.sourceIdKey,
       Relationship.sourceStartNodeKey,
@@ -211,6 +85,7 @@ object CAPFRelationshipTable {
       mapping.withPropertyKey(propertyColumn.toProperty, propertyColumn)
     }
 
+
     fromMapping(relationshipMapping, relationshipTable)
   }
 
@@ -220,11 +95,13 @@ object CAPFRelationshipTable {
 
       case Right((typeColumnName, relTypes)) =>
         FlinkTable(initialTable).verifyColumnType(typeColumnName, CTString, "relationship type")
-        val updatedTable = relTypes.foldLeft(initialTable) { case (currentTable, relType) =>
+        val updateTable = relTypes.foldLeft(initialTable) { case (currentTable, relType) =>
+          val typeColumn = UnresolvedFieldReference(typeColumnName)
           val relTypeColumnName = relType.toRelTypeColumnName
-          currentTable.safeAddColumn(relTypeColumnName, UnresolvedFieldReference(typeColumnName) === Literal(relType, Types.STRING))
+          currentTable
+            .safeUpsertColumn(relTypeColumnName, typeColumn === expressions.Literal(relType, Types.STRING))
         }
-        updatedTable.safeDropColumn(typeColumnName)
+        updateTable.drop(typeColumnName).table
 
       case _ => initialTable
     }
@@ -236,56 +113,5 @@ object CAPFRelationshipTable {
 
   private def properties(relColumnNames: Seq[String]): Set[String] = {
     relColumnNames.filter(!Relationship.nonPropertyAttributes.contains(_)).toSet
-  }
-}
-
-abstract class NodeTable(mapping: NodeMapping, table: FlinkTable) extends EntityTable[FlinkTable] with RecordBehaviour {
-
-  override lazy val schema: CAPFSchema = {
-    val propertyKeys = mapping.propertyMapping.toSeq.map {
-      case (propertyKey, sourceKey) => propertyKey -> table.columnType(sourceKey)
-    }
-
-    mapping.optionalLabelMapping.keys.toSet.subsets
-      .map(_.union(mapping.impliedLabels))
-      .map(combo => Schema.empty.withNodePropertyKeys(combo.toSeq: _*)(propertyKeys: _*))
-      .reduce(_ ++ _)
-      .asCapf
-  }
-
-  override protected def verify(): Unit = {
-    super.verify()
-    mapping.optionalLabelMapping.values.foreach { optionalLabelKey =>
-      table.verifyColumnType(optionalLabelKey, CTBoolean, "optional label")
-    }
-  }
-}
-
-abstract class RelationshipTable(mapping: RelationshipMapping, table: FlinkTable) extends EntityTable[FlinkTable] with RecordBehaviour {
-
-  override lazy val schema: CAPFSchema = {
-    val relTypes = mapping.relTypeOrSourceRelTypeKey match {
-      case Left(name) => Set(name)
-      case Right((_, possibleTypes)) => possibleTypes
-    }
-
-    val propertyKeys = mapping.propertyMapping.toSeq.map {
-      case (propertyKey, sourceKey) => propertyKey -> table.columnType(sourceKey)
-    }
-
-    relTypes.foldLeft(Schema.empty) {
-      case (partialSchema, relType) => partialSchema.withRelationshipPropertyKeys(relType)(propertyKeys: _*)
-    }.asCapf
-  }
-
-  override protected def verify(): Unit = {
-    super.verify()
-    table.verifyColumnType(mapping.sourceStartNodeKey, CTInteger, "start node")
-    table.verifyColumnType(mapping.sourceEndNodeKey, CTInteger, "end node")
-    mapping.relTypeOrSourceRelTypeKey.right.map { case (_, relTypes) =>
-      relTypes.foreach { relType =>
-        table.verifyColumnType(relType.toRelTypeColumnName, CTBoolean, "relationship type")
-      }
-    }
   }
 }

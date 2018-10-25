@@ -28,11 +28,11 @@ package org.opencypher.flink.impl.convert
 
 import org.apache.flink.types.Row
 import org.opencypher.flink.api.value.{CAPFNode, CAPFRelationship}
-import org.opencypher.okapi.api.types.{CTNode, CTRelationship}
+import org.opencypher.okapi.api.types.{CTList, CTNode, CTRelationship}
 import org.opencypher.okapi.api.value.CypherValue
-import org.opencypher.okapi.api.value.CypherValue.{CypherMap, CypherNull, CypherValue}
+import org.opencypher.okapi.api.value.CypherValue.{CypherList, CypherMap, CypherNull, CypherValue}
 import org.opencypher.okapi.impl.exception.UnsupportedOperationException
-import org.opencypher.okapi.ir.api.expr.{Expr, Var}
+import org.opencypher.okapi.ir.api.expr.{Expr, ListSegment, Var}
 import org.opencypher.okapi.relational.impl.table.RecordHeader
 
 final case class rowToCypherMap(exprToColumn: Seq[(Expr, String)], columnNameToIndex: Map[String, Int]) extends (Row => CypherMap) {
@@ -40,17 +40,20 @@ final case class rowToCypherMap(exprToColumn: Seq[(Expr, String)], columnNameToI
   private val header = RecordHeader(exprToColumn.toMap)
 
   override def apply(row: Row): CypherMap = {
-    val values = header.vars.map(v => v.name -> constructValue(row, v)).toSeq
+    val values = header.returnItems.map(r => r.name -> constructValue(row, r)).toSeq
     CypherMap(values: _*)
   }
 
   private def constructValue(row: Row, v: Var): CypherValue = {
-    v.cypherType match {
+    v.cypherType.material match {
       case _: CTNode =>
         collectNode(row, v)
 
       case _: CTRelationship =>
         collectRel(row, v)
+
+      case CTList(_) if !header.exprToColumn.contains(v) =>
+        collectComplexList(row, v)
 
       case _ =>
         val raw = row.getField(columnNameToIndex(header.column(v)))
@@ -103,5 +106,20 @@ final case class rowToCypherMap(exprToColumn: Seq[(Expr, String)], columnNameToI
         CAPFRelationship(id, source, target, relType, properties)
       case invalidID => throw UnsupportedOperationException(s"CAPFRelationship ID has to be a Long instead of ${invalidID.getClass}")
     }
+  }
+
+  private def collectComplexList(row: Row, expr: Var): CypherList = {
+    val elements = header.ownedBy(expr).collect {
+      case p: ListSegment => p
+    }.toSeq.sortBy(_.index)
+
+    val values = elements
+      .map(constructValue(row, _))
+      .filter {
+        case CypherNull => false
+        case _ => true
+      }
+
+    CypherList(values)
   }
 }

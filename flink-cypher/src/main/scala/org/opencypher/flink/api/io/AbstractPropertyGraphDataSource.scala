@@ -26,25 +26,31 @@
  */
 package org.opencypher.flink.api.io
 
-import org.apache.flink.api.scala._
-import org.apache.flink.table.api.scala._
-import org.apache.flink.table.api.{Table, TableSchema}
+import java.util.concurrent.Executors
+
+import org.apache.flink.table.api.Table
 import org.apache.flink.table.expressions.ResolvedFieldReference
+import org.opencypher.flink.api.CAPFSession
 import org.opencypher.flink.api.io.metadata.CAPFGraphMetaData
-import org.opencypher.flink._
 import org.opencypher.flink.api.io.util.CAPFGraphExport._
 import org.opencypher.flink.impl.CAPFConverters._
-import org.opencypher.flink.impl.{CAPFGraph, CAPFSession}
 import org.opencypher.flink.impl.io.CAPFPropertyGraphDataSource
 import org.opencypher.flink.schema.CAPFSchema
+import org.opencypher.flink.schema.CAPFSchema._
 import org.opencypher.okapi.api.graph.{GraphName, PropertyGraph}
 import org.opencypher.okapi.api.types.CTInteger
-import org.opencypher.okapi.impl.exception.{GraphAlreadyExistsException, GraphNotFoundException}
+import org.opencypher.okapi.impl.exception.GraphNotFoundException
 import org.opencypher.okapi.impl.util.StringEncodingUtilities._
 
-abstract class AbstractDataSource(implicit val session: CAPFSession) extends CAPFPropertyGraphDataSource {
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutorService, Future}
+import scala.util.{Failure, Success}
 
-  def tableStorageFormat: String
+abstract class AbstractPropertyGraphDataSource extends CAPFPropertyGraphDataSource {
+
+  implicit val capf: CAPFSession
+
+  def tableStorageFormat: StorageFormat
 
   protected var schemaCache: Map[GraphName, CAPFSchema] = Map.empty
 
@@ -86,8 +92,8 @@ abstract class AbstractDataSource(implicit val session: CAPFSession) extends CAP
     } else {
       val capfSchema: CAPFSchema = schema(graphName).get
       val capfMetaData: CAPFGraphMetaData = readCAPFGraphMetaData(graphName)
-      val nodeTables = capfSchema.allLabelCombinations.map { combo =>
-        val propertyColsWithCypherType = capfSchema.keysFor(Set(combo)).map {
+      val nodeTables = capfSchema.allCombinations.map { combo =>
+        val propertyColsWithCypherType = capfSchema.nodePropertyKeysForCombinations(Set(combo)).map {
           case (key, cypherType) => key.toPropertyColumnName -> cypherType
         }
 
@@ -97,14 +103,18 @@ abstract class AbstractDataSource(implicit val session: CAPFSession) extends CAP
       }
 
       val relTables = capfSchema.relationshipTypes.map { relType =>
-        val propertyColsWithCypherType = capfSchema.relationshipKeys(relType).map {
+        val propertyColsWithCypherType = capfSchema.relationshipPropertyKeys(relType).map {
           case (key, cypherType) => key.toPropertyColumnName -> cypherType
         }
 
         val table = readRelationshipTable(graphName, relType, capfSchema.canonicalRelFieldReference(relType))
         CAPFRelationshipTable(relType, table)
       }
-      CAPFGraph.create(capfMetaData.tags, Some(capfSchema), nodeTables.head, (nodeTables.tail ++ relTables).toSeq: _*)
+      if (nodeTables.isEmpty) {
+        capf.graphs.empty
+      } else {
+        capf.graphs.create(capfMetaData.tags, Some(capfSchema), nodeTables.head, (nodeTables.tail ++ relTables).toSeq: _*)
+      }
     }
   }
 
@@ -119,23 +129,49 @@ abstract class AbstractDataSource(implicit val session: CAPFSession) extends CAP
   }
 
   override def store(graphName: GraphName, graph: PropertyGraph): Unit = {
-    if (hasGraph(graphName)) {
-      throw GraphAlreadyExistsException(s"A graph with name $graphName is already stored in this graph data source.")
+    checkStorable(graphName)
+
+    // TODO: check if this is the expected value | probably the parallelism of a worker is needed
+    val poolSize = capf.env.getParallelism
+
+    implicit val executionContext: ExecutionContextExecutorService =
+      ExecutionContext.fromExecutorService(Executors.newFixedThreadPool(poolSize))
+
+    try {
+      val relationalGraph = graph.asCapf
+
+      val schema = relationalGraph.schema.asCapf
+      schemaCache += graphName -> schema
+      graphNameCache += graphName
+      writeCAPFGraphMetaData(graphName, CAPFGraphMetaData(tableStorageFormat.name, relationalGraph.tags))
+      writeSchema(graphName, schema)
+
+      val nodeWrites = schema.labelCombinations.combos.map { combo =>
+        Future {
+          writeNodeTable(graphName, combo, relationalGraph.canonicalNodeTable(combo))
+        }
+      }
+
+      val relWrites = schema.relationshipTypes.map { relType =>
+        Future {
+          writeRelationshipTable(graphName, relType, relationalGraph.canonicalRelationshipTable(relType))
+        }
+      }
+
+      waitForWriteCompletion(nodeWrites)
+      waitForWriteCompletion(relWrites)
+    } finally {
+      executionContext.shutdown()
     }
+  }
 
-    val capfGraph = graph.asCapf
-    val schema = capfGraph.schema
-    schemaCache += graphName -> schema
-    graphNameCache += graphName
-    writeCAPFGraphMetaData(graphName, CAPFGraphMetaData(tableStorageFormat, capfGraph.tags))
-    writeSchema(graphName, schema)
-
-    schema.labelCombinations.combos.foreach { combo =>
-      writeNodeTable(graphName, combo, capfGraph.canonicalNodeTable(combo))
-    }
-
-    schema.relationshipTypes.foreach { relType =>
-      writeRelationshipTable(graphName, relType, capfGraph.canonicalRelationshipTable(relType))
+  protected def waitForWriteCompletion(writeFutures: Set[Future[Unit]])(implicit ec: ExecutionContext): Unit = {
+    writeFutures.foreach { writeFuture =>
+      Await.ready(writeFuture, Duration.Inf)
+      writeFuture.onComplete {
+        case Success(_) =>
+        case Failure(e) => throw e
+      }
     }
   }
 

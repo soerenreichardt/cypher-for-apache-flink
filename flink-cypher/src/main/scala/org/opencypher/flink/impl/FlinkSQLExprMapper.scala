@@ -124,15 +124,6 @@ object FlinkSQLExprMapper {
           val array = rhs.asFlinkSQLExpr
           element in array
 
-        case As(lhs, rhs) =>
-          val colName = header.column(rhs)
-          lhs match {
-            case e: Lit[_] =>
-              e.asFlinkSQLExpr as Symbol(colName)
-            case _ =>
-              Symbol(header.column(lhs)) as Symbol(colName)
-          }
-
         case LessThan(lhs, rhs) => compare(lt, lhs, rhs)
         case LessThanOrEqual(lhs, rhs) => compare(lteq, lhs, rhs)
         case GreaterThanOrEqual(lhs, rhs) => compare(gteq, lhs, rhs)

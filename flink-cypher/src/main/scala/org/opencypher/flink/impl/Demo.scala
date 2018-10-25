@@ -31,23 +31,18 @@ import java.time.LocalDate
 
 import org.apache.flink.api.scala._
 import org.apache.flink.table.api.scala._
-import org.apache.flink.types.Row
-import org.opencypher.flink.api.io.fs.FileBasedDataSource
-import org.opencypher.flink.api.io.{CAPFNodeTable, CAPFRelationshipTable, CsvDataSource}
-import org.opencypher.flink.impl.CAPFConverters._
+import org.opencypher.flink.api.io.{CAPFNodeTable, CAPFRelationshipTable}
+import org.opencypher.flink.api.{CAPFSession, GraphSources}
 import org.opencypher.okapi.api.configuration.Configuration.PrintTimings
 import org.opencypher.okapi.api.graph.Namespace
 import org.opencypher.okapi.api.io.conversion.{NodeMapping, RelationshipMapping}
-import org.opencypher.okapi.impl.util.Measurement
 import org.opencypher.okapi.ir.api.configuration.IrConfiguration.PrintIr
 import org.opencypher.okapi.logical.api.configuration.LogicalConfiguration.PrintLogicalPlan
-import org.opencypher.okapi.relational.api.configuration.CoraConfiguration.{PrintFlatPlan, PrintOptimizedPhysicalPlan, PrintPhysicalPlan}
+import org.opencypher.okapi.relational.api.configuration.CoraConfiguration.PrintRelationalPlan
 
 object Demo extends App {
 
   val session = CAPFSession.local()
-
-  val d = Date.valueOf(LocalDate.now())
 
   private val nodeDataSet = session.env.fromCollection(DemoData.nodes)
   val relsDataSet = session.env.fromCollection(DemoData.rels)
@@ -72,23 +67,24 @@ object Demo extends App {
   val nodeTable = CAPFNodeTable.fromMapping(nodeMapping, nodes)
   val relTable = CAPFRelationshipTable.fromMapping(relMapping, rels)
 
-  val graph: CAPFGraph = session.readFrom(nodeTable, relTable)
+  val graph = session.readFrom(nodeTable, relTable)
 
   PrintIr.set()
   PrintLogicalPlan.set()
-  PrintPhysicalPlan.set()
+  PrintRelationalPlan.set()
   PrintTimings.set()
-  val planning = Measurement.time(graph.cypher("MATCH (n:Person)-[r:KNOWS]->(n2:Person) WHERE n.age >= 26 RETURN n.age AS age"))
-  println("Planning: " + planning._2)
-  val translation = Measurement.time(planning._1.getRecords.asCapf.table.toDataSet[Row])
-  println("Translation: " + translation._2)
-  val execution = Measurement.time(translation._1.collect())
-  println("Execution: " +  execution._2)
-  println("Flink execution: " + session.env.getLastJobExecutionResult.getNetRuntime)
-  println(session.tableEnv.explain(planning._1.getRecords.asCapf.table))
-//  graph.cypher("MATCH (n:Person)-[r:KNOWS*2..2]->(n2:Person) RETURN n.name, n2.name").getRecords.show                   // var expand
-//  graph.cypher("MATCH (n:Person) WHERE (n)--({age: 29}) RETURN n.name").getRecords.show                               // exists
-//  graph.cypher("MATCH (n:Person) OPTIONAL MATCH (n)-[:KNOWS]->(b {age: 29}) RETURN n.name, b.name").getRecords.show   // optional match
+//  graph.cypher("MATCH (n:person) RETURN n.name").show
+//  val planning = Measurement.time(graph.cypher("MATCH (n:Person)-[r:KNOWS]->(n2:Person) WHERE n.age >= 26 RETURN n.age AS age"))
+//  println("Planning: " + planning._2)
+//  val translation = Measurement.time(planning._1.getRecords.asCapf.table.toDataSet[Row])
+//  println("Translation: " + translation._2)
+//  val execution = Measurement.time(translation._1.collect())
+//  println("Execution: " +  execution._2)
+//  println("Flink execution: " + session.env.getLastJobExecutionResult.getNetRuntime)
+//  println(session.tableEnv.explain(planning._1.getRecords.asCapf.table))
+  graph.cypher("MATCH (n:Person)-[r:KNOWS*1..2]->(n2:Person) RETURN n.name, n2.name").show                   // var expand
+//  graph.cypher("MATCH (n:Person) WHERE (n)--({age: 29}) RETURN n.name").show                               // exists
+//  graph.cypher("MATCH (n:Person) OPTIONAL MATCH (n)-[:KNOWS]->(b {age: 29}) RETURN n.name, b.name").show   // optional match
 
 //  graph.cypher("MATCH (n) RETURN CASE n.age WHEN 26 THEN 'Alice' WHEN 23 THEN 'Bob' ELSE 'other' END AS name").getRecords.show
 
@@ -135,7 +131,7 @@ object CsvDemo extends App {
   implicit val session: CAPFSession = CAPFSession.local()
 
   val csvFolder = getClass.getResource("/csv").getFile
-  session.registerSource(Namespace("csv"), CsvDataSource(rootPath = csvFolder))
+  session.registerSource(Namespace("csv"), GraphSources.fs(rootPath = csvFolder).csv)
 
   val purchaseNetwork = session.catalog.graph("csv.products")
 
@@ -145,7 +141,7 @@ object CsvDemo extends App {
       |MATCH (c:Customer)
       |RETURN *
     """.stripMargin
-  ).getRecords.show
+  ).show
 }
 
 object OrcDemo extends App {
@@ -153,7 +149,7 @@ object OrcDemo extends App {
   implicit val session: CAPFSession = CAPFSession.local()
 
   val orcFolder = getClass.getResource("/orc").getPath
-  session.registerSource(Namespace("orc"), new FileBasedDataSource(orcFolder, "orc"))
+  session.registerSource(Namespace("orc"), GraphSources.fs(orcFolder).orc)
 
   session.cypher(
     """
@@ -161,7 +157,7 @@ object OrcDemo extends App {
       |MATCH (n:Person)
       |RETURN n.firstName
     """.stripMargin
-  ).getRecords.show
+  ).show
 }
 
 object ThesisDemo extends App {
@@ -240,18 +236,14 @@ object ThesisDemo extends App {
 
   PrintIr.set()
   PrintLogicalPlan.set()
-  PrintFlatPlan.set()
-  PrintPhysicalPlan.set()
-  PrintOptimizedPhysicalPlan.set()
 
   val records = graph.cypher(
     """
       | MATCH (p:Person)-[:LIKES*1..3]->(m:Music)
       | WHERE m.genre = 'Metal'
       | RETURN p.name AS name
-    """.stripMargin).getRecords
+    """.stripMargin)
 
-  records.asCapf.explain
   records.show
 
 }

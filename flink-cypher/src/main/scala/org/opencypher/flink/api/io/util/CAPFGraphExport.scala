@@ -29,13 +29,14 @@ package org.opencypher.flink.api.io.util
 import org.apache.flink.table.api.scala._
 import org.apache.flink.table.api.{Table, Types}
 import org.apache.flink.table.expressions.{ResolvedFieldReference, UnresolvedFieldReference}
+import org.opencypher.flink.impl.table.FlinkCypherTable.FlinkTable
 import org.opencypher.flink.api.io.{GraphEntity, Relationship}
-import org.opencypher.flink.impl.CAPFGraph
 import org.opencypher.flink.impl.convert.FlinkConversions._
 import org.opencypher.okapi.api.schema.Schema
 import org.opencypher.okapi.api.types.{CTNode, CTRelationship}
 import org.opencypher.okapi.impl.util.StringEncodingUtilities._
 import org.opencypher.okapi.ir.api.expr.{Property, Var}
+import org.opencypher.okapi.relational.api.graph.RelationalCypherGraph
 
 object CAPFGraphExport {
 
@@ -43,7 +44,7 @@ object CAPFGraphExport {
 
     def canonicalNodeFieldReference(labels: Set[String]): Seq[ResolvedFieldReference] = {
       val id = ResolvedFieldReference(GraphEntity.sourceIdKey, Types.LONG)
-      val properties = schema.nodeKeys(labels).toSeq
+      val properties = schema.nodePropertyKeys(labels).toSeq
         .map { case (propertyName, cypherType) => propertyName.toPropertyColumnName -> cypherType }
         .sortBy { case (propertyColumnName, _) => propertyColumnName }
         .map { case (propertyColumnName, cypherType) => ResolvedFieldReference(propertyColumnName, cypherType.getFlinkType) }
@@ -55,18 +56,19 @@ object CAPFGraphExport {
       val id = ResolvedFieldReference(GraphEntity.sourceIdKey, Types.LONG)
       val sourceId = ResolvedFieldReference(Relationship.sourceStartNodeKey, Types.LONG)
       val targetId = ResolvedFieldReference(Relationship.sourceEndNodeKey, Types.LONG)
-      val properties = schema.relationshipKeys(relType).toSeq.sortBy(_._1).map { case (propertyName, cypherType) =>
+      val properties = schema.relationshipPropertyKeys(relType).toSeq.sortBy(_._1).map { case (propertyName, cypherType) =>
         ResolvedFieldReference(propertyName.toPropertyColumnName, cypherType.getFlinkType)
       }
       Seq(id, sourceId, targetId) ++ properties
     }
   }
 
-  implicit class CanonicalTableExport(graph: CAPFGraph) {
+  implicit class CanonicalTableExport(graph: RelationalCypherGraph[FlinkTable]) {
 
     def canonicalNodeTable(labels: Set[String]): Table = {
-      val v = Var("n")(CTNode(labels))
-      val nodeRecords = graph.nodesWithExactLabels(v.name, labels)
+      val ct = CTNode(labels)
+      val v = Var("n")(ct)
+      val nodeRecords = graph.nodes(v.name, ct, exactLabelMatch = true)
       val header = nodeRecords.header
 
       val idRenaming = header.column(v) -> GraphEntity.sourceIdKey
@@ -77,7 +79,7 @@ object CAPFGraphExport {
         case (oldName, newName) => UnresolvedFieldReference(oldName) as Symbol(newName)
       }
 
-      nodeRecords.table.select(selectColumnsExprs: _*)
+      nodeRecords.table.table.select(selectColumnsExprs: _*)
     }
 
     def canonicalRelationshipTable(relType: String): Table = {
@@ -96,7 +98,7 @@ object CAPFGraphExport {
         case (oldName, newName) => UnresolvedFieldReference(oldName) as Symbol(newName)
       }
 
-      relRecords.table.select(selectColumnsExprs: _*)
+      relRecords.table.table.select(selectColumnsExprs: _*)
     }
   }
 

@@ -30,26 +30,30 @@ import org.apache.flink.api.common.typeinfo.{BasicArrayTypeInfo, BasicTypeInfo, 
 import org.apache.flink.api.java.typeutils.RowTypeInfo
 import org.apache.flink.api.scala._
 import org.apache.flink.api.scala.utils.DataSetUtils
-import org.apache.flink.table.api.scala.{BatchTableEnvironment, _}
-import org.apache.flink.table.api.{Table, TableEnvironment, TableSchema, Types}
+import org.apache.flink.table.api.scala._
+import org.apache.flink.table.api.{Table, TableSchema, Types}
 import org.apache.flink.table.expressions._
 import org.apache.flink.table.functions.ScalarFunction
 import org.apache.flink.types.Row
+import org.opencypher.flink.api.CAPFSession
 import org.opencypher.flink.api.Tags._
 import org.opencypher.flink.impl.convert.FlinkConversions._
-import org.opencypher.flink.impl.physical.CAPFRuntimeContext
+import org.opencypher.flink.impl.table.FlinkCypherTable.FlinkTable
 import org.opencypher.okapi.api.types.CypherType
 import org.opencypher.okapi.api.value.CypherValue
 import org.opencypher.okapi.api.value.CypherValue.CypherValue
 import org.opencypher.okapi.impl.exception
-import org.opencypher.okapi.impl.exception.{IllegalArgumentException, IllegalStateException}
+import org.opencypher.okapi.impl.exception.IllegalArgumentException
 import org.opencypher.okapi.ir.api.expr.{Expr, Param}
+import org.opencypher.okapi.relational.api.planning.RelationalRuntimeContext
 import org.opencypher.okapi.relational.impl.table.RecordHeader
 
 object TableOps {
 
   implicit class CypherRow(r: Row) {
-    def getCypherValue(expr: Expr, header: RecordHeader, columnNameToIndex: Map[String, Int])(implicit context: CAPFRuntimeContext): CypherValue = {
+
+    def getCypherValue(expr: Expr, header: RecordHeader, columnNameToIndex: Map[String, Int])
+      (implicit context: RelationalRuntimeContext[FlinkTable]): CypherValue = {
       expr match {
         case Param(name) => context.parameters(name)
         case _ =>
@@ -63,12 +67,7 @@ object TableOps {
 
   implicit class RichTableSchema(val schema: TableSchema) extends AnyVal {
 
-    def columnNameToIndex: Map[String, Int] = {
-      (0 to schema.getColumnCount - 1).map { i =>
-        schema.getColumnName(i).getOrElse(throw IllegalStateException(s"Column at index $i does not exist")) -> i
-      }.toMap
-    }
-
+    def columnNameToIndex: Map[String, Int] = schema.getColumnNames.zipWithIndex.toMap
   }
 
   implicit class ColumnTagging(val col: Expression) extends AnyVal {

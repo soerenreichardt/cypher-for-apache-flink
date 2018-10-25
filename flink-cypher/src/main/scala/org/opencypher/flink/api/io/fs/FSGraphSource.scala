@@ -26,6 +26,7 @@
  */
 package org.opencypher.flink.api.io.fs
 
+import java.net.URI
 import java.util.UUID
 
 import org.apache.flink.core.fs.FileSystem
@@ -35,27 +36,27 @@ import org.apache.flink.table.expressions.ResolvedFieldReference
 import org.apache.flink.table.sinks.CsvTableSink
 import org.apache.flink.table.sources.CsvTableSource
 import org.apache.orc.TypeDescription
-import org.opencypher.flink.api.io.AbstractDataSource
-import org.opencypher.flink.api.io.fs.DefaultFileSystem._
+import org.opencypher.flink.api.CAPFSession
 import org.opencypher.flink.api.io.json.JsonSerialization
-import org.opencypher.flink.impl.CAPFSession
+import org.opencypher.flink.api.io.{AbstractPropertyGraphDataSource, StorageFormat}
 import org.opencypher.flink.impl.convert.FlinkConversions._
 import org.opencypher.okapi.api.graph.GraphName
+import org.opencypher.flink.api.io.fs.FlinkFSHelpers._
 
-class FileBasedDataSource(
+class FSGraphSource(
   val rootPath: String,
-  val tableStorageFormat: String,
-  val customFileSystem: Option[CAPFFileSystem] = None,
+  val tableStorageFormat: StorageFormat,
   val filesPerTable: Option[Int] = Some(1)
-)(implicit session: CAPFSession)
-  extends AbstractDataSource with JsonSerialization {
+)(override implicit val capf: CAPFSession)
+  extends AbstractPropertyGraphDataSource with JsonSerialization {
 
   protected val directoryStructure = DefaultGraphDirectoryStructure(rootPath)
 
   import directoryStructure._
 
-  protected lazy val fileSystem: CAPFFileSystem = customFileSystem.getOrElse(
-    FileSystem.get(FileSystem.getDefaultFsUri))
+  protected lazy val fileSystem: FileSystem = {
+    FileSystem.get(new URI(rootPath))
+  }
 
   protected def listDirectories(path: String): List[String] = fileSystem.listDirectories(path)
 
@@ -65,9 +66,9 @@ class FileBasedDataSource(
 
   protected def writeFile(path: String, content: String): Unit = fileSystem.writeFile(path, content)
 
-  protected def readTable(path: String, tableStorageFormat: String, schema: Seq[ResolvedFieldReference]): Table = {
+  protected def readTable(path: String, schema: Seq[ResolvedFieldReference]): Table = {
     val tableSourceName = tableStorageFormat + "#" + UUID.randomUUID()
-    tableStorageFormat match {
+    tableStorageFormat.name match {
       case "csv" =>
         readFromCsv(path, schema, tableSourceName)
       case "orc" =>
@@ -77,8 +78,8 @@ class FileBasedDataSource(
 
   private def readFromCsv(path: String, schema: Seq[ResolvedFieldReference], tableSourceName: String): Table = {
     val csvSource = new CsvTableSource(path, schema.map(_.name).toArray, schema.map(_.resultType).toArray)
-    session.tableEnv.registerTableSource(tableSourceName, csvSource)
-    session.tableEnv.scan(tableSourceName)
+    capf.tableEnv.registerTableSource(tableSourceName, csvSource)
+    capf.tableEnv.scan(tableSourceName)
   }
 
   private def readFromOrc(path: String, schema: Seq[ResolvedFieldReference], tableSourceName: String): Table = {
@@ -89,12 +90,12 @@ class FileBasedDataSource(
       .path(path)
       .forOrcSchema(typeDescription)
       .build()
-    session.tableEnv.registerTableSource(tableSourceName, orcSource)
-    session.tableEnv.scan(tableSourceName)
+    capf.tableEnv.registerTableSource(tableSourceName, orcSource)
+    capf.tableEnv.scan(tableSourceName)
   }
 
-  protected def writeTable(path: String, tableStorageFormat: String, table: Table): Unit = {
-    tableStorageFormat match {
+  protected def writeTable(path: String, table: Table): Unit = {
+    tableStorageFormat.name match {
       case "csv" =>
         val csvSink = new CsvTableSink(path)
         table.writeToSink(csvSink)
@@ -110,19 +111,19 @@ class FileBasedDataSource(
   }
 
   override protected def readNodeTable(graphName: GraphName, labels: Set[String], tableSchema: Seq[ResolvedFieldReference]): Table = {
-    readTable(pathToNodeTable(graphName, labels), tableStorageFormat, tableSchema)
+    readTable(pathToNodeTable(graphName, labels), tableSchema)
   }
 
   override protected def writeNodeTable(graphName: GraphName, labels: Set[String], table: Table): Unit = {
-    writeTable(pathToNodeTable(graphName, labels), tableStorageFormat, table)
+    writeTable(pathToNodeTable(graphName, labels), table)
   }
 
   override protected def readRelationshipTable(graphName: GraphName, relKey: String, tableSchema: Seq[ResolvedFieldReference]): Table = {
-    readTable(pathToRelationshipTable(graphName, relKey), tableStorageFormat, tableSchema)
+    readTable(pathToRelationshipTable(graphName, relKey), tableSchema)
   }
 
   override protected def writeRelationshipTable(graphName: GraphName, relKey: String, table: Table): Unit = {
-    writeTable(pathToRelationshipTable(graphName, relKey), tableStorageFormat, table)
+    writeTable(pathToRelationshipTable(graphName, relKey), table)
   }
 
   override protected def readJsonSchema(graphName: GraphName): String = {

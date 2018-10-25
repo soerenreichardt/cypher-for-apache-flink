@@ -26,14 +26,14 @@
  */
 package org.opencypher.flink.api.io.edgelist
 
-import org.apache.flink.table.api.scala._
 import org.apache.flink.table.api.Types
+import org.apache.flink.table.api.scala._
 import org.apache.flink.table.expressions.UnresolvedFieldReference
 import org.apache.flink.table.sources.CsvTableSource
-import org.opencypher.flink.api.io.{CAPFNodeTable, CAPFRelationshipTable}
+import org.opencypher.flink.api.CAPFSession
 import org.opencypher.flink.api.io.GraphEntity.sourceIdKey
 import org.opencypher.flink.api.io.Relationship.{sourceEndNodeKey, sourceStartNodeKey}
-import org.opencypher.flink.impl.{CAPFGraph, CAPFSession}
+import org.opencypher.flink.api.io.{CAPFNodeTable, CAPFRelationshipTable}
 import org.opencypher.flink.impl.TableOps._
 import org.opencypher.flink.schema.CAPFSchema
 import org.opencypher.okapi.api.graph.{GraphName, PropertyGraph}
@@ -54,7 +54,7 @@ object EdgeListDataSource {
     .withRelationshipPropertyKeys(REL_TYPE, PropertyKeys.empty)
 }
 
-case class EdgeListDataSource(path: String, options: Map[String, String] = Map.empty)(implicit session: CAPFSession)
+case class EdgeListDataSource(path: String, options: Map[String, String] = Map.empty)(implicit capf: CAPFSession)
   extends PropertyGraphDataSource {
 
   override def hasGraph(name: GraphName): Boolean = name == EdgeListDataSource.GRAPH_NAME
@@ -68,8 +68,8 @@ case class EdgeListDataSource(path: String, options: Map[String, String] = Map.e
       .commentPrefix(options.get("comment").get)
       .build()
 
-    session.tableEnv.registerTableSource("relScanCsv", relTableSource)
-    val rawRels = session.tableEnv.scan("relScanCsv")
+    capf.tableEnv.registerTableSource("relScanCsv", relTableSource)
+    val rawRels = capf.tableEnv.scan("relScanCsv")
       .safeAddIdColumn(sourceIdKey)
 
     val rawNodes = rawRels
@@ -77,7 +77,7 @@ case class EdgeListDataSource(path: String, options: Map[String, String] = Map.e
       .union(rawRels.select(UnresolvedFieldReference(sourceEndNodeKey) as Symbol(sourceIdKey)))
       .distinct()
 
-    CAPFGraph.create(CAPFNodeTable(Set(EdgeListDataSource.NODE_LABEL), rawNodes), CAPFRelationshipTable(EdgeListDataSource.REL_TYPE, rawRels))
+    capf.graphs.create(CAPFNodeTable(Set(EdgeListDataSource.NODE_LABEL), rawNodes), CAPFRelationshipTable(EdgeListDataSource.REL_TYPE, rawRels))
 
   }
 

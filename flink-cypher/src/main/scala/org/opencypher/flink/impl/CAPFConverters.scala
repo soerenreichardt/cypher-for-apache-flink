@@ -26,30 +26,58 @@
  */
 package org.opencypher.flink.impl
 
-import org.opencypher.okapi.api.graph.{CypherSession, PropertyGraph}
+import org.opencypher.flink.api.CAPFSession
+import org.opencypher.flink.impl.table.FlinkCypherTable.FlinkTable
+import org.opencypher.okapi.api.graph.{CypherResult, CypherSession, PropertyGraph}
 import org.opencypher.okapi.api.table.CypherRecords
 import org.opencypher.okapi.impl.exception.UnsupportedOperationException
+import org.opencypher.okapi.relational.api.graph.RelationalCypherGraph
+import org.opencypher.okapi.relational.api.planning.RelationalCypherResult
+
+import scala.util.{Failure, Success, Try}
 
 object CAPFConverters {
 
+  private def unsupported(expected: String, got: Any): Nothing =
+    throw UnsupportedOperationException(s"Can only handle $expected, got $got")
+
   implicit class RichPropertyGraph(val graph: PropertyGraph) extends AnyVal {
-    def asCapf: CAPFGraph = graph match {
-      case capf: CAPFGraph  => capf
-      case _                => throw UnsupportedOperationException(s"can only handle CAPS graphs, got $graph")
+    def asCapf: RelationalCypherGraph[FlinkTable] = graph.asInstanceOf[RelationalCypherGraph[_]] match {
+      case capf: RelationalCypherGraph[_] =>
+        Try {
+          capf.asInstanceOf[RelationalCypherGraph[FlinkTable]]
+        } match {
+          case Success(value) => value
+          case Failure(_) => unsupported("CAPF graphs", capf)
+        }
+      case other => unsupported("CAPF graphs", other)
     }
   }
 
   implicit class RichSession(session: CypherSession) {
     def asCapf: CAPFSession = session match {
       case capf: CAPFSession  => capf
-      case _                  => throw UnsupportedOperationException(s"can only handle CAPF sessions, got $session")
+      case other              => unsupported("CAPF session", other)
     }
   }
 
   implicit class RichCypherRecords(val records: CypherRecords) extends AnyVal {
     def asCapf: CAPFRecords = records match {
       case capf: CAPFRecords => capf
-      case _ => throw UnsupportedOperationException(s"can only handle CAPF records, got $records")
+      case other => unsupported("CAPF records", other)
+    }
+  }
+
+  implicit class RichCypherResult(val records: CypherResult) extends AnyVal {
+    def asCapf(implicit capf: CAPFSession): RelationalCypherResult[FlinkTable] = records match {
+      case relational: RelationalCypherResult[_] =>
+        Try {
+          relational.asInstanceOf[RelationalCypherResult[FlinkTable]]
+        } match {
+          case Success(value) => value
+          case Failure(_) => unsupported("CAPF results", relational)
+        }
+      case other => unsupported("CAPF results", other)
     }
   }
 

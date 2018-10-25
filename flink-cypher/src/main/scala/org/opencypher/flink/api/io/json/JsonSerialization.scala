@@ -26,14 +26,14 @@
  */
 package org.opencypher.flink.api.io.json
 
-import org.opencypher.flink.api.io.AbstractDataSource
+import org.opencypher.flink.api.io.AbstractPropertyGraphDataSource
 import org.opencypher.flink.api.io.metadata.CAPFGraphMetaData
 import org.opencypher.flink.schema.CAPFSchema
 import org.opencypher.okapi.api.graph.GraphName
 import org.opencypher.okapi.api.schema.Schema
 
 trait JsonSerialization {
-  self: AbstractDataSource =>
+  self: AbstractPropertyGraphDataSource =>
 
   import CAPFSchema._
 
