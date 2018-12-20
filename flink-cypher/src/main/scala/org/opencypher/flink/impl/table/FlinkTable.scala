@@ -48,7 +48,7 @@ object FlinkCypherTable {
 
     private case class EmptyRow()
 
-    override def physicalColumns: Seq[String] = table.getSchema.getColumnNames
+    override def physicalColumns: Seq[String] = table.getSchema.getFieldNames
 
     override def columnType: Map[String, CypherType] = physicalColumns.map(c => c -> table.cypherTypeForColumn(c)).toMap
 
@@ -166,14 +166,14 @@ object FlinkCypherTable {
     }
 
     override def unionAll(other: FlinkTable): FlinkTable = {
-      val leftTypes = table.getSchema.getTypes.flatMap(_.toCypherType)
-      val rightTypes = other.table.getSchema.getTypes.flatMap(_.toCypherType)
+      val leftTypes = table.getSchema.getFieldTypes.flatMap(_.toCypherType)
+      val rightTypes = other.table.getSchema.getFieldTypes.flatMap(_.toCypherType)
 
       leftTypes.zip(rightTypes).foreach {
         case (leftType, rightType) if !leftType.nullable.couldBeSameTypeAs(rightType.nullable) =>
           throw IllegalArgumentException(
             "Equal column types for union all (differing nullability is OK)",
-            s"Left fields: ${table.getSchema.getTypes.mkString(", ")}\n\tRight fields: ${other.table.getSchema.getTypes.mkString(", ")}"
+            s"Left fields: ${table.getSchema.getFieldTypes.mkString(", ")}\n\tRight fields: ${other.table.getSchema.getFieldTypes.mkString(", ")}"
           )
         case _ =>
       }

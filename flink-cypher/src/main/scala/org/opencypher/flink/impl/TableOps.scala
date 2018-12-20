@@ -67,7 +67,7 @@ object TableOps {
 
   implicit class RichTableSchema(val schema: TableSchema) extends AnyVal {
 
-    def columnNameToIndex: Map[String, Int] = schema.getColumnNames.zipWithIndex.toMap
+    def columnNameToIndex: Map[String, Int] = schema.getFieldNames.zipWithIndex.toMap
   }
 
   implicit class ColumnTagging(val col: Expression) extends AnyVal {
@@ -92,22 +92,22 @@ object TableOps {
   implicit class RichTable(val table: Table) extends AnyVal {
 
     def cypherTypeForColumn(columnName: String): CypherType = {
-      val compatibleCypherType = table.getSchema.getType(columnName).get.cypherCompatibleDataType.flatMap(_.toCypherType())
+      val compatibleCypherType = table.getSchema.getFieldType(columnName).get.cypherCompatibleDataType.flatMap(_.toCypherType())
       compatibleCypherType.getOrElse(
-        throw IllegalArgumentException("a supported Flink Type that can be converted to CypherType", table.getSchema.getType(columnName)))
+        throw IllegalArgumentException("a supported Flink Type that can be converted to CypherType", table.getSchema.getFieldType(columnName)))
     }
 
     def col(colName: String): Table =
       table.select(colName)
 
-    def columns: Seq[String] = table.getSchema.getColumnNames
+    def columns: Seq[String] = table.getSchema.getFieldNames
 
     def cross(other: Table)(implicit capf: CAPFSession): Table = {
 
       val crossedTableNames = table.columns.map(UnresolvedFieldReference) ++
         other.columns.map(UnresolvedFieldReference)
-      val crossedTableTypes = table.getSchema.getTypes.toSeq ++
-        other.getSchema.getTypes.toSeq
+      val crossedTableTypes = table.getSchema.getFieldTypes.toSeq ++
+        other.getSchema.getFieldTypes.toSeq
 
       val crossedDataSet = table.toDataSet[Row].cross(other).map { rowTuple =>
         rowTuple match {
@@ -219,7 +219,7 @@ object TableOps {
 
     def safeToDataSet[T: TypeInformation](implicit capf: CAPFSession): DataSet[T] = {
       // TODO: preserve order of fields
-      val nameToTypeMap = table.getSchema.getColumnNames.zip(table.getSchema.getTypes).toMap
+      val nameToTypeMap = table.getSchema.getFieldNames.zip(table.getSchema.getFieldTypes).toMap
 
       val arrayTypes = nameToTypeMap.filter { pair => pair._2.isInstanceOf[BasicArrayTypeInfo[_, _]] }
 
@@ -236,7 +236,7 @@ object TableOps {
     }
 
     def safeReplaceTags(columnName: String, replacements: Map[Int, Int]): Table = {
-      val dataType = table.getSchema.getType(columnName).get
+      val dataType = table.getSchema.getFieldType(columnName).get
       require(dataType == Types.LONG, s"Cannot remap long values in Column with type $dataType")
 
       val col = UnresolvedFieldReference(columnName)
@@ -248,11 +248,11 @@ object TableOps {
     }
 
     def safeAddIdColumn(idColumnName: String)(implicit capf: CAPFSession): Table = {
-      require(!table.getSchema.getColumnNames.toSet.contains(idColumnName),
+      require(!table.getSchema.getFieldNames.toSet.contains(idColumnName),
       "Cannot create column `id` as it already exists")
 
-      val tableTypes = table.getSchema.getTypes
-      val tableNames = table.getSchema.getColumnNames
+      val tableTypes = table.getSchema.getFieldTypes
+      val tableNames = table.getSchema.getFieldNames
 
       val dsWithIndex = table.toDataSet[Row].zipWithUniqueId
 
@@ -271,7 +271,7 @@ object TableOps {
     }
 
     def withCypherCompatibleTypes: Table = {
-      val castExprs = table.getSchema.getColumnNames.zip(table.getSchema.getTypes).map {
+      val castExprs = table.getSchema.getFieldNames.zip(table.getSchema.getFieldTypes).map {
         case (fieldName, fieldType) =>
           Seq(
             UnresolvedFieldReference(fieldName).cast(fieldType.cypherCompatibleDataType.getOrElse(

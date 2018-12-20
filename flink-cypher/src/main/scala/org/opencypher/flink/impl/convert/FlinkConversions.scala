@@ -150,12 +150,12 @@ object FlinkConversions {
 
   implicit class TableSchemaOps(val tableSchema: TableSchema) {
     def toRecordHeader: RecordHeader = {
-      val exprToColumn = tableSchema.getColumnNames.map { columnName =>
-        val cypherType = tableSchema.getType(columnName).getOrElse(
+      val exprToColumn = tableSchema.getFieldNames.map { columnName =>
+        val cypherType = tableSchema.getFieldType(columnName).orElse(
           throw IllegalStateException(s"a missing TypeInformation for column $columnName")
         ).toCypherType() match {
           case Some(ct) => ct
-          case None => throw IllegalArgumentException("a supported Flink type", tableSchema.getType(columnName))
+          case None => throw IllegalArgumentException("a supported Flink type", tableSchema.getFieldType(columnName))
         }
         Var(columnName)(cypherType) -> columnName
       }

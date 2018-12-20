@@ -98,7 +98,8 @@ class FSGraphSource(
     tableStorageFormat.name match {
       case "csv" =>
         val csvSink = new CsvTableSink(path)
-        table.writeToSink(csvSink)
+        capf.tableEnv.registerTableSink("CsvTableSink", csvSink)
+        table.insertInto("CsvTableSink")
     }
   }
 

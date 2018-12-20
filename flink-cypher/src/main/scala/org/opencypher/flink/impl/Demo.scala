@@ -36,9 +36,11 @@ import org.opencypher.flink.api.{CAPFSession, GraphSources}
 import org.opencypher.okapi.api.configuration.Configuration.PrintTimings
 import org.opencypher.okapi.api.graph.Namespace
 import org.opencypher.okapi.api.io.conversion.{NodeMapping, RelationshipMapping}
+import org.opencypher.okapi.impl.util.Measurement
 import org.opencypher.okapi.ir.api.configuration.IrConfiguration.PrintIr
 import org.opencypher.okapi.logical.api.configuration.LogicalConfiguration.PrintLogicalPlan
 import org.opencypher.okapi.relational.api.configuration.CoraConfiguration.PrintRelationalPlan
+import org.opencypher.flink.impl.CAPFConverters._
 
 object Demo extends App {
 
@@ -82,7 +84,7 @@ object Demo extends App {
 //  println("Execution: " +  execution._2)
 //  println("Flink execution: " + session.env.getLastJobExecutionResult.getNetRuntime)
 //  println(session.tableEnv.explain(planning._1.getRecords.asCapf.table))
-  graph.cypher("MATCH (n:Person)-[r:KNOWS*1..2]->(n2:Person) RETURN n.name, n2.name").show                   // var expand
+//  graph.cypher("MATCH (n:Person)-[r:KNOWS*1..2]->(n2:Person) RETURN n.name, n2.name").show                   // var expand
 //  graph.cypher("MATCH (n:Person) WHERE (n)--({age: 29}) RETURN n.name").show                               // exists
 //  graph.cypher("MATCH (n:Person) OPTIONAL MATCH (n)-[:KNOWS]->(b {age: 29}) RETURN n.name, b.name").show   // optional match
 
@@ -158,6 +160,78 @@ object OrcDemo extends App {
       |RETURN n.firstName
     """.stripMargin
   ).show
+}
+
+object CircularDemo extends App {
+
+  implicit val session = CAPFSession.local()
+
+  val nodes = Seq(
+    (0L, 0L),
+    (1L, 1L),
+    (2L, 2L),
+    (3L, 3L),
+    (4L, 4L),
+    (5L, 5L),
+    (6L, 6L),
+    (7L, 7L),
+    (8L, 8L),
+    (9L, 9L),
+    (10L, 10L)
+  )
+
+  val rels = Seq(
+    (11L, 0L, 1L, 0L),
+    (12L, 0L, 3L, 1L),
+    (13L, 1L, 6L, 2L),
+    (14L, 2L, 6L, 3L),
+    (15L, 4L, 1L, 4L),
+    (16L, 4L, 3L, 5L),
+    (17L, 5L, 4L, 6L),
+    (18L, 6L, 2L, 7L),
+    (19L, 6L, 5L, 8L),
+    (20L, 6L, 7L, 9L),
+    (21L, 8L, 5L, 10L),
+    (22L, 5L, 9L, 11L),
+    (23L, 9L, 10L, 12L),
+    (24L, 2L, 1L, 13L)
+  )
+
+  val nodeTable = session.tableEnv.fromDataSet(
+    session.env.fromCollection(nodes),
+    'id, 'prop
+  )
+  val nodeMapping = NodeMapping
+    .on("id")
+    .withImpliedLabel("node")
+    .withPropertyKey("prop")
+
+  val relTable = session.tableEnv.fromDataSet(
+    session.env.fromCollection(rels),
+    'id, 'source, 'target, 'prop
+  )
+  val relMapping = RelationshipMapping
+    .on("id")
+    .from("source")
+    .to("target")
+    .relType("relationship")
+    .withPropertyKey("prop")
+
+  val capfNodeTable = CAPFNodeTable.fromMapping(nodeMapping, nodeTable)
+  val capfRelTable = CAPFRelationshipTable.fromMapping(relMapping, relTable)
+
+  val graph = session.readFrom(capfNodeTable, capfRelTable)
+
+  PrintRelationalPlan.set()
+  val (records, time) =  Measurement.time(graph.cypher(
+    """
+      |MATCH (n0)-[e0]->(n1)-[e1]->(n2)-[e2]->(n3)-[e3]->(n0) RETURN *
+    """.stripMargin).records
+  )
+  println(session.tableEnv.explain(records.asCapf.table.table))
+  //  records.show
+  println(time)
+
 }
 
 object ThesisDemo extends App {
