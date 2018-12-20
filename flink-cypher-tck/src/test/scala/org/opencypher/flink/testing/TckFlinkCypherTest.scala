@@ -2,10 +2,8 @@ package org.opencypher.flink.testing
 
 import java.io.File
 
-import org.opencypher.flink.impl.CAPFGraph
 import org.opencypher.flink.test.CAPFTestSuite
 import org.opencypher.flink.test.support.capf.{CAPFScanGraphFactory, CAPFTestGraphFactory}
-import org.opencypher.okapi.relational.api.configuration.CoraConfiguration.{PrintOptimizedPhysicalPlan, PrintPhysicalPlan}
 import org.opencypher.okapi.tck.test.Tags.{BlackList, WhiteList}
 import org.opencypher.okapi.tck.test.{ScenariosFor, TCKGraph}
 import org.opencypher.tools.tck.api.CypherTCK
@@ -35,7 +33,7 @@ class TckFlinkCypherTest extends CAPFTestSuite {
     forAll(scenarios.whiteList) { scenario =>
       if (!additional_blacklist.contains(scenario.toString)) {
         test(s"[${factory.name}, ${WhiteList.name}] $scenario", WhiteList, TckCapfTag, Tag(factory.name)) {
-          scenario(TCKGraph(factory, CAPFGraph.empty)).execute()
+          scenario(TCKGraph(factory, capf.graphs.empty)).execute()
         }
       }
     }
@@ -43,7 +41,7 @@ class TckFlinkCypherTest extends CAPFTestSuite {
 
   forAll(scenarios.blackList) { scenario =>
     test(s"[${defaultFactory.name}, ${BlackList.name}] $scenario", BlackList, TckCapfTag) {
-      val tckGraph = TCKGraph(defaultFactory, CAPFGraph.empty)
+      val tckGraph = TCKGraph(defaultFactory, capf.graphs.empty)
 
       Try(scenario(tckGraph).execute()) match {
         case Success(_) =>
@@ -60,12 +58,12 @@ class TckFlinkCypherTest extends CAPFTestSuite {
     CypherTCK
       .parseFilesystemFeature(file)
       .scenarios
-      .foreach(scenario => scenario(TCKGraph(defaultFactory,  CAPFGraph.empty)).execute())
+      .foreach(scenario => scenario(TCKGraph(defaultFactory,  capf.graphs.empty)).execute())
   }
 
   it("run Single Scenario") {
     scenarios.get("Using `keys()` on a relationship, non-empty result")
-      .foreach(scenario => scenario(TCKGraph(defaultFactory, CAPFGraph.empty)).execute())
+      .foreach(scenario => scenario(TCKGraph(defaultFactory, capf.graphs.empty)).execute())
   }
 
 }
