@@ -107,6 +107,9 @@
     <module>spark-cypher-examples</module>
     <module>spark-cypher-tck</module>
     <module>spark-cypher-testing</module>
+    <module>flink-cypher</module>
+    <module>flink-cypher-tck</module>
+    <module>flink-cypher-testing</module>
     <module>graph-ddl</module>
   </modules>
 

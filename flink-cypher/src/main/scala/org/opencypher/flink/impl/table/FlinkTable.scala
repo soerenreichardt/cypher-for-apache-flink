@@ -36,7 +36,7 @@ import org.opencypher.flink.impl.convert.FlinkConversions._
 import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.api.value.CypherValue
 import org.opencypher.okapi.api.value.CypherValue.{CypherMap, CypherValue}
-import org.opencypher.okapi.impl.exception.{IllegalArgumentException, NotImplementedException}
+import org.opencypher.okapi.impl.exception.{IllegalArgumentException, NotImplementedException, UnsupportedOperationException}
 import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.relational.api.table.{Table => RelationalTable}
 import org.opencypher.okapi.relational.impl.planning._
@@ -207,164 +207,9 @@ object FlinkCypherTable {
 
     override def withColumnRenamed(oldColumn: String, newColumn: String): FlinkTable =
       table.safeRenameColumn(oldColumn, newColumn)
+
+    override def columnsFor(returnItem: String): Set[String] =
+      throw UnsupportedOperationException("A FlinkTable does not have return items")
   }
 
 }
-
-//trait CAPFEntityTable extends EntityTable[FlinkTable] {
-//
-//  private[flink] def entityType: CypherType with DefiniteCypherType
-//
-//  private[flink] def records(implicit capf: CAPFSession): CAPFRecords = CAPFRecords.create(this)
-//}
-//
-//case class CAPFNodeTable(
-//  override val mapping: NodeMapping,
-//  override val relationalTable: FlinkTable
-//) extends NodeTable(mapping, relationalTable) with CAPFEntityTable {
-//
-//  override type R = CAPFNodeTable
-//
-//  override def from(
-//    header: RecordHeader,
-//    table: FlinkTable,
-//    columnNames: Option[Seq[String]] = None): CAPFNodeTable = CAPFNodeTable(mapping, table)
-//
-//  override private[flink] def entityType = mapping.cypherType
-//
-//}
-//
-//object CAPFNodeTable {
-//
-//  def apply(impliedLabels: Set[String], nodeTable: Table): CAPFNodeTable =
-//    CAPFNodeTable(impliedLabels, Map.empty, nodeTable)
-//
-//  def apply(impliedLabels: Set[String], optionalLabels: Map[String, String], nodeTable: Table): CAPFNodeTable = {
-//    val propertyColumnNames = properties(nodeTable.physicalColumns) -- optionalLabels.values
-//
-//    val baseMapping = NodeMapping(GraphEntity.sourceIdKey, impliedLabels, optionalLabels)
-//
-//    val nodeMapping = propertyColumnNames.foldLeft(baseMapping) { (mapping, propertyColumn) =>
-//      mapping.withPropertyKey(propertyColumn.toProperty, propertyColumn)
-//    }
-//
-//    fromMapping(nodeMapping, nodeTable)
-//  }
-//
-//  def fromMapping(mapping: NodeMapping, initialTable: Table): CAPFNodeTable = {
-//    val colsToSelect = mapping.allSourceKeys
-//    CAPFNodeTable(mapping, initialTable.select(colsToSelect.map(UnresolvedFieldReference): _*))
-//  }
-//
-//  private def properties(nodeColumnNames: Seq[String]): Set[String] =
-//    nodeColumnNames.filter(_ != GraphEntity.sourceIdKey).toSet
-//}
-//
-//case class CAPFRelationshipTable(
-//  override val mapping: RelationshipMapping,
-//  override val relationalTable: FlinkTable
-//) extends RelationshipTable(mapping, relationalTable) with CAPFEntityTable {
-//
-//  override type R = CAPFRelationshipTable
-//
-//  override def from(
-//    header: RecordHeader,
-//    table: FlinkTable,
-//    columnNames: Option[Seq[String]] = None
-//  ): CAPFRelationshipTable = CAPFRelationshipTable(mapping, table)
-//
-//  override private[flink] def entityType = mapping.cypherType
-//}
-//
-//object CAPFRelationshipTable {
-//
-//  def apply(relationshipType: String, relationshipTable: Table): CAPFRelationshipTable = {
-//    val propertyColumnNames = properties(relationshipTable.physicalColumns)
-//
-//    val baseMapping = RelationshipMapping.create(GraphEntity.sourceIdKey,
-//      Relationship.sourceStartNodeKey,
-//      Relationship.sourceEndNodeKey,
-//      relationshipType)
-//
-//    val relationshipMapping = propertyColumnNames.foldLeft(baseMapping) { (mapping, propertyColumn) =>
-//      mapping.withPropertyKey(propertyColumn.toProperty, propertyColumn)
-//    }
-//
-//    fromMapping(relationshipMapping, relationshipTable)
-//  }
-//
-//  def fromMapping(mapping: RelationshipMapping, initialTable: Table): CAPFRelationshipTable = {
-//
-//    val updatedTable = mapping.relTypeOrSourceRelTypeKey match {
-//
-//      case Right((typeColumnName, relTypes)) =>
-//        FlinkTable(initialTable).verifyColumnType(typeColumnName, CTString, "relationship type")
-//        val updatedTable = relTypes.foldLeft(initialTable) { case (currentTable, relType) =>
-//          val relTypeColumnName = relType.toRelTypeColumnName
-//          currentTable.safeAddColumn(relTypeColumnName, UnresolvedFieldReference(typeColumnName) === Literal(relType, Types.STRING))
-//        }
-//        updatedTable.safeDropColumn(typeColumnName)
-//
-//      case _ => initialTable
-//    }
-//
-//    val colsToSelect = mapping.allSourceKeys
-//
-//    CAPFRelationshipTable(mapping, updatedTable.select(colsToSelect.map(UnresolvedFieldReference): _*))
-//  }
-//
-//  private def properties(relColumnNames: Seq[String]): Set[String] = {
-//    relColumnNames.filter(!Relationship.nonPropertyAttributes.contains(_)).toSet
-//  }
-//}
-//
-//abstract class NodeTable(mapping: NodeMapping, table: FlinkTable) extends EntityTable[FlinkTable] with RecordBehaviour {
-//
-//  override lazy val schema: CAPFSchema = {
-//    val propertyKeys = mapping.propertyMapping.toSeq.map {
-//      case (propertyKey, sourceKey) => propertyKey -> table.columnType(sourceKey)
-//    }
-//
-//    mapping.optionalLabelMapping.keys.toSet.subsets
-//      .map(_.union(mapping.impliedLabels))
-//      .map(combo => Schema.empty.withNodePropertyKeys(combo.toSeq: _*)(propertyKeys: _*))
-//      .reduce(_ ++ _)
-//      .asCapf
-//  }
-//
-//  override protected def verify(): Unit = {
-//    super.verify()
-//    mapping.optionalLabelMapping.values.foreach { optionalLabelKey =>
-//      table.verifyColumnType(optionalLabelKey, CTBoolean, "optional label")
-//    }
-//  }
-//}
-//
-//abstract class RelationshipTable(mapping: RelationshipMapping, table: FlinkTable) extends EntityTable[FlinkTable] with RecordBehaviour {
-//
-//  override lazy val schema: CAPFSchema = {
-//    val relTypes = mapping.relTypeOrSourceRelTypeKey match {
-//      case Left(name) => Set(name)
-//      case Right((_, possibleTypes)) => possibleTypes
-//    }
-//
-//    val propertyKeys = mapping.propertyMapping.toSeq.map {
-//      case (propertyKey, sourceKey) => propertyKey -> table.columnType(sourceKey)
-//    }
-//
-//    relTypes.foldLeft(Schema.empty) {
-//      case (partialSchema, relType) => partialSchema.withRelationshipPropertyKeys(relType)(propertyKeys: _*)
-//    }.asCapf
-//  }
-//
-//  override protected def verify(): Unit = {
-//    super.verify()
-//    table.verifyColumnType(mapping.sourceStartNodeKey, CTInteger, "start node")
-//    table.verifyColumnType(mapping.sourceEndNodeKey, CTInteger, "end node")
-//    mapping.relTypeOrSourceRelTypeKey.right.map { case (_, relTypes) =>
-//      relTypes.foreach { relType =>
-//        table.verifyColumnType(relType.toRelTypeColumnName, CTBoolean, "relationship type")
-//      }
-//    }
-//  }
-//}

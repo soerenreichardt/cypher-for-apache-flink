@@ -3,7 +3,6 @@ package org.opencypher.flink.test.support.capf
 import org.apache.flink.api.scala._
 import org.apache.flink.table.api.scala._
 import org.opencypher.flink.api.io.{CAPFNodeTable, CAPFRelationshipTable}
-import org.opencypher.flink.impl.CAPFGraph
 import org.opencypher.flink.test.CAPFTestSuite
 import org.opencypher.flink.test.support.GraphMatchingTestSupport
 import org.opencypher.okapi.api.io.conversion.{NodeMapping, RelationshipMapping}
@@ -84,7 +83,7 @@ abstract class CAPFTestGraphFactoryTest extends CAPFTestSuite with GraphMatching
 
   test("testAsScanGraph") {
     val propertyGraph = CreateGraphFactory(createQuery)
-    CAPFScanGraphFactory(propertyGraph) shouldMatch CAPFGraph.create(personTable, languageTable, knowsScan)
+    CAPFScanGraphFactory(propertyGraph) shouldMatch capf.graphs.create(personTable, languageTable, knowsScan)
   }
 }
 

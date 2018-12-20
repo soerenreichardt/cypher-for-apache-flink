@@ -26,13 +26,11 @@
  */
 package org.opencypher.flink.impl
 
-import java.sql._
-import java.time.LocalDate
-
 import org.apache.flink.api.scala._
 import org.apache.flink.table.api.scala._
 import org.opencypher.flink.api.io.{CAPFNodeTable, CAPFRelationshipTable}
 import org.opencypher.flink.api.{CAPFSession, GraphSources}
+import org.opencypher.flink.impl.CAPFConverters._
 import org.opencypher.okapi.api.configuration.Configuration.PrintTimings
 import org.opencypher.okapi.api.graph.Namespace
 import org.opencypher.okapi.api.io.conversion.{NodeMapping, RelationshipMapping}
@@ -40,7 +38,6 @@ import org.opencypher.okapi.impl.util.Measurement
 import org.opencypher.okapi.ir.api.configuration.IrConfiguration.PrintIr
 import org.opencypher.okapi.logical.api.configuration.LogicalConfiguration.PrintLogicalPlan
 import org.opencypher.okapi.relational.api.configuration.CoraConfiguration.PrintRelationalPlan
-import org.opencypher.flink.impl.CAPFConverters._
 
 object Demo extends App {
 
@@ -75,7 +72,7 @@ object Demo extends App {
   PrintLogicalPlan.set()
   PrintRelationalPlan.set()
   PrintTimings.set()
-//  graph.cypher("MATCH (n:person) RETURN n.name").show
+//  graph.cypher("MATCH (n:Person) RETURN n.name").show
 //  val planning = Measurement.time(graph.cypher("MATCH (n:Person)-[r:KNOWS]->(n2:Person) WHERE n.age >= 26 RETURN n.age AS age"))
 //  println("Planning: " + planning._2)
 //  val translation = Measurement.time(planning._1.getRecords.asCapf.table.toDataSet[Row])
@@ -84,7 +81,7 @@ object Demo extends App {
 //  println("Execution: " +  execution._2)
 //  println("Flink execution: " + session.env.getLastJobExecutionResult.getNetRuntime)
 //  println(session.tableEnv.explain(planning._1.getRecords.asCapf.table))
-//  graph.cypher("MATCH (n:Person)-[r:KNOWS*1..2]->(n2:Person) RETURN n.name, n2.name").show                   // var expand
+  graph.cypher("MATCH (n:Person)-[r:KNOWS*1..2]->(n2:Person) RETURN n.name, n2.name").show                   // var expand
 //  graph.cypher("MATCH (n:Person) WHERE (n)--({age: 29}) RETURN n.name").show                               // exists
 //  graph.cypher("MATCH (n:Person) OPTIONAL MATCH (n)-[:KNOWS]->(b {age: 29}) RETURN n.name, b.name").show   // optional match
 
@@ -232,6 +229,56 @@ object CircularDemo extends App {
   //  records.show
   println(time)
 
+}
+
+object IntegerBug extends App {
+  val nodes1 = (0 until 10).foldLeft(Seq.empty[(Long, Int)]) {
+    case (acc, i) => acc :+ ((i.toLong, i))
+  }
+  val nodes2 = (11 until 20).foldLeft(Seq.empty[(Long, String)]) {
+    case (acc, i) => acc :+ ((i.toLong, i.toString))
+  }
+
+  val edges = Seq(
+    (11L, 0L, 1L),
+    (12L, 0L, 3L),
+    (13L, 1L, 6L),
+    (14L, 2L, 6L),
+    (15L, 4L, 1L),
+    (16L, 4L, 3L),
+    (17L, 5L, 4L),
+    (18L, 6L, 2L),
+    (19L, 6L, 5L),
+    (20L, 6L, 7L),
+    (21L, 8L, 5L),
+    (22L, 5L, 9L),
+    (23L, 9L, 10L)
+  )
+
+  val session = CAPFSession.local()
+  val nodeTable1 = session.tableEnv.fromDataSet(
+    session.env.fromCollection(nodes1),
+    'node_id, 'prop1
+  )
+  val nodeTable2 = session.tableEnv.fromDataSet(
+    session.env.fromCollection(nodes2),
+    'node_id, 'prop2
+  )
+  val relTable = session.tableEnv.fromDataSet(
+    session.env.fromCollection(edges),
+    'rel_id, 'start, 'end
+  )
+
+  val nodeMapping1 = NodeMapping.withSourceIdKey("node_id").withImpliedLabel("node1").withPropertyKey("prop1")
+  val nodeMapping2 = NodeMapping.withSourceIdKey("node_id").withImpliedLabel("node2").withPropertyKey("prop2")
+  val relMapping = RelationshipMapping.withSourceIdKey("rel_id").withSourceStartNodeKey("start").withSourceEndNodeKey("end").relType("relationship")
+
+  val capfNodeTable1 = CAPFNodeTable.fromMapping(nodeMapping1, nodeTable1)
+  val capfNodeTable2 = CAPFNodeTable.fromMapping(nodeMapping2, nodeTable2)
+  val capfRelTable = CAPFRelationshipTable.fromMapping(relMapping, relTable)
+
+  val graph = session.readFrom(capfNodeTable1, capfRelTable, capfNodeTable2)
+  graph.cypher("MATCH (n0)-->(n1) RETURN n0").show
 }
 
 object ThesisDemo extends App {

@@ -31,24 +31,24 @@ class CAPFSessionImplTest extends CAPFTestSuite with TeamDataFixture with GraphC
     val r3 = capf.cypher("FROM GRAPH wokring.b MATCH (n) RETURN n")
     val r4 = capf.cypher("FROM GRAPH foo.bar.baz.a MATCH (n) RETURN n")
 
-    r1.getRecords.collect.toBag should equal(Bag(
+    r1.records.collect.toBag should equal(Bag(
       CypherMap("n" -> CAPFNode(0L, Set("A")))
     ))
-    r2.getRecords.collect.toBag should equal(Bag(
+    r2.records.collect.toBag should equal(Bag(
       CypherMap("n" -> CAPFNode(0L, Set("B")))
     ))
-    r3.getRecords.collect.toBag should equal(Bag(
+    r3.records.collect.toBag should equal(Bag(
       CypherMap("n" -> CAPFNode(0L, Set("B")))
     ))
-    r4.getRecords.collect.toBag should equal(Bag(
+    r4.records.collect.toBag should equal(Bag(
       CypherMap("n" -> CAPFNode(0L, Set("C")))
     ))
   }
 
   it("can execute sql on registred tables") {
 
-    tableEnv.registerTable("people", CAPFRecords.wrap(personDF).toTable())
-    tableEnv.registerTable("knows", CAPFRecords.wrap(knowsDF).toTable())
+    tableEnv.registerTable("people", personDF)
+    tableEnv.registerTable("knows", knowsDF)
 
     val sqlResult = capf.sql(
       """

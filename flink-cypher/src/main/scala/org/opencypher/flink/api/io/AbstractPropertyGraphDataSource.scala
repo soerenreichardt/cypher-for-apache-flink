@@ -113,7 +113,7 @@ abstract class AbstractPropertyGraphDataSource extends CAPFPropertyGraphDataSour
       if (nodeTables.isEmpty) {
         capf.graphs.empty
       } else {
-        capf.graphs.create(capfMetaData.tags, Some(capfSchema), nodeTables.head, (nodeTables.tail ++ relTables).toSeq: _*)
+        capf.graphs.create(capfMetaData.tags, Some(capfSchema), (nodeTables ++ relTables).toSeq: _*)
       }
     }
   }

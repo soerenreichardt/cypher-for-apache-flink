@@ -34,28 +34,16 @@ trait RecordMatchingTestSupport {
       actualData should equal(expectedData)
     }
 
-    def shouldMatchOpaquely(expectedRecords: CAPFRecords): Assertion = {
-      RecordMatcher(projected(records)) shouldMatch projected(expectedRecords)
-    }
-
-    private def projected(records: CAPFRecords): CAPFRecords = {
-      val aliases = records.header.expressions.map {
-        case v: Var => v
-        case e => e as Var(e.withoutType)(e.cypherType)
-      }.toSeq
-
-      records.select(aliases.head, aliases.tail: _*)
-    }
   }
 
   implicit class RichRecords(records: CypherRecords) {
-    val capfRecords = records.asCapf
+    val capfRecords: CAPFRecords = records.asCapf
 
     def toMaps: Bag[CypherMap] = {
-      val rows = capfRecords.toTable().collect().map { r =>
+      val rows = capfRecords.flinkTable.collect().map { r =>
         val properties = capfRecords.header.expressions.map {
-          case v: Var => v.name -> r.getCypherValue(v, capfRecords.header, capfRecords.table.getSchema.columnNameToIndex)
-          case e => e.withoutType -> r.getCypherValue(e, capfRecords.header, capfRecords.table.getSchema.columnNameToIndex)
+          case v: Var => v.name -> r.getCypherValue(v, capfRecords.header, capfRecords.flinkTable.getSchema.columnNameToIndex)
+          case e => e.withoutType -> r.getCypherValue(e, capfRecords.header, capfRecords.flinkTable.getSchema.columnNameToIndex)
         }.toMap
         CypherMap(properties)
       }

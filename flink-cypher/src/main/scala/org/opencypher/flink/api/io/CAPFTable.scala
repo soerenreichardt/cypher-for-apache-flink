@@ -12,6 +12,23 @@ import org.opencypher.okapi.api.io.conversion.{NodeMapping, RelationshipMapping}
 import org.opencypher.okapi.api.types.CTString
 import org.opencypher.okapi.impl.util.StringEncodingUtilities._
 import org.opencypher.okapi.relational.api.io.{EntityTable, NodeTable, RelationshipTable}
+import org.opencypher.okapi.relational.api.table.RelationalEntityTableFactory
+
+case object CAPFEntityTableFactory extends RelationalEntityTableFactory[FlinkTable] {
+  override def nodeTable(
+    nodeMapping: NodeMapping,
+    table: FlinkTable
+  ): NodeTable[FlinkTable] = {
+    CAPFNodeTable(nodeMapping, table)
+  }
+
+  override def relationshipTable(
+    relationshipMapping: RelationshipMapping,
+    table: FlinkTable
+  ): RelationshipTable[FlinkTable] = {
+    CAPFRelationshipTable(relationshipMapping, table)
+  }
+}
 
 trait CAPFEntityTable extends EntityTable[FlinkTable] {
 

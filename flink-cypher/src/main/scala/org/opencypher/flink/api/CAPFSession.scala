@@ -29,17 +29,15 @@ package org.opencypher.flink.api
 import org.apache.flink.api.scala.{DataSet, ExecutionEnvironment}
 import org.apache.flink.table.api.scala.BatchTableEnvironment
 import org.apache.flink.table.api.{Table, TableEnvironment}
-import org.opencypher.flink.api.io.{CAPFEntityTable, CAPFNodeTable}
+import org.opencypher.flink.api.io.CAPFEntityTableFactory
 import org.opencypher.flink.impl.graph.CAPFGraphFactory
 import org.opencypher.flink.impl.table.FlinkCypherTable.FlinkTable
 import org.opencypher.flink.impl.{CAPFRecords, CAPFRecordsFactory}
-import org.opencypher.okapi.api.graph.PropertyGraph
 import org.opencypher.okapi.api.table.CypherRecords
 import org.opencypher.okapi.api.value.CypherValue.CypherMap
 import org.opencypher.okapi.impl.exception.UnsupportedOperationException
 import org.opencypher.okapi.relational.api.graph.RelationalCypherSession
 import org.opencypher.okapi.relational.api.planning.RelationalCypherResult
-import org.opencypher.okapi.relational.impl.table.RecordHeader
 
 sealed class CAPFSession(
   val env: ExecutionEnvironment,
@@ -56,13 +54,7 @@ sealed class CAPFSession(
 
   override val graphs: CAPFGraphFactory = CAPFGraphFactory()
 
-  def readFrom(nodeTable: CAPFNodeTable, entityTables: CAPFEntityTable*): PropertyGraph = {
-    graphs.create(nodeTable, entityTables: _*)
-  }
-
-  def readFrom(tags: Set[Int], nodeTable: CAPFNodeTable, entityTables: CAPFEntityTable*): PropertyGraph = {
-    graphs.create(tags, None, nodeTable, entityTables: _*)
-  }
+  override val entityTables: CAPFEntityTableFactory.type = CAPFEntityTableFactory
 
   def sql(query: String): CAPFRecords =
     records.wrap(tableEnv.sqlQuery(query))
