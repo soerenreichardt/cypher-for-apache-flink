@@ -94,25 +94,12 @@ class MultipleGraphBehaviour extends CAPSTestSuite with ScanGraphInit {
   }
 
   //TODO: This test has no useful expectation
-  it("CLONEs without an alias") {
-    val query =
-      """
-        |MATCH (n)
-        |CONSTRUCT
-        |  CLONE n
-        |RETURN GRAPH""".stripMargin
-
-    val result = testGraph1.cypher(query)
-    result.getRecords should be(None)
-  }
-
-  //TODO: This test has no useful expectation
   it("CLONEs with an alias") {
     val query =
       """
         |MATCH (n)
         |CONSTRUCT
-        |  CLONE n as m
+        |  CLONE n AS m
         |RETURN GRAPH""".stripMargin
 
     val result = testGraph1.cypher(query)
@@ -338,7 +325,7 @@ class MultipleGraphBehaviour extends CAPSTestSuite with ScanGraphInit {
     val query =
       """|MATCH (m:Person)
          |CONSTRUCT
-         |  CLONE m
+         |  CLONE m AS m
          |RETURN GRAPH""".stripMargin
 
     val result = testGraph1.cypher(query)
@@ -438,8 +425,8 @@ class MultipleGraphBehaviour extends CAPSTestSuite with ScanGraphInit {
     val graph = initGraph(
       """
         |CREATE (:A {val: 1})
-        |CREATE (:B {val: 1})
-        |CREATE (:A:C {val: 1})
+        |CREATE (:B {val: 2})
+        |CREATE (:A:C {val: 3})
       """.stripMargin)
 
     val query =
@@ -453,8 +440,8 @@ class MultipleGraphBehaviour extends CAPSTestSuite with ScanGraphInit {
     result.getRecords shouldBe None
     result.graph.cypher("MATCH (a) RETURN a.val, labels(a) as labels").records.iterator.toBag should equal(Bag(
       CypherMap("a.val" -> 1, "labels" -> Seq("A")),
-      CypherMap("a.val" -> 1, "labels" -> Seq("B")),
-      CypherMap("a.val" -> 1, "labels" -> Seq("A", "C"))
+      CypherMap("a.val" -> 2, "labels" -> Seq("B")),
+      CypherMap("a.val" -> 3, "labels" -> Seq("A", "C"))
     ))
   }
 
@@ -504,7 +491,7 @@ class MultipleGraphBehaviour extends CAPSTestSuite with ScanGraphInit {
         |MATCH (n),(m)
         |WHERE n.name = 'Mats' AND m.name = 'Phil'
         |CONSTRUCT
-        | CLONE n, m
+        | CLONE n AS n, m AS m
         | CREATE (n)-[r:KNOWS]->(m)
         |RETURN GRAPH
       """.stripMargin)
@@ -532,17 +519,13 @@ class MultipleGraphBehaviour extends CAPSTestSuite with ScanGraphInit {
       """
         |CREATE (p0 {name: 'Mats'})
         |CREATE (p1 {name: 'Phil'})
-        |CREATE (p0)-[:KNOWS]->(p1)
-        |CREATE (p0)-[:KNOWS]->(p1)
-        |CREATE (p1)-[:KNOWS]->(p0)
       """.stripMargin)
 
     val res = inputGraph.cypher(
       """
-        |MATCH (n)-[:KNOWS]->(m)
-        |WITH DISTINCT n, m
+        |MATCH (n),(m)
+        |WHERE n <> m
         |CONSTRUCT
-        | CLONE n, m
         | CREATE (n)-[r:KNOWS]->(m)
         |RETURN GRAPH
       """.stripMargin)
@@ -588,7 +571,7 @@ class MultipleGraphBehaviour extends CAPSTestSuite with ScanGraphInit {
       """
         |MATCH (n)-[:KNOWS]->(m)
         |CONSTRUCT
-        | CLONE n, m
+        | CLONE n AS n, m AS m
         | CREATE (n)-[r:KNOWS]->(m)
         |RETURN GRAPH
       """.stripMargin)
@@ -646,7 +629,7 @@ class MultipleGraphBehaviour extends CAPSTestSuite with ScanGraphInit {
       case Some(relPlan) =>
         val switchOp = relPlan.collectFirst { case op: SwitchContext[_] => op }.get
         val containsUnionGraph = switchOp.context.queryLocalCatalog.head._2 match {
-          case g: UnionGraph[_] => g.graphsToReplacements.keys.collectFirst { case op: UnionGraph[_] => op }.isDefined
+          case g: UnionGraph[_] => g.graphsToReplacements.unzip._1.collectFirst { case op: UnionGraph[_] => op }.isDefined
           case _ => false
         }
         withClue("CONSTRUCT plans union on a single input graph") {
@@ -681,7 +664,6 @@ class MultipleGraphBehaviour extends CAPSTestSuite with ScanGraphInit {
          |FROM GRAPH two
          |MATCH (p: Person)
          |CONSTRUCT ON one, two
-         |  CLONE m, p
          |  CREATE (m)-[:KNOWS]->(p)
          |RETURN GRAPH""".stripMargin
 
@@ -743,11 +725,11 @@ class MultipleGraphBehaviour extends CAPSTestSuite with ScanGraphInit {
         |FROM GRAPH g1
         |MATCH (a)
         |CONSTRUCT // generated qgn
-        |  CLONE a
+        |  CLONE a AS a
         |MATCH (b)
         |CONSTRUCT
         |  ON g1
-        |  CLONE b
+        |  CLONE b AS b
         |RETURN GRAPH
       """.stripMargin
 
@@ -774,7 +756,7 @@ class MultipleGraphBehaviour extends CAPSTestSuite with ScanGraphInit {
         |MATCH (b:Person)
         |CONSTRUCT
         |  ON g2
-        |  CLONE a, b
+        |  CLONE a AS a, b AS b
         |RETURN GRAPH
       """.stripMargin
 
@@ -795,7 +777,7 @@ class MultipleGraphBehaviour extends CAPSTestSuite with ScanGraphInit {
       """|FROM GRAPH testGraphRels1
          |MATCH (p1 :Person)-[r1]->(p2 :Person)
          |CONSTRUCT ON testGraphRels2
-         |  CLONE p1, r1, p2
+         |  CLONE p1 AS p1, r1 AS r1, p2 AS p2
          |  CREATE (p1)-[ r1]->( p2)
          |RETURN GRAPH""".stripMargin
 
@@ -834,7 +816,7 @@ class MultipleGraphBehaviour extends CAPSTestSuite with ScanGraphInit {
          |FROM GRAPH testGraphRels2
          |MATCH (p3 :Person)-[r2]->(p4 :Person)
          |CONSTRUCT
-         |  CLONE p1, p2, p3, p4, r1, r2
+         |  CLONE p1 AS p1, p2 AS p2, p3 AS p3, p4 AS p4, r1 AS r1, r2 AS r2
          |  CREATE (p1)-[r1]->(p2)
          |  CREATE (p3)-[r2]->(p4)
          |RETURN GRAPH""".stripMargin
@@ -861,7 +843,7 @@ class MultipleGraphBehaviour extends CAPSTestSuite with ScanGraphInit {
          |  CREATE (a:A)-[r:FOO]->(b:B)
          |MATCH (a)-->(b)
          |CONSTRUCT
-         |  CLONE a, b
+         |  CLONE a AS a, b AS b
          |  CREATE (a)-[:KNOWS]->(b)
          |RETURN GRAPH""".stripMargin
 
@@ -1019,5 +1001,4 @@ class MultipleGraphBehaviour extends CAPSTestSuite with ScanGraphInit {
       CypherMap("a.name" -> "Donald")
     ))
   }
-
 }

@@ -32,35 +32,44 @@ import org.opencypher.okapi.api.schema.Schema
 import org.opencypher.okapi.neo4j.io.Neo4jConfig
 import org.opencypher.spark.api.io.fs.{EscapeAtSymbol, FSGraphSource}
 import org.opencypher.spark.api.io.neo4j.{Neo4jBulkCSVDataSink, Neo4jPropertyGraphDataSource}
+import org.opencypher.spark.api.io.sql.{SqlDataSourceConfig, SqlPropertyGraphDataSource}
 import org.opencypher.spark.api.io.{CsvFormat, OrcFormat, ParquetFormat}
+import org.opencypher.graphddl.GraphDdl
+import org.opencypher.spark.api.io.sql.IdGenerationStrategy.IdGenerationStrategy
 
 import scala.io.Source
+import scala.util.Properties
 
 object GraphSources {
   def fs(
     rootPath: String,
+    hiveDatabaseName: Option[String] = None,
     filesPerTable: Option[Int] = Some(1)
-  )(implicit session: CAPSSession) = FSGraphSources(rootPath, filesPerTable)
+  )(implicit session: CAPSSession) = FSGraphSources(rootPath, hiveDatabaseName, filesPerTable)
 
   def cypher: CypherGraphSources.type = CypherGraphSources
+
+  def sql(graphDdlPath: String)(implicit session: CAPSSession) = SqlGraphSources(graphDdlPath)
 }
 
 object FSGraphSources {
   def apply(
     rootPath: String,
+    hiveDatabaseName: Option[String] = None,
     filesPerTable: Option[Int] = Some(1)
-  )(implicit session: CAPSSession): FSGraphSourceFactory = FSGraphSourceFactory(rootPath, filesPerTable)
+  )(implicit session: CAPSSession): FSGraphSourceFactory = FSGraphSourceFactory(rootPath, hiveDatabaseName, filesPerTable)
 
   case class FSGraphSourceFactory(
     rootPath: String,
+    hiveDatabaseName: Option[String] = None,
     filesPerTable: Option[Int] = Some(1)
   )(implicit session: CAPSSession) {
 
-    def csv: FSGraphSource = new FSGraphSource(rootPath, CsvFormat, filesPerTable)
+    def csv: FSGraphSource = new FSGraphSource(rootPath, CsvFormat, hiveDatabaseName, filesPerTable)
 
-    def parquet: FSGraphSource = new FSGraphSource(rootPath, ParquetFormat, filesPerTable)
+    def parquet: FSGraphSource = new FSGraphSource(rootPath, ParquetFormat, hiveDatabaseName, filesPerTable)
 
-    def orc: FSGraphSource = new FSGraphSource(rootPath, OrcFormat, filesPerTable) with EscapeAtSymbol
+    def orc: FSGraphSource = new FSGraphSource(rootPath, OrcFormat, hiveDatabaseName, filesPerTable) with EscapeAtSymbol
   }
 
   /**
@@ -100,4 +109,31 @@ object CypherGraphSources {
 
     Neo4jPropertyGraphDataSource(config, maybeSchema = Some(Schema.fromJson(schemaString)), omitIncompatibleProperties = omitIncompatibleProperties)
   }
+}
+
+import org.opencypher.spark.api.io.sql.IdGenerationStrategy._
+
+object SqlGraphSources {
+
+  case class SqlGraphSourceFactory(graphDdl: GraphDdl, idGenerationStrategy: IdGenerationStrategy)
+    (implicit session: CAPSSession) {
+
+    def withIdGenerationStrategy(idGenerationStrategy: IdGenerationStrategy): SqlGraphSourceFactory =
+      copy(idGenerationStrategy = idGenerationStrategy)
+
+
+    def withSqlDataSourceConfigs(sqlDataSourceConfigsPath: String): SqlPropertyGraphDataSource = {
+      val jsonString = Source.fromFile(sqlDataSourceConfigsPath, "UTF-8").getLines().mkString(Properties.lineSeparator)
+      val sqlDataSourceConfigs = SqlDataSourceConfig.dataSourcesFromString(jsonString).values.toList
+      withSqlDataSourceConfigs(sqlDataSourceConfigs)
+    }
+
+    def withSqlDataSourceConfigs(sqlDataSourceConfigs: List[SqlDataSourceConfig]): SqlPropertyGraphDataSource =
+      SqlPropertyGraphDataSource(graphDdl, sqlDataSourceConfigs, idGenerationStrategy)
+  }
+
+  def apply(graphDdlPath: String)(implicit session: CAPSSession): SqlGraphSourceFactory =
+    SqlGraphSourceFactory(
+      graphDdl = GraphDdl(Source.fromFile(graphDdlPath, "UTF-8").getLines().mkString(Properties.lineSeparator)),
+      idGenerationStrategy = MonotonicallyIncreasingId)
 }

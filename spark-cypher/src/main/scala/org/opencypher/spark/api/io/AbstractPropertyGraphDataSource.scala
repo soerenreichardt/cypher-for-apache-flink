@@ -31,14 +31,14 @@ import java.util.concurrent.Executors
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
 import org.opencypher.okapi.api.graph.{GraphName, PropertyGraph}
-import org.opencypher.okapi.api.types.CTInteger
+import org.opencypher.okapi.api.schema.Schema
+import org.opencypher.okapi.api.types.{CTInteger, CypherType}
 import org.opencypher.okapi.impl.exception.GraphNotFoundException
 import org.opencypher.okapi.impl.util.StringEncodingUtilities._
 import org.opencypher.spark.api.CAPSSession
 import org.opencypher.spark.api.io.metadata.CAPSGraphMetaData
 import org.opencypher.spark.api.io.util.CAPSGraphExport._
 import org.opencypher.spark.impl.CAPSConverters._
-import org.opencypher.spark.impl.DataFrameOps._
 import org.opencypher.spark.impl.io.CAPSPropertyGraphDataSource
 import org.opencypher.spark.schema.CAPSSchema
 import org.opencypher.spark.schema.CAPSSchema._
@@ -46,6 +46,23 @@ import org.opencypher.spark.schema.CAPSSchema._
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutorService, Future}
 import scala.util.{Failure, Success}
+
+object AbstractPropertyGraphDataSource {
+
+  def nodeColsWithCypherType(schema: Schema, labelCombination: Set[String]): Map[String, CypherType] = {
+    val propertyColsWithCypherType = schema.nodePropertyKeysForCombinations(Set(labelCombination)).map {
+      case (key, cypherType) => key.toPropertyColumnName -> cypherType
+    }
+    propertyColsWithCypherType + (GraphEntity.sourceIdKey -> CTInteger)
+  }
+
+  def relColsWithCypherType(schema: Schema, relType: String): Map[String, CypherType] = {
+    val propertyColsWithCypherType = schema.relationshipPropertyKeys(relType).map {
+      case (key, cypherType) => key.toPropertyColumnName -> cypherType
+    }
+    propertyColsWithCypherType ++ Relationship.nonPropertyAttributes.map(_ -> CTInteger)
+  }
+}
 
 /**
   * Abstract data source implementation that takes care of caching graph names and schemas.
@@ -75,9 +92,9 @@ abstract class AbstractPropertyGraphDataSource extends CAPSPropertyGraphDataSour
 
   protected def writeCAPSGraphMetaData(graphName: GraphName, capsGraphMetaData: CAPSGraphMetaData): Unit
 
-  protected def readNodeTable(graphName: GraphName, labels: Set[String], sparkSchema: StructType): DataFrame
+  protected def readNodeTable(graphName: GraphName, labelCombination: Set[String], sparkSchema: StructType): DataFrame
 
-  protected def writeNodeTable(graphName: GraphName, labels: Set[String], table: DataFrame): Unit
+  protected def writeNodeTable(graphName: GraphName, labelCombination: Set[String], table: DataFrame): Unit
 
   protected def readRelationshipTable(graphName: GraphName, relKey: String, sparkSchema: StructType): DataFrame
 
@@ -100,28 +117,17 @@ abstract class AbstractPropertyGraphDataSource extends CAPSPropertyGraphDataSour
       val capsSchema: CAPSSchema = schema(name).get
       val capsMetaData: CAPSGraphMetaData = readCAPSGraphMetaData(name)
       val nodeTables = capsSchema.allCombinations.map { combo =>
-        val propertyColsWithCypherType = capsSchema.nodePropertyKeysForCombinations(Set(combo)).map {
-          case (key, cypherType) => key.toPropertyColumnName -> cypherType
-        }
-
-        val columnsWithCypherType = propertyColsWithCypherType + (GraphEntity.sourceIdKey -> CTInteger)
         val df = readNodeTable(name, combo, capsSchema.canonicalNodeStructType(combo))
-        CAPSNodeTable(combo, df.setNullability(columnsWithCypherType))
+        CAPSNodeTable(combo, df)
       }
-
       val relTables = capsSchema.relationshipTypes.map { relType =>
-        val propertyColsWithCypherType = capsSchema.relationshipPropertyKeys(relType).map {
-          case (key, cypherType) => key.toPropertyColumnName -> cypherType
-        }
-
-        val columnsWithCypherType = propertyColsWithCypherType ++ Relationship.nonPropertyAttributes.map(_ -> CTInteger)
         val df = readRelationshipTable(name, relType, capsSchema.canonicalRelStructType(relType))
-        CAPSRelationshipTable(relType, df.setNullability(columnsWithCypherType))
+        CAPSRelationshipTable(relType, df)
       }
       if (nodeTables.isEmpty) {
         caps.graphs.empty
       } else {
-        caps.graphs.create(capsMetaData.tags, Some(capsSchema), nodeTables.head, (nodeTables.tail ++ relTables).toSeq: _*)
+        caps.graphs.create(capsMetaData.tags, Some(capsSchema), (nodeTables ++ relTables).toSeq: _*)
       }
     }
   }

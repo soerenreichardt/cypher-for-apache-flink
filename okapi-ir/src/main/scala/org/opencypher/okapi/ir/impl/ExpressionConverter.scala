@@ -28,15 +28,14 @@ package org.opencypher.okapi.ir.impl
 
 import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.impl.exception.NotImplementedException
-import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.ir.api._
+import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.ir.impl.FunctionUtils._
 import org.opencypher.v9_0.expressions.{RegexMatch, functions}
 import org.opencypher.v9_0.util.Ref
 import org.opencypher.v9_0.{expressions => ast}
 
 import scala.language.implicitConversions
-import scala.util.parsing.combinator.token.StdTokens
 
 final class ExpressionConverter(implicit context: IRBuilderContext) {
 
@@ -76,7 +75,6 @@ final class ExpressionConverter(implicit context: IRBuilderContext) {
       if (exprs.size == 1) exprs.head else Ands(exprs.toSet)
     case ast.Not(expr) =>
       Not(convert(expr))(typings(e))
-    // TODO: Does this belong here still?
     case ast.Equals(f: ast.FunctionInvocation, s: ast.StringLiteral) if f.function == functions.Type =>
       HasType(convert(f.args.head), RelType(s.value))(CTBoolean)
     case ast.Equals(lhs, rhs) =>
@@ -115,7 +113,6 @@ final class ExpressionConverter(implicit context: IRBuilderContext) {
     case ast.Divide(lhs, rhs) =>
       Divide(convert(lhs), convert(rhs))(typings(e))
 
-    // Functions
     case funcInv: ast.FunctionInvocation =>
       funcInv.convertFunction(funcInv.args.map(convert), typings(e))
     case _: ast.CountStar =>
@@ -124,7 +121,7 @@ final class ExpressionConverter(implicit context: IRBuilderContext) {
     // Exists (rewritten Pattern Expressions)
     case org.opencypher.okapi.ir.impl.parse.rewriter.ExistsPattern(subquery, trueVar) =>
       val innerModel = IRBuilder(subquery)(context) match {
-        case cq: CypherQuery => cq
+        case sq: SingleQuery => sq
         case _ => throw new IllegalArgumentException("ExistsPattern only accepts SingleQuery")
       }
       ExistsPatternExpr(

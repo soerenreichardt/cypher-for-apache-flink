@@ -29,7 +29,6 @@ package org.opencypher.okapi.ir.impl
 import org.opencypher.okapi.api.graph.{Namespace, PropertyGraph, QualifiedGraphName}
 import org.opencypher.okapi.api.io.PropertyGraphDataSource
 import org.opencypher.okapi.api.schema.Schema
-import org.opencypher.okapi.api.types.CypherType._
 import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.api.value.CypherValue.CypherMap
 import org.opencypher.okapi.impl.exception.NotImplementedException
@@ -73,7 +72,7 @@ final case class IRBuilderContext(
 
   // TODO: Fuse monads
   def infer(expr: ast.Expression): Map[Ref[ast.Expression], CypherType] = {
-    typer.infer(expr, TypeTracker(List(knownTypes), parameters.value.mapValues(_.cypherType))) match {
+    typer.infer(expr, TypeTracker(List(knownTypes), parameters.value)) match {
       case Right(result) =>
         result.recorder.toMap
 
@@ -109,6 +108,11 @@ final case class IRBuilderContext(
 
   def registerSchema(qgn: QualifiedGraphName, schema: Schema): IRBuilderContext =
     copy(queryLocalCatalog = queryLocalCatalog.withSchema(qgn, schema))
+
+  def resetRegistry: IRBuilderContext = {
+    val sourceBlock = SourceBlock(workingGraph)
+    copy(blockRegistry = BlockRegistry.empty.register(sourceBlock))
+  }
 }
 
 object IRBuilderContext {

@@ -53,6 +53,20 @@ trait CypherTable {
   def logicalColumns: Option[Seq[String]] = None
 
   /**
+    * Get the names of the physical columns that hold the values of the given return item.
+    * A return item is given by an identifier or alias of a return clause. For example
+    * in the query 'MATCH (n) RETURN n.foo' the only return item would be 'n.foo'
+    *
+    * It returns a list with a single value if the return item is a primitive. It will return
+    * a list of column names if the return item is an entity, such as a node. The listed columns
+    * hold the members of the entity (ids, label/type, properties) using an internal naming scheme.
+    *
+    * @param returnItem name of one of the return items represented in this table.
+    * @return a list of names of the physical columns that hold the data for the return item.
+    */
+  def columnsFor(returnItem: String): Set[String]
+
+  /**
     * CypherType of columns stored in this table.
     */
   def columnType: Map[String, CypherType]
@@ -84,16 +98,10 @@ object CypherTable {
         s"table with column key $columnKey",
         s"table with columns ${table.physicalColumns.mkString(", ")}"))
 
-      if (!columnType.subTypeOf(expectedType).isTrue) {
-        if (columnType.material == expectedType.material) {
-          throw IllegalArgumentException(
-            s"non-nullable type for $keyDescription column `$columnKey`",
-            "nullable type")
-        } else {
-          throw IllegalArgumentException(
-            s"$keyDescription column `$columnKey` of type $expectedType",
-            s"incompatible column type $columnType")
-        }
+      if (columnType.material.subTypeOf(expectedType.material).isFalse) {
+        throw IllegalArgumentException(
+          s"$keyDescription column `$columnKey` of type $expectedType",
+          s"incompatible column type $columnType")
       }
     }
   }

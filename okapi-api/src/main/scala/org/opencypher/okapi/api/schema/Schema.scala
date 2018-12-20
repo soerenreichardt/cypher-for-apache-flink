@@ -33,8 +33,11 @@ import org.opencypher.okapi.api.types.{CTRelationship, CypherType}
 import org.opencypher.okapi.impl.annotations.experimental
 import org.opencypher.okapi.impl.schema.SchemaImpl._
 import org.opencypher.okapi.impl.schema.{ImpliedLabels, LabelCombinations, SchemaImpl}
+import org.opencypher.okapi.impl.util.Version
 
 object Schema {
+  val CURRENT_VERSION: Version = Version("1.0")
+
   /**
     * Empty Schema. Start with this to construct a new Schema.
     * Use the `with*` functions to add information.
@@ -186,6 +189,17 @@ trait Schema {
     * @return Cypher type of the property on relationships with one of the given types
     */
   def relationshipPropertyKeyType(relTypes: Set[String], key: String): Option[CypherType]
+
+  /**
+    * Returns property keys for the set of known relationship types.
+    * Types of conflicting property keys are joined.
+    * The parameter `knownTypes` functions as a predicate, i.e. an empty Set means that every relationship type
+    * registered in the schema will be considered.
+    *
+    * @param knownTypes types that relationship can have
+    * @return typed property keys, with joined or nullable types for conflicts
+    */
+  def relationshipPropertyKeysForTypes(knownTypes: Set[String]): PropertyKeys
 
   /**
     * This function returns all schema patterns that are applicable with regards to the specified known labels and

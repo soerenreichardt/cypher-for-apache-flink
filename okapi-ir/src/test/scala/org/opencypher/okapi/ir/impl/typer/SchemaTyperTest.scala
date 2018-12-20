@@ -29,10 +29,11 @@ package org.opencypher.okapi.ir.impl.typer
 import cats.data.NonEmptyList
 import org.opencypher.okapi.api.schema.Schema
 import org.opencypher.okapi.api.types._
+import org.opencypher.okapi.api.value.CypherValue
 import org.opencypher.okapi.ir.test.support.Neo4jAstTestSupport
 import org.opencypher.okapi.testing.BaseTestSuite
+import org.opencypher.v9_0.expressions._
 import org.opencypher.v9_0.expressions.functions.Tail
-import org.opencypher.v9_0.expressions.{Expression, Parameter, Variable}
 import org.opencypher.v9_0.util.symbols
 import org.scalatest.Assertion
 import org.scalatest.mockito.MockitoSugar
@@ -56,6 +57,43 @@ class SchemaTyperTest extends BaseTestSuite with Neo4jAstTestSupport with Mockit
     assertExpr.from("tail(a)") shouldFailToInferTypeWithErrors(
       UnsupportedExpr(f), NoSuitableSignatureForExpr(f, Seq(CTList(CTInteger)))
     )
+  }
+
+  it("should type Date") {
+    implicit val context: TypeTracker = typeTracker("d" -> CTDate)
+
+    assertExpr.from("date()") shouldHaveInferredType CTDate.nullable
+    assertExpr.from("date('2010-12-10')") shouldHaveInferredType CTDate.nullable
+    assertExpr.from("date({ year: 2018, month: 12, day: 18 })") shouldHaveInferredType CTDate.nullable
+  }
+
+  it("should type DateTime") {
+    implicit val context: TypeTracker = typeTracker("d" -> CTDateTime)
+
+    assertExpr.from("datetime()") shouldHaveInferredType CTDateTime.nullable
+    assertExpr.from("datetime('2010-12-10')") shouldHaveInferredType CTDateTime.nullable
+    assertExpr.from("datetime('2010-12-10T00:00:00.000')") shouldHaveInferredType CTDateTime.nullable
+    assertExpr.from("datetime({ year: 2018, month: 12, day: 18 })") shouldHaveInferredType CTDateTime.nullable
+    assertExpr.from(
+      """
+        |datetime({
+        | year: 2018,
+        | month: 12,
+        | day: 18,
+        | hour: 11,
+        | minute: 11,
+        | second: 11,
+        | millisecond: 999,
+        | mircosecond: 999,
+        | nanosecond: 999})""".stripMargin) shouldHaveInferredType CTDateTime.nullable
+  }
+
+  it("should type trim(), ltrim(), rtrim()") {
+    implicit val context: TypeTracker = typeTracker("n" -> CTString)
+
+    assertExpr.from("trim(n)") shouldHaveInferredType CTString.nullable
+    assertExpr.from("ltrim(n)") shouldHaveInferredType CTString.nullable
+    assertExpr.from("rtrim(n)") shouldHaveInferredType CTString.nullable
   }
 
   it("should type timestamp()") {
@@ -411,15 +449,9 @@ class SchemaTyperTest extends BaseTestSuite with Neo4jAstTestSupport with Mockit
   }
 
   it("typing of parameters (1)") {
-    implicit val tracker: TypeTracker = TypeTracker.empty.withParameters(Map("param" -> CTNode("Person")))
+    implicit val tracker: TypeTracker = TypeTracker.empty.withParameters(Map("param" -> CypherValue("foobar")))
 
-    assertExpr.from("$param") shouldHaveInferredType CTNode("Person")
-  }
-
-  it("typing of parameters (2)") {
-    implicit val tracker: TypeTracker = TypeTracker.empty.withParameters(Map("param" -> CTAny))
-
-    assertExpr.from("$param") shouldHaveInferredType CTAny
+    assertExpr.from("$param") shouldHaveInferredType CTString
   }
 
   it("typing of basic literals") {
@@ -444,12 +476,33 @@ class SchemaTyperTest extends BaseTestSuite with Neo4jAstTestSupport with Mockit
   it("typing of list indexing") {
     implicit val context: TypeTracker = TypeTracker.empty.updated(Parameter("param", symbols.CTAny)(pos), CTInteger)
 
-    assertExpr.from("[1, 2][15]") shouldHaveInferredType CTVoid
-    assertExpr.from("[3.14, -1, 5000][15]") shouldHaveInferredType CTVoid
-    assertExpr.from("[[], 1, true][15]") shouldHaveInferredType CTVoid
-    assertExpr.from("[1, 2][1]") shouldHaveInferredType CTInteger
-    assertExpr.from("[3.14, -1, 5000][$param]")(TypeTracker.empty.withParameters(Map("param" -> CTInteger))) shouldHaveInferredType CTNumber.nullable
-    assertExpr.from("[[], 1, true][$param]")(TypeTracker.empty.withParameters(Map("param" -> CTInteger))) shouldHaveInferredType CTAny.nullable
+    assertExpr.from("[1, 2][15]") shouldHaveInferredType CTInteger.nullable
+    assertExpr.from("[3.14, -1, 5000][15]") shouldHaveInferredType CTNumber.nullable
+    assertExpr.from("[[], 1, true][15]") shouldHaveInferredType CTAny.nullable
+    assertExpr.from("[1, 2][1]") shouldHaveInferredType CTInteger.nullable
+    assertExpr.from("[3.14, -1, 5000][$param]")(TypeTracker.empty.withParameters(Map("param" -> CypherValue(42L)))) shouldHaveInferredType CTNumber.nullable
+    assertExpr.from("[[], 1, true][$param]")(TypeTracker.empty.withParameters(Map("param" -> CypherValue(21L)))) shouldHaveInferredType CTAny.nullable
+  }
+
+  it("typing of map indexing") {
+    implicit val context: TypeTracker = TypeTracker.empty
+      .updated(Variable("map")(pos), CTMap(Map("foo" -> CTInteger, "bar" -> CTBoolean)))
+      .updated(Variable("stringKey")(pos), CTString)
+      .updated(Variable("intKey")(pos), CTInteger)
+      .withParameters(Map(
+        "stringParam" -> CypherValue("bar"),
+        "intParam" -> CypherValue(42L)
+      ))
+
+    assertExpr.from("""map["foo"]""") shouldHaveInferredType CTInteger
+    assertExpr.from("""map["bar"]""") shouldHaveInferredType CTBoolean
+    assertExpr.from("""map["baz"]""") shouldHaveInferredType CTVoid
+
+    assertExpr.from("""map[stringKey]""") shouldHaveInferredType CTAny.nullable
+    assertExpr.from("""map[intKey]""") shouldFailToInferTypeWithErrors InvalidType(Variable("intKey")(pos), CTString, CTInteger)
+
+    assertExpr.from("""map[$stringParam]""") shouldHaveInferredType CTBoolean
+    assertExpr.from("""map[$intParam]""") shouldFailToInferTypeWithErrors InvalidType(Parameter("intParam", symbols.CTAny)(pos), CTString, CTInteger)
   }
 
   it("infer type of node property lookup") {
@@ -464,7 +517,7 @@ class SchemaTyperTest extends BaseTestSuite with Neo4jAstTestSupport with Mockit
     assertExpr.from("r.relative") shouldHaveInferredType CTBoolean
   }
 
-  it("typing of id function") {
+  it("types of id function") {
     implicit val context: TypeTracker = typeTracker("n" -> CTNode("Person"))
 
     assertExpr.from("id(n)") shouldHaveInferredType CTInteger.nullable
@@ -476,12 +529,28 @@ class SchemaTyperTest extends BaseTestSuite with Neo4jAstTestSupport with Mockit
 
     assertExpr.from("percentileDisc(1, 3.14)") shouldHaveInferredType CTInteger.nullable
     assertExpr.from("percentileDisc(6.67, 3.14)") shouldHaveInferredType CTFloat.nullable
-    assertExpr.from("percentileDisc([1, 3.14][0], 3.14)") shouldHaveInferredType CTInteger.nullable
+    assertExpr.from("percentileDisc([1, 3.14][0], 3.14)") shouldHaveInferredType CTNumber.nullable
 
     // TODO: Making this work requires union types and changing how nullability works. Sad!
     //
     // implicit val context = TyperContext.empty :+ Parameter("param", symbols.CTAny)(pos) -> CTInteger
     // assertExpr.from("percentileDisc([1, 3.14][$param], 3.14)") shouldHaveInferredType CTInteger
+  }
+
+  it("types the properties function") {
+    implicit val context: TypeTracker = typeTracker(
+      "person" -> CTNode(Set("Person")),
+      "personFoo" -> CTNode().nullable,
+      "rel" -> CTRelationship(),
+      "knows" -> CTRelationship("KNOWS").nullable,
+      "map" -> CTMap(Map("foo" -> CTString, "bar" -> CTInteger))
+    )
+
+    assertExpr.from("properties(person)") shouldHaveInferredType CTMap(Map("name" -> CTString, "age" -> CTInteger))
+    assertExpr.from("properties(personFoo)") shouldHaveInferredType CTMap(Map("name" -> CTAny, "age" -> CTNumber)).nullable
+    assertExpr.from("properties(rel)") shouldHaveInferredType CTMap(Map("since" -> CTInteger, "relative" -> CTBoolean))
+    assertExpr.from("properties(knows)") shouldHaveInferredType CTMap(Map("since" -> CTInteger, "relative" -> CTBoolean)).nullable
+    assertExpr.from("properties(map)") shouldHaveInferredType CTMap(Map("foo" -> CTString, "bar" -> CTInteger))
   }
 
   it("types the range function") {

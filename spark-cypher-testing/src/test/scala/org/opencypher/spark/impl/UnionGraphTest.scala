@@ -27,10 +27,9 @@
 package org.opencypher.spark.impl
 
 import org.apache.spark.sql.Row
-import org.opencypher.okapi.relational.api.graph.RelationalCypherGraph
 import org.opencypher.okapi.relational.api.tagging.Tags._
 import org.opencypher.okapi.testing.Bag
-import org.opencypher.spark.impl.table.SparkTable.DataFrameTable
+import org.opencypher.spark.impl.CAPSConverters._
 import org.opencypher.spark.testing.fixture.{GraphConstructionFixture, RecordsVerificationFixture, TeamDataFixture}
 
 class UnionGraphTest extends CAPSGraphTest
@@ -38,7 +37,6 @@ class UnionGraphTest extends CAPSGraphTest
   with RecordsVerificationFixture
   with TeamDataFixture {
 
-  import CAPSGraphTest._
   import CAPSGraphTestData._
 
   def testGraph1 = initGraph("CREATE (:Person {name: 'Mats'})")
@@ -48,28 +46,21 @@ class UnionGraphTest extends CAPSGraphTest
     testGraph1.unionAll(testGraph2).cypher("""MATCH (n) RETURN DISTINCT id(n)""").records.size should equal(2)
   }
 
-  test("Node scan from single node CAPSRecords") {
-    val inputGraph = initGraph(`:Person`)
-    val inputNodes = inputGraph.nodes("n")
+  it("supports UNION ALL on identical graphs") {
+    val g = initGraph("CREATE ()")
+    val union = g.unionAll(g)
+    union.nodes("n").size shouldBe 2
+  }
 
-    val singleTableGraph = caps.graphs.singleTableGraph(inputNodes.planStart, inputGraph.schema, Set(0))
-    val nodes = singleTableGraph.nodes("n")
+  it("supports union in CONSTRUCT:ed graphs") {
+    val g1 = initGraph("CREATE ()-[:FOO]->()")
+    val g2 = initGraph("CREATE ()")
+    caps.catalog.store("g1", g1)
+    caps.catalog.store("g2", g2)
+    val union = caps.cypher("CONSTRUCT ON g1, g2 RETURN GRAPH").graph
 
-    val cols = Seq(
-      n,
-      nHasLabelPerson,
-      nHasLabelSwedish,
-      nHasPropertyLuckyNumber,
-      nHasPropertyName
-    )
-    val data = Bag(
-      Row(0L, true, true, 23L, "Mats"),
-      Row(1L, true, false, 42L, "Martin"),
-      Row(2L, true, false, 1337L, "Max"),
-      Row(3L, true, false, 9L, "Stefan")
-    )
-
-    verify(nodes, cols, data)
+    union.nodes("n").size shouldBe 3
+    union.asCaps.tags shouldBe Set(0, 1)
   }
 
   test("Node scan from multiple single node CAPSRecords") {

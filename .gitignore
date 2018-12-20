@@ -6,6 +6,13 @@ dependency-reduced-pom.xml
 version.txt
 build/test/
 */build
+metastore_db/
+derby.log
+
+# Hive logs
+derby.log
+metastore_db
+metastore_*
 
 # IDE cruft
 .settings

@@ -27,13 +27,15 @@
 package org.opencypher.okapi.relational.impl.planning
 
 import org.opencypher.okapi.api.graph.CypherSession
+import org.opencypher.okapi.api.io.conversion.{NodeMapping, RelationshipMapping}
 import org.opencypher.okapi.api.types.{CTBoolean, CTNode, CTRelationship}
-import org.opencypher.okapi.impl.exception.{NotImplementedException, SchemaException}
+import org.opencypher.okapi.impl.exception.{NotImplementedException, SchemaException, UnsupportedOperationException}
 import org.opencypher.okapi.ir.api.block.SortItem
 import org.opencypher.okapi.ir.api.expr._
-import org.opencypher.okapi.ir.api.{Label, RelType}
+import org.opencypher.okapi.ir.api.{Label, PropertyKey, RelType}
 import org.opencypher.okapi.logical.impl._
 import org.opencypher.okapi.logical.{impl => logical}
+import org.opencypher.okapi.relational.api.io.EntityTable
 import org.opencypher.okapi.relational.api.planning.RelationalRuntimeContext
 import org.opencypher.okapi.relational.api.table.Table
 import org.opencypher.okapi.relational.api.tagging.Tags._
@@ -41,7 +43,6 @@ import org.opencypher.okapi.relational.impl.operators._
 import org.opencypher.okapi.relational.impl.planning.ConstructGraphPlanner._
 import org.opencypher.okapi.relational.impl.table.RecordHeader
 import org.opencypher.okapi.relational.impl.{operators => relational}
-import org.opencypher.okapi.relational.impl.RelationalConverters._
 
 import scala.reflect.runtime.universe.TypeTag
 
@@ -109,6 +110,9 @@ object RelationalPlanner {
       case logical.Distinct(fields, in, _) =>
         val entityExprs: Set[Var] = Set(fields.toSeq: _*)
         relational.Distinct(process[T](in), entityExprs)
+
+      case logical.TabularUnionAll(left, right) =>
+        process[T](left).unionAll(process[T](right))
 
       // TODO: This needs to be a ternary operator taking source, rels and target records instead of just source and target and planning rels only at the physical layer
       case logical.Expand(source, rel, target, direction, sourceOp, targetOp, _) =>
@@ -244,7 +248,7 @@ object RelationalPlanner {
     val lhsOp = process[T](lhs)
     val rhsOp = process[T](rhs)
 
-    if(lhs.fields.isEmpty) {
+    if (lhs.fields.isEmpty) {
       rhsOp
     } else {
       val lhsHeader = lhsOp.header
@@ -296,6 +300,25 @@ object RelationalPlanner {
       relational.Join(op, other.withDisjointColumnNames(op.header), joinExprs, joinType)
     }
 
+    def unionAll(other: RelationalOperator[T]): RelationalOperator[T] = {
+      val combinedHeader = op.header union other.header
+
+      // rename all columns to make sure we have no conflicts
+      val targetHeader = RecordHeader.empty.withExprs(combinedHeader.expressions)
+
+      val elementVars = targetHeader.nodeVars ++ targetHeader.relationshipVars
+
+      val opWithAlignedEntities = elementVars.foldLeft(op) {
+        case (acc, elementVar) => acc.alignExpressions(elementVar, elementVar, targetHeader)
+      }.alignColumnNames(targetHeader)
+
+      val otherWithAlignedEntities = elementVars.foldLeft(other) {
+        case (acc, elementVar) => acc.alignExpressions(elementVar, elementVar, targetHeader)
+      }.alignColumnNames(targetHeader)
+
+      relational.TabularUnionAll(opWithAlignedEntities, otherWithAlignedEntities)
+    }
+
     def add(values: Expr*): RelationalOperator[T] = {
       if (values.isEmpty) op else relational.Add(op, values.toList)
     }
@@ -311,7 +334,7 @@ object RelationalPlanner {
       } else op
     }
 
-    def drop[E <: Expr](expressions: E*): RelationalOperator[T] = {
+    def dropExpressions[E <: Expr](expressions: E*): RelationalOperator[T] = {
       dropExprSet(expressions.toSet)
     }
 
@@ -335,14 +358,21 @@ object RelationalPlanner {
       op.addInto(idRetaggings.toSeq: _*)
     }
 
-    def alignWith(entity: Var, targetHeader: RecordHeader): RelationalOperator[T] = {
-      op.alignExpressions(entity, targetHeader).alignColumnNames(targetHeader)
+    def alignWith(inputEntity: Var, targetEntity: Var, targetHeader: RecordHeader): RelationalOperator[T] = {
+      op.alignExpressions(inputEntity, targetEntity, targetHeader).alignColumnNames(targetHeader)
     }
 
     // TODO: entity needs to contain all labels/relTypes: all case needs to be explicitly expanded with the schema
-    def alignExpressions(targetVar: Var, targetHeader: RecordHeader): RelationalOperator[T] = {
+    /**
+      * Aligns a single element within the operator with the given target entity in the target header.
+      *
+      * @param inputVar the variable of the element that should be aligned
+      * @param targetVar the variable of the reference element
+      * @param targetHeader the header describing the desired state
+      * @return operator with aligned element
+      */
+    def alignExpressions(inputVar: Var, targetVar: Var, targetHeader: RecordHeader): RelationalOperator[T] = {
 
-      val inputVar = op.singleEntity
       val targetHeaderLabels = targetHeader.labelsFor(targetVar).map(_.label.name)
       val targetHeaderTypes = targetHeader.typesFor(targetVar).map(_.relType.name)
 
@@ -350,8 +380,11 @@ object RelationalPlanner {
       val existingLabels = op.header.labelsFor(inputVar).map(_.label.name)
       val existingRelTypes = op.header.typesFor(inputVar).map(_.relType.name)
 
+      val otherEntities = op.header -- Set(inputVar)
+      val toRetain = otherEntities.expressions + (inputVar as targetVar)
+
       // Rename variable and select columns owned by entityVar
-      val renamedEntity = op.select(inputVar as targetVar)
+      val renamedEntity = op.select(toRetain.toSeq: _*)
 
       // Drop expressions that are not in the target header
       val dropExpressions = renamedEntity.header.expressions -- targetHeader.expressions
@@ -400,8 +433,11 @@ object RelationalPlanner {
       )
 
       import Expr._
-      assert(targetHeader.expressions == withProperties.header.expressions,
-        s"Expected header expressions:\n\t${targetHeader.expressions.toSeq.sorted.mkString(", ")},\ngot\n\t${withProperties.header.expressions.toSeq.sorted.mkString(", ")}")
+      assert(targetHeader.expressionsFor(targetVar) == withProperties.header.expressionsFor(targetVar),
+        s"""Expected header expressions for $targetVar:
+           |\t${targetHeader.expressionsFor(targetVar).toSeq.sorted.mkString(", ")},
+           |got
+           |\t${withProperties.header.expressionsFor(targetVar).toSeq.sorted.mkString(", ")}""".stripMargin)
       withProperties
     }
 
@@ -462,6 +498,34 @@ object RelationalPlanner {
       }
     }
 
+    def filterNodeLabels(targetType: CTNode, exactLabelMatch: Boolean = false): RelationalOperator[T] = {
+      val entityVar = op.singleEntity
+
+      val labels = targetType.labels
+
+      val labelExpressions: Iterable[HasLabel] = op.header.labelsFor(entityVar)
+
+      val hasColumnForMandatoryLabels = labels.forall { label =>
+        labelExpressions.exists {
+          case HasLabel(_, Label(l)) if l == label => true
+          case _ => false
+        }
+      }
+
+      if (!hasColumnForMandatoryLabels) {
+        implicit val context: RelationalRuntimeContext[T] = op.context
+        relational.Start(op.session.records.empty(op.header))
+      } else {
+        val filterExpressions = labelExpressions.flatMap {
+          case hl@HasLabel(_, label) if labels.contains(label.name) => Some(Equals(hl, TrueLit)(CTBoolean))
+          case other if exactLabelMatch => Some(Equals(other, FalseLit)(CTBoolean))
+          case _ => None
+        }.toSet
+
+        op.filter(Ands(filterExpressions))
+      }
+    }
+
     def filterRelTypes(targetType: CTRelationship): RelationalOperator[T] = {
       val singleEntity = op.singleEntity
 
@@ -473,6 +537,34 @@ object RelationalPlanner {
           .filter(hasType => targetType.types.contains(hasType.relType.name))
         val filterExpr = Ors(relTypes.map(Equals(_, TrueLit)(CTBoolean)).toSeq: _*)
         op.filter(filterExpr)
+      }
+    }
+
+    def entityTable: EntityTable[T] = {
+      val entity = op.singleEntity
+
+      val header = op.header
+      val idCol = header.idColumns(entity).head
+      val properties = header.propertiesFor(entity).map(p => p -> header.column(p))
+
+      entity.cypherType match {
+        case CTNode(labels, _) =>
+          val mapping = NodeMapping.on(idCol).withImpliedLabels(labels.toSeq: _*)
+          val nodeMapping = properties.foldLeft(mapping) {
+            case (acc, (Property(_, PropertyKey(key)), col)) => acc.withPropertyKey(key, col)
+          }
+          op.session.entityTables.nodeTable(nodeMapping, op.table)
+
+        case CTRelationship(typ, _) =>
+          val sourceCol = header.column(header.startNodeFor(entity))
+          val targetCol = header.column(header.endNodeFor(entity))
+          val mapping = RelationshipMapping.on(idCol).from(sourceCol).to(targetCol).withRelType(typ.head)
+          val relMapping = properties.foldLeft(mapping) {
+            case (acc, (Property(_, PropertyKey(key)), col)) => acc.withPropertyKey(key, col)
+          }
+          op.session.entityTables.relationshipTable(relMapping, op.table)
+
+        case other => throw UnsupportedOperationException(s"Cannot create scan for $other")
       }
     }
   }

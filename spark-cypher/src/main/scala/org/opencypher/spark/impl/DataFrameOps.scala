@@ -29,20 +29,43 @@ package org.opencypher.spark.impl
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{Column, DataFrame, Row}
+import org.apache.spark.sql.{Column, DataFrame, Row, functions}
 import org.apache.spark.storage.StorageLevel.MEMORY_ONLY
 import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.api.value.CypherValue
 import org.opencypher.okapi.api.value.CypherValue.CypherValue
 import org.opencypher.okapi.impl.exception.IllegalArgumentException
 import org.opencypher.okapi.impl.util.Measurement.printTiming
+import org.opencypher.okapi.impl.util.StringEncodingUtilities._
 import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.relational.api.planning.RelationalRuntimeContext
 import org.opencypher.okapi.relational.impl.table.RecordHeader
+import org.opencypher.spark.impl.CAPSFunctions.partitioned_id_assignment
 import org.opencypher.spark.impl.convert.SparkConversions._
 import org.opencypher.spark.impl.table.SparkTable.DataFrameTable
 
 object DataFrameOps {
+
+  /**
+    * Takes a sequence of DataFrames and adds long identifiers to all of them. Identifiers are guaranteed to be unique
+    * across all given DataFrames. The DataFrames are returned in the same order as the input.
+    *
+    * @param dataFrames   sequence of DataFrames to assign ids to
+    * @param idColumnName column name for the generated id
+    * @return a sequence of DataFrames with unique long identifiers
+    */
+  def addUniqueIds(dataFrames: Seq[DataFrame], idColumnName: String): Seq[DataFrame] = {
+    // We need to know how many partitions a DF has in order to avoid writing into the id space of another DF.
+    // This is why require a running sum of number of partitions because we add the DF-specific sum to the offset that
+    // Sparks monotonically_increasing_id adds.
+    val dfPartitionCounts = dataFrames.map(_.rdd.getNumPartitions)
+    val dfPartitionStartDeltas = dfPartitionCounts.scan(0)(_ + _).dropRight(1) // drop last delta, as we don't need it
+
+    dataFrames.zip(dfPartitionStartDeltas).map {
+      case (df, partitionStartDelta) =>
+        df.withColumn(idColumnName, partitioned_id_assignment(partitionStartDelta))
+    }
+  }
 
   implicit class CypherRow(r: Row) {
 
@@ -59,9 +82,41 @@ object DataFrameOps {
     }
   }
 
-
   implicit class RichDataFrame(val df: DataFrame) extends AnyVal {
 
+    def validateColumnTypes(expectedColsWithType: Map[String, CypherType]): Unit = {
+      val missingColumns = expectedColsWithType.keySet -- df.schema.fieldNames.toSet
+
+      if (missingColumns.nonEmpty) {
+        throw IllegalArgumentException(
+          expected = expectedColsWithType.keySet,
+          actual = df.schema.fieldNames.toSet,
+          s"""Expected columns are not contained in the DataFrame.
+             |Missing columns: $missingColumns
+           """.stripMargin
+        )
+      }
+
+      val structFields = df.schema.fields.map(field => field.name -> field).toMap
+
+      expectedColsWithType.foreach {
+        case (column, cypherType) =>
+          val structField = structFields(column)
+
+          val structFieldType = structField.toCypherType match {
+            case Some(cType) => cType
+            case None => throw IllegalArgumentException(
+              expected = s"Cypher-compatible DataType for column $column",
+              actual = structField.dataType)
+          }
+
+          if (structFieldType.material.subTypeOf(cypherType.material).isFalse) {
+            throw IllegalArgumentException(
+              expected = s"Sub-type of $cypherType for column: $column",
+              actual = structFieldType)
+          }
+      }
+    }
 
     /**
       * Returns the corresponding Cypher type for the given column name in the data frame.
@@ -93,34 +148,69 @@ object DataFrameOps {
       df.withColumn(name, f(df.col(name)))
     }
 
-    def setNonNullable(columnName: String): DataFrame = {
-      setNonNullable(Set(columnName))
+    /**
+      * Cast all integer columns in a DataFrame to long.
+      *
+      * @return a DataFrame with all integer values cast to long
+      */
+    def castToLong: DataFrame = {
+      def convertColumns(field: StructField, col: Column): Column = {
+        val converted = field.dataType match {
+          case StructType(inner) =>
+            val fields = inner.map(i => convertColumns(i, col.getField(i.name)))
+            functions.struct(fields: _*)
+          case ArrayType(IntegerType, nullable) => col.cast(ArrayType(LongType, nullable))
+          case IntegerType => col.cast(LongType)
+          case _ => col
+        }
+        converted.as(field.name)
+      }
+
+      val convertedFields = df.schema.fields.map { field => convertColumns(field, df.col(field.name)) }
+
+      df.select(convertedFields: _*)
     }
 
-    def setNonNullable(columnNames: Set[String]): DataFrame = {
-      val newSchema = StructType(df.schema.map {
-        case s@StructField(cn, _, true, _) if columnNames.contains(cn) => s.copy(nullable = false)
-        case other => other
-      })
-      if (newSchema == df.schema) {
-        df
-      } else {
-        df.sparkSession.createDataFrame(df.rdd, newSchema)
+    /**
+      * Adds a new column under a given name containing the hash value of the given input columns.
+      *
+      * The hash is generated using [[org.apache.spark.sql.catalyst.expressions.Murmur3Hash]] based on the given column
+      * sequence. To decrease collision probability, we:
+      *
+      * 1) generate a first hash for the given column sequence
+      * 2) shift the hash into the upper bits of a 64 bit long
+      * 3) generate a second hash using the reversed input column sequence
+      * 4) store the hash in the lower 32 bits of the final id
+      *
+      * @param columns  input columns for the hash function
+      * @param idColumn column storing the result of the hash function
+      * @return DataFrame with an additional idColumn
+      */
+    def withHashColumn(columns: Seq[Column], idColumn: String): DataFrame = {
+      require(columns.nonEmpty, "Hash function requires a non-empty sequence of columns as input.")
+      val id1 = functions.hash(columns: _*).cast(LongType)
+      val shifted = functions.shiftLeft(id1, Integer.SIZE)
+      val id = shifted + functions.hash(columns.reverse: _*)
+
+      df.withColumn(idColumn, id)
+    }
+
+    def withPropertyColumns: DataFrame = {
+      df.columns.foldLeft(df) {
+        case (currentDf, column) => currentDf.withColumnRenamed(column, column.toPropertyColumnName)
       }
     }
 
-    def setNullability(mapping: Map[String, CypherType]): DataFrame = {
-      val newSchema = StructType(df.schema.map {
-        case s@StructField(cn, _, _, _) => mapping.get(cn) match {
-          case Some(ct) => ct.toStructField(cn)
-          case None => s
-        }
-        case other => throw IllegalArgumentException(s"No mapping provided for $other")
-      })
-      if (newSchema == df.schema) {
-        df
-      } else {
-        df.sparkSession.createDataFrame(df.rdd, newSchema)
+    def prefixColumns(prefix: String): DataFrame = {
+      df.columns.foldLeft(df) {
+        case (currentDf, column) => currentDf.withColumnRenamed(column, s"$prefix$column")
+      }
+    }
+
+    def removePrefix(prefix: String): DataFrame = {
+      df.columns.foldLeft(df) {
+        case (currentDf, column) if column.startsWith(prefix) => currentDf.withColumnRenamed(column, column.substring(prefix.length))
+        case (currentDf, _) => currentDf
       }
     }
 

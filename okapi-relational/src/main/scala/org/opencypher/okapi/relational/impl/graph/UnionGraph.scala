@@ -26,21 +26,26 @@
  */
 package org.opencypher.okapi.relational.impl.graph
 
+import org.opencypher.okapi.api.schema.LabelPropertyMap._
+import org.opencypher.okapi.api.schema.RelTypePropertyMap._
 import org.opencypher.okapi.api.schema.Schema
-import org.opencypher.okapi.api.types.CypherType
+import org.opencypher.okapi.api.types.{CTNode, CTRelationship, CypherType}
+import org.opencypher.okapi.impl.exception.UnsupportedOperationException
 import org.opencypher.okapi.ir.api.expr.Var
 import org.opencypher.okapi.relational.api.graph.{RelationalCypherGraph, RelationalCypherSession}
 import org.opencypher.okapi.relational.api.planning.RelationalRuntimeContext
 import org.opencypher.okapi.relational.api.schema.RelationalSchema._
 import org.opencypher.okapi.relational.api.table.{RelationalCypherRecords, Table}
-import org.opencypher.okapi.relational.impl.operators.{Distinct, RelationalOperator, TabularUnionAll}
+import org.opencypher.okapi.relational.impl.operators.{RelationalOperator, Start, TabularUnionAll}
 import org.opencypher.okapi.relational.impl.planning.RelationalPlanner._
 
 import scala.reflect.runtime.universe.TypeTag
 
 // TODO: This should be a planned tree of physical operators instead of a graph
-final case class UnionGraph[T <: Table[T] : TypeTag](graphsToReplacements: Map[RelationalCypherGraph[T], Map[Int, Int]])
+final case class UnionGraph[T <: Table[T] : TypeTag](graphsToReplacements: Seq[(RelationalCypherGraph[T], Map[Int, Int])])
   (implicit context: RelationalRuntimeContext[T]) extends RelationalCypherGraph[T] {
+
+  private val (graphs, replacements) = graphsToReplacements.unzip
 
   override implicit val session: RelationalCypherSession[T] = context.session
 
@@ -50,12 +55,12 @@ final case class UnionGraph[T <: Table[T] : TypeTag](graphsToReplacements: Map[R
 
   require(graphsToReplacements.nonEmpty, "Union requires at least one graph")
 
-  override def tables: Seq[T] = graphsToReplacements.keys.flatMap(_.tables).toSeq
+  override def tables: Seq[T] = graphs.flatMap(_.tables)
 
-  override lazy val tags: Set[Int] = graphsToReplacements.values.flatMap(_.values).toSet
+  override lazy val tags: Set[Int] = replacements.flatMap(_.values).toSet
 
   override lazy val schema: Schema = {
-    graphsToReplacements.keys.map(g => g.schema).foldLeft(Schema.empty)(_ ++ _)
+    graphs.map(g => g.schema).foldLeft(Schema.empty)(_ ++ _)
   }
 
   override def toString = s"UnionGraph(graphs=[${graphsToReplacements.mkString(",")}])"
@@ -66,13 +71,38 @@ final case class UnionGraph[T <: Table[T] : TypeTag](graphsToReplacements: Map[R
   ): RelationalOperator[T] = {
     val targetEntity = Var("")(entityType)
     val targetEntityHeader = schema.headerForEntity(targetEntity, exactLabelMatch)
-    val alignedScans = graphsToReplacements.keys
-      .map { graph =>
-        val scanOp = graph.scanOperator(entityType, exactLabelMatch)
-        val retagOp = scanOp.retagVariable(targetEntity, graphsToReplacements(graph))
-        retagOp.alignWith(targetEntity, targetEntityHeader)
+    val alignedScans = graphsToReplacements
+      .flatMap {
+        case (graph, replacement) =>
+          val isEmptyScan = entityType match {
+            case CTNode(knownLabels, _) if knownLabels.isEmpty =>
+              graph.schema.allCombinations.isEmpty
+            case CTNode(knownLabels, _) =>
+              graph.schema.labelPropertyMap.filterForLabels(knownLabels).isEmpty
+            case CTRelationship(types, _) if types.isEmpty =>
+              graph.schema.relationshipTypes.isEmpty
+            case CTRelationship(types, _) =>
+              graph.schema.relTypePropertyMap.filterForRelTypes(types).isEmpty
+            case other => throw UnsupportedOperationException(s"Cannot scan on $other")
+          }
+
+          if (isEmptyScan) {
+            None
+          }
+          else {
+            val scanOp = graph.scanOperator(entityType, exactLabelMatch)
+            val retagOp = scanOp.retagVariable(targetEntity, replacement)
+            val inputEntity = retagOp.singleEntity
+            Some(retagOp.alignWith(inputEntity, targetEntity, targetEntityHeader))
+          }
       }
-    // TODO: find out if a graph returns empty records and skip union operation
-    Distinct(alignedScans.reduce(TabularUnionAll(_, _)), Set(targetEntity))
+
+    alignedScans match {
+      case Nil =>
+        Start(session.records.empty(targetEntityHeader))
+      case _ =>
+        alignedScans.reduce(TabularUnionAll(_, _))
+    }
+
   }
 }

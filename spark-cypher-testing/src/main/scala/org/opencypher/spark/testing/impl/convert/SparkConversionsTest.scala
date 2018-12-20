@@ -28,10 +28,10 @@ package org.opencypher.spark.testing.impl.convert
 
 import org.apache.spark.sql.types._
 import org.opencypher.okapi.api.types._
-import org.scalatest.{FunSpec, Matchers}
+import org.opencypher.okapi.testing.BaseTestSuite
 import org.opencypher.spark.impl.convert.SparkConversions._
 
-class SparkConversionsTest extends FunSpec with Matchers {
+class SparkConversionsTest extends BaseTestSuite {
 
   it("should produce the correct StructField for non-nested types") {
     CTInteger.toStructField("foo") should equal(StructField("foo", LongType, nullable = false))
@@ -42,6 +42,10 @@ class SparkConversionsTest extends FunSpec with Matchers {
     CTBooleanOrNull.toStructField("foo") should equal(StructField("foo", BooleanType, nullable = true))
     CTString.toStructField("foo") should equal(StructField("foo", StringType, nullable = false))
     CTStringOrNull.toStructField("foo") should equal(StructField("foo", StringType, nullable = true))
+    CTDateTime.toStructField("foo") should equal(StructField("foo", TimestampType, nullable = false))
+    CTDateTimeOrNull.toStructField("foo") should equal(StructField("foo", TimestampType, nullable = true))
+    CTDate.toStructField("foo") should equal(StructField("foo", DateType, nullable = false))
+    CTDateOrNull.toStructField("foo") should equal(StructField("foo", DateType, nullable = true))
 
     CTNode(Set("A")).toStructField("foo") should equal(StructField("foo", LongType, nullable = false))
     CTNodeOrNull(Set("A")).toStructField("foo") should equal(StructField("foo", LongType, nullable = true))
@@ -70,12 +74,12 @@ class SparkConversionsTest extends FunSpec with Matchers {
     CTList(CTList(CTInteger.nullable).nullable).nullable.toStructField("foo") should equal(
       StructField("foo", ArrayType(ArrayType(LongType, containsNull = true), containsNull = true), nullable = true)
     )
-  }
 
-  it("should throw for unsupported CypherTypes") {
-    a[org.opencypher.okapi.impl.exception.IllegalArgumentException] shouldBe thrownBy {
-      CTMap.toStructField("foo")
-    }
+    CTMap(Map("foo" -> CTInteger, "bar" -> CTString.nullable)).toStructField("myMap") should equal(
+      StructField("myMap", StructType(Seq(
+        StructField("foo", LongType, nullable = false),
+        StructField("bar", StringType, nullable = true)
+      )))
+    )
   }
-
 }

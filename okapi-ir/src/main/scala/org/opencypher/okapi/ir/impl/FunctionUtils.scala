@@ -60,6 +60,12 @@ object FunctionUtils {
         case functions.ToBoolean => ToBoolean(expr.head)(cypherType)
         case functions.Range => Range(expr(0), expr(1), expr.lift(2))
         case functions.Substring => Substring(expr(0), expr(1), expr.lift(2))
+        case functions.Trim => Trim(expr.head)(cypherType)
+        case functions.LTrim => LTrim(expr.head)(cypherType)
+        case functions.RTrim => RTrim(expr.head)(cypherType)
+        case functions.ToUpper => ToUpper(expr.head) (cypherType)
+        case functions.ToLower => ToLower(expr.head) (cypherType)
+        case functions.Properties => Properties(expr.head)(cypherType)
 
         // Logarithmic functions
         case functions.Sqrt => Sqrt(expr.head)(cypherType)
@@ -77,10 +83,25 @@ object FunctionUtils {
         case functions.Round => Round(expr.head)(cypherType)
         case functions.Sign => Sign(expr.head)(cypherType)
 
+        // Trigonometric functions
+        case functions.Acos => Acos(expr.head)(cypherType)
+        case functions.Asin => Asin(expr.head)(cypherType)
+        case functions.Atan => Atan(expr.head)(cypherType)
+        case functions.Atan2 => Atan2(expr(0),expr(1))(cypherType)
+        case functions.Cos => Cos(expr.head)(cypherType)
+        case functions.Cot => Cot(expr.head)(cypherType)
+        case functions.Degrees => Degrees(expr.head)(cypherType)
+        case functions.Haversin => Haversin(expr.head)(cypherType)
+        case functions.Radians => Radians(expr.head)(cypherType)
+        case functions.Sin => Sin(expr.head)(cypherType)
+        case functions.Tan => Tan(expr.head)(cypherType)
+
         // Match by name
         case functions.UnresolvedFunction => functionInvocation.name match {
           // Time functions
           case f.Timestamp.name => Timestamp()(cypherType)
+          case f.DateTime.name => DateTime(expr.headOption)(cypherType)
+          case f.Date.name => Date(expr.headOption)(cypherType)
 
           case name => throw NotImplementedException(s"Support for converting ${name} function not yet implemented")
         }

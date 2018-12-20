@@ -31,6 +31,7 @@ import org.apache.spark.sql.{Column, DataFrame, functions}
 import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.api.value.CypherValue.{CypherList, CypherMap}
 import org.opencypher.okapi.impl.exception.{IllegalArgumentException, IllegalStateException, NotImplementedException, UnsupportedOperationException}
+import org.opencypher.okapi.ir.api.PropertyKey
 import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.relational.impl.table.RecordHeader
 import org.opencypher.spark.impl.CAPSFunctions.{array_contains, get_node_labels, get_property_keys, get_rel_type, _}
@@ -92,8 +93,17 @@ object SparkSQLExprMapper {
             case CypherList(l) => functions.array(l.unwrap.map(functions.lit): _*)
             case notAList => throw IllegalArgumentException("a Cypher list", notAList)
           }
+
         case Param(name) =>
-          functions.lit(parameters(name).unwrap)
+          toSparkLiteral(parameters(name).unwrap)
+
+        case Property(map, PropertyKey(key)) if map.cypherType.material.isInstanceOf[CTMap] =>
+          val fields =  map.cypherType.material match {
+            case CTMap(inner) => inner.keySet
+            case _ => Set.empty[String]
+          }
+
+          if (fields.contains(key)) map.asSparkSQLExpr.getField(key) else functions.lit(null)
 
         case _: Property if !header.contains(expr) => NULL_LIT
 
@@ -117,6 +127,22 @@ object SparkSQLExprMapper {
 
         case NullLit(ct) =>
           NULL_LIT.cast(ct.toSparkType.get)
+
+        // TODO: extract argument mapping to helper function/class
+        case DateTime(expr) =>
+          val mappedArgs = expr match {
+            case Some(e) => e.asSparkSQLExpr
+            case None => functions.current_timestamp()
+          }
+          functions.lit(mappedArgs).cast(DataTypes.TimestampType)
+
+        // TODO: see above
+        case Date(expr) =>
+          val mappedArgs = expr match {
+            case Some(e) => e.asSparkSQLExpr
+            case None => functions.current_timestamp()
+          }
+          functions.lit(mappedArgs).cast(DataTypes.DateType)
 
         case l: Lit[_] => functions.lit(l.v)
 
@@ -210,12 +236,37 @@ object SparkSQLExprMapper {
           val booleanLabelFlagColumn = functions.array(labelColumns: _*)
           get_node_labels(labelNames)(booleanLabelFlagColumn)
 
-        case Keys(e) =>
-          val node = e.owner.get
-          val propertyExprs = header.propertiesFor(node).toSeq.sortBy(_.key.name)
-          val (propertyKeys, propertyColumns) = propertyExprs.map(e => e.key.name -> e.asSparkSQLExpr).unzip
-          val valuesColumn = functions.array(propertyColumns: _*)
-          get_property_keys(propertyKeys)(valuesColumn)
+        case Keys(e) => e.cypherType.material match {
+          case _: CTNode | _: CTRelationship =>
+            val node = e.owner.get
+            val propertyExprs = header.propertiesFor(node).toSeq.sortBy(_.key.name)
+            val (propertyKeys, propertyColumns) = propertyExprs.map(e => e.key.name -> e.asSparkSQLExpr).unzip
+            val valuesColumn = functions.array(propertyColumns: _*)
+            get_property_keys(propertyKeys)(valuesColumn)
+
+          case CTMap(innerTypes) =>
+            val mapColumn = e.asSparkSQLExpr
+            val (keys, valueColumns) = innerTypes.keys.map { e =>
+              // Whe have to make sure that every column has the same type (true or null)
+              e -> functions.when(mapColumn.getField(e).isNotNull, functions.lit(true)).otherwise(NULL_LIT)
+            }.toSeq.unzip
+            val valueColumn = functions.array(valueColumns: _*)
+            get_property_keys(keys)(valueColumn)
+
+          case other => throw IllegalArgumentException("an Expression with type CTNode, CTRelationship or CTMap", other)
+        }
+
+        case Properties(e) =>
+          e.cypherType.material match {
+            case _: CTNode | _: CTRelationship =>
+              val element = e.owner.get
+              val propertyExprs = header.propertiesFor(element).toSeq.sortBy(_.key.name)
+              val propertyColumns = propertyExprs.map(e => e.asSparkSQLExpr.as(e.key.name))
+              createStructColumn(propertyColumns)
+            case _: CTMap => e.asSparkSQLExpr
+            case other =>
+              throw IllegalArgumentException("a node, relationship or map", other, "Invalid input to properties function")
+          }
 
         case Type(inner) =>
           inner match {
@@ -250,6 +301,13 @@ object SparkSQLExprMapper {
           case other => throw IllegalArgumentException("CTList", other)
         }
 
+        case Trim(str) => functions.trim(str.asSparkSQLExpr)
+        case LTrim(str) => functions.ltrim(str.asSparkSQLExpr)
+        case RTrim(str) => functions.rtrim(str.asSparkSQLExpr)
+
+        case ToUpper(str) => functions.upper(str.asSparkSQLExpr)
+        case ToLower(str) => functions.lower(str.asSparkSQLExpr)
+
         case Range(from, to, maybeStep) =>
           val stepCol = maybeStep.map(_.asSparkSQLExpr).getOrElse(ONE_LIT)
           rangeUdf(from.asSparkSQLExpr, to.asSparkSQLExpr, stepCol)
@@ -275,6 +333,19 @@ object SparkSQLExprMapper {
         case _: Rand => functions.rand()
         case Round(e) => functions.round(e.asSparkSQLExpr).cast(DoubleType)
         case Sign(e) => functions.signum(e.asSparkSQLExpr).cast(IntegerType)
+
+        case Acos(e) => functions.acos(e.asSparkSQLExpr)
+        case Asin(e) => functions.asin(e.asSparkSQLExpr)
+        case Atan(e) => functions.atan(e.asSparkSQLExpr)
+        case Atan2(e1,e2) => functions.atan2(e1.asSparkSQLExpr, e2.asSparkSQLExpr)
+        case Cos(e) => functions.cos(e.asSparkSQLExpr)
+        case Cot(e) => Divide(IntegerLit(1)(CTInteger), Tan(e)(CTFloat))(CTFloat).asSparkSQLExpr
+        case Degrees(e) => functions.degrees(e.asSparkSQLExpr)
+        case Haversin(e) => Divide(Subtract(IntegerLit(1)(CTInteger),Cos(e)(CTFloat))(CTFloat), IntegerLit(2)(CTInteger))(CTFloat).asSparkSQLExpr
+        case Radians(e) => functions.radians(e.asSparkSQLExpr)
+        case Sin(e) => functions.sin(e.asSparkSQLExpr)
+        case Tan(e) => functions.tan(e.asSparkSQLExpr)
+
 
         // Time functions
 
@@ -323,9 +394,21 @@ object SparkSQLExprMapper {
           val containerCol = container.asSparkSQLExpr
 
           container.cypherType.material match {
-            case _: CTList => containerCol.get(indexCol)
+            case _: CTList | _: CTMap => containerCol.get(indexCol)
             case other => throw NotImplementedException(s"Accessing $other by index is not supported")
           }
+
+        case MapExpression(items) => expr.cypherType.material match {
+          case CTMap(inner) =>
+            val innerColumns = items.map {
+              case (key, innerExpr) =>
+                val targetType = inner(key).toSparkType.get
+                innerExpr.asSparkSQLExpr.cast(targetType).as(key)
+            }.toSeq
+            createStructColumn(innerColumns)
+          case other => throw IllegalArgumentException("an expression of type CTMap", other)
+        }
+
 
         case _ =>
           throw NotImplementedException(s"No support for converting Cypher expression $expr to a Spark SQL expression")
@@ -333,4 +416,20 @@ object SparkSQLExprMapper {
     }
   }
 
+  private def toSparkLiteral(value: Any): Column = value match {
+    case map: Map[_, _] =>
+      val columns = map.map {
+        case (key, v) => toSparkLiteral(v).as(key.toString)
+      }.toSeq
+      createStructColumn(columns)
+    case _ => functions.lit(value)
+  }
+
+  private def createStructColumn(structColumns: Seq[Column]): Column = {
+    if (structColumns.isEmpty) {
+      functions.lit(null).cast(new StructType())
+    } else {
+      functions.struct(structColumns: _*)
+    }
+  }
 }

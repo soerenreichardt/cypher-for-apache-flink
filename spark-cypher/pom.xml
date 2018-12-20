@@ -7,7 +7,7 @@
   <parent>
     <groupId>org.opencypher</groupId>
     <artifactId>okapi</artifactId>
-    <version>0.2.1-SNAPSHOT</version>
+    <version>0.2.4-SNAPSHOT</version>
   </parent>
 
   <artifactId>spark-cypher</artifactId>
@@ -31,26 +31,32 @@
       <version>${project.parent.version}</version>
     </dependency>
 
+    <dependency>
+      <groupId>org.opencypher</groupId>
+      <artifactId>graph-ddl</artifactId>
+      <version>${project.parent.version}</version>
+    </dependency>
+
     <!-- Spark -->
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${project.scala.binary.version}</artifactId>
       <version>${dep.spark.version}</version>
-      <scope>${dep.spark.scope}</scope>
+      <scope>provided</scope>
     </dependency>
 
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-sql_${project.scala.binary.version}</artifactId>
       <version>${dep.spark.version}</version>
-      <scope>${dep.spark.scope}</scope>
+      <scope>provided</scope>
     </dependency>
 
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-catalyst_${project.scala.binary.version}</artifactId>
       <version>${dep.spark.version}</version>
-      <scope>${dep.spark.scope}</scope>
+      <scope>provided</scope>
     </dependency>
 
     <!-- Neo4j -->
@@ -61,4 +67,51 @@
     </dependency>
 
   </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>${plugin.maven-shade.version}</version>
+        <executions>
+          <!-- run shade goal on package phase -->
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <shadedArtifactAttached>true</shadedArtifactAttached>
+              <shadedClassifierName>${project.artifact.classifier}</shadedClassifierName>
+              <createDependencyReducedPom>true</createDependencyReducedPom>
+              <artifactSet>
+                <excludes>
+                  <exclude>org.scala-lang:*</exclude>
+                  <exclude>org.scalatest:*</exclude>
+                  <exclude>org.scalacheck:*</exclude>
+                </excludes>
+              </artifactSet>
+              <filters>
+
+                <filter>
+                  <artifact>*:*</artifact>
+                  <excludes>
+                    <exclude>META-INF/*.SF</exclude>
+                    <exclude>META-INF/*.DSA</exclude>
+                    <exclude>META-INF/*.RSA</exclude>
+                    <!--Exclude Java 9 modules-->
+                    <exclude>**/module-info.class</exclude>
+                    <exclude>META-INF/versions/9/**/*</exclude>
+                  </excludes>
+                </filter>
+
+              </filters>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
 </project>

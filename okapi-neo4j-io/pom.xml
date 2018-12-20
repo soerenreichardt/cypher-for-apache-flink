@@ -7,7 +7,7 @@
   <parent>
     <groupId>org.opencypher</groupId>
     <artifactId>okapi</artifactId>
-    <version>0.2.1-SNAPSHOT</version>
+    <version>0.2.4-SNAPSHOT</version>
   </parent>
 
   <artifactId>okapi-neo4j-io</artifactId>
@@ -22,14 +22,6 @@
       <groupId>org.opencypher</groupId>
       <artifactId>okapi-api</artifactId>
       <version>${project.parent.version}</version>
-    </dependency>
-
-    <dependency>
-      <groupId>org.opencypher</groupId>
-      <artifactId>okapi-api</artifactId>
-      <version>${project.parent.version}</version>
-      <type>test-jar</type>
-      <scope>test</scope>
     </dependency>
 
     <!-- Neo4j -->

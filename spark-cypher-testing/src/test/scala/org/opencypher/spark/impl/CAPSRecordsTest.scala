@@ -33,18 +33,71 @@ import org.opencypher.okapi.api.value.CypherValue._
 import org.opencypher.okapi.impl.exception.InternalException
 import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.ir.api.{Label, PropertyKey, RelType}
+import org.opencypher.okapi.relational.api.tagging.Tags._
 import org.opencypher.okapi.relational.impl.table.RecordHeader
 import org.opencypher.okapi.testing.Bag
 import org.opencypher.okapi.testing.Bag._
 import org.opencypher.okapi.testing.MatchHelper.equalWithTracing
 import org.opencypher.spark.api.io.{CAPSNodeTable, CAPSRelationshipTable}
 import org.opencypher.spark.api.value.CAPSNode
-import org.opencypher.spark.impl.DataFrameOps._
 import org.opencypher.spark.testing.CAPSTestSuite
 import org.opencypher.spark.testing.fixture.{GraphConstructionFixture, TeamDataFixture}
-import org.opencypher.okapi.relational.api.tagging.Tags._
+
+import scala.util.Try
 
 class CAPSRecordsTest extends CAPSTestSuite with GraphConstructionFixture with TeamDataFixture {
+
+  describe("columnsFor") {
+
+    it("can resolve a primitive return item") {
+      caps.cypher("RETURN 1").records.columnsFor("1") should equal(Set("$  AUTOINT0 __ INTEGER"))
+      caps.cypher("RETURN 1 AS foo").records.columnsFor("foo") should equal(Set("$  AUTOINT0 __ INTEGER"))
+      caps.cypher("RETURN 1 AS foo, 2 AS bar").records.columnsFor("bar") should equal(Set("$  AUTOINT1 __ INTEGER"))
+    }
+
+    it("can resolve a node") {
+      val given = initGraph("CREATE (:L {val: 'a'})")
+      caps.catalog.store("foo", given)
+
+      val result = given.cypher("FROM GRAPH foo MATCH (n) RETURN n")
+
+      result.records.columnsFor("n") should equal(
+        Set(
+          s" __ NODE @ session_foo",
+          "_val __ STRING",
+          "_L __ BOOLEAN"
+        )
+      )
+    }
+
+    it("can resolve a relationship") {
+      val given = initGraph("CREATE ({val: 'a'})-[:R {prop: 'b'}]->({val: 'c'})")
+      caps.catalog.store("foo", given)
+
+      val result = given.cypher("FROM GRAPH foo MATCH (n)-[r]->(m) RETURN r")
+
+      result.records.columnsFor("r") should equal(
+        Set(
+          "type() = 'R' __ BOOLEAN",
+          " __ RELATIONSHIP @ session_foo",
+          "source( __ RELATIONSHIP @ session_foo) __ NODE",
+          "target( __ RELATIONSHIP @ session_foo) __ NODE",
+          "_prop __ STRING"
+        )
+      )
+    }
+
+    it("fails when resolving a non-existing return item") {
+      val expected = "A return item in this table, which contains: [`bar`, `foo`]"
+
+      Try(caps.cypher("RETURN 1 AS foo, 2 AS bar").records.columnsFor("almostFoo")) match {
+        case scala.util.Success(_) => fail()
+        case scala.util.Failure(exception) => {
+          exception.getMessage should (include(expected) and include("almostFoo"))
+        }
+      }
+    }
+  }
 
   // TODO: Test new RetagVariable operator instead
   ignore("retags a node variable") {
@@ -86,7 +139,7 @@ class CAPSRecordsTest extends CAPSTestSuite with GraphConstructionFixture with T
         (11L, 2L, 3L, "BLUE"),
         (12L, 3L, 4L, "GREEN"),
         (13L, 4L, 1L, "YELLOW")
-      )).toDF("ID", "FROM", "TO", "COLOR").setNonNullable("COLOR")
+      )).toDF("ID", "FROM", "TO", "COLOR")
 
     val givenMapping = RelationshipMapping.on("ID")
       .from("FROM")
@@ -219,7 +272,7 @@ class CAPSRecordsTest extends CAPSTestSuite with GraphConstructionFixture with T
             (11L, 2L, 3L, "BLUE"),
             (12L, 3L, 4L, "GREEN"),
             (13L, 4L, 1L, "YELLOW")
-      )).toDF("ID", "FROM", "TO", "COLOR").setNonNullable("COLOR")
+      )).toDF("ID", "FROM", "TO", "COLOR")
 
     val givenMapping = RelationshipMapping.on("ID")
       .from("FROM")

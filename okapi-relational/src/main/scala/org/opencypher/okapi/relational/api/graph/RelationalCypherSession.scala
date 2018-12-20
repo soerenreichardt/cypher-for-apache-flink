@@ -42,13 +42,13 @@ import org.opencypher.okapi.ir.impl.{IRBuilder, IRBuilderContext, QueryLocalCata
 import org.opencypher.okapi.logical.api.configuration.LogicalConfiguration.PrintLogicalPlan
 import org.opencypher.okapi.logical.impl._
 import org.opencypher.okapi.relational.api.configuration.CoraConfiguration.{PrintOptimizedRelationalPlan, PrintQueryExecutionStages, PrintRelationalPlan}
+import org.opencypher.okapi.relational.api.io.{EntityTable, NodeTable}
 import org.opencypher.okapi.relational.api.planning.{RelationalCypherResult, RelationalRuntimeContext}
-import org.opencypher.okapi.relational.api.table.{RelationalCypherRecords, RelationalCypherRecordsFactory, Table}
+import org.opencypher.okapi.relational.api.table.{RelationalCypherRecords, RelationalCypherRecordsFactory, RelationalEntityTableFactory, Table}
 import org.opencypher.okapi.relational.impl.RelationalConverters._
 import org.opencypher.okapi.relational.impl.planning.{RelationalOptimizer, RelationalPlanner}
 
 import scala.reflect.runtime.universe.TypeTag
-import scala.util.Try
 
 /**
   * Base class for relational back ends implementing the OKAPI pipeline.
@@ -77,6 +77,29 @@ abstract class RelationalCypherSession[T <: Table[T] : TypeTag] extends CypherSe
   private implicit val session: RelationalCypherSession[T] = this
 
   /**
+    * Reads a graph from a sequence of entity tables that contains at least one node table.
+    *
+    * @param nodeTable    first parameter to guarantee there is at least one node table
+    * @param entityTables sequence of node and relationship tables defining the graph
+    * @return property graph
+    */
+  def readFrom(nodeTable: NodeTable[T], entityTables: EntityTable[T]*): PropertyGraph = {
+    graphs.create(nodeTable, entityTables: _ *)
+  }
+
+  /**
+    * Reads a graph from a sequence of entity tables that contains at least one node table.
+    *
+    * @param tags         tags that are used by graph entities
+    * @param nodeTable    first parameter to guarantee there is at least one node table
+    * @param entityTables sequence of node and relationship tables defining the graph
+    * @return property graph
+    */
+  def readFrom(tags: Set[Int], nodeTable: NodeTable[T], entityTables: EntityTable[T]*): PropertyGraph = {
+    graphs.create(tags, None, nodeTable +: entityTables: _*)
+  }
+
+  /**
     * Qualified graph name for the empty graph
     */
   private[opencypher] lazy val emptyGraphQgn = QualifiedGraphName(SessionGraphDataSource.Namespace, GraphName("emptyGraph"))
@@ -95,6 +118,8 @@ abstract class RelationalCypherSession[T <: Table[T] : TypeTag] extends CypherSe
   private[opencypher] def records: RelationalCypherRecordsFactory[T]
 
   private[opencypher] def graphs: RelationalCypherGraphFactory[T]
+
+  private[opencypher] def entityTables: RelationalEntityTableFactory[T]
 
   private[opencypher] def graphAt(qgn: QualifiedGraphName): Option[RelationalCypherGraph[T]] =
     if (catalog.graphNames.contains(qgn)) Some(catalog.graph(qgn).asRelational) else None
@@ -160,7 +185,7 @@ abstract class RelationalCypherSession[T <: Table[T] : TypeTag] extends CypherSe
 
     logStageProgress("Done!")
 
-    ir match {
+    def processIR(ir: CypherStatement): RelationalCypherResult[T] = ir match {
       case cq: CypherQuery =>
         if (PrintIr.isSet) {
           println("IR:")
@@ -168,24 +193,26 @@ abstract class RelationalCypherSession[T <: Table[T] : TypeTag] extends CypherSe
         }
         planCypherQuery(graph, cq, allParameters, inputFields, maybeRelationalRecords, queryLocalCatalog)
 
-      case CreateGraphStatement(_, targetGraph, innerQueryIr) =>
+      case CreateGraphStatement(targetGraph, innerQueryIr) =>
         val innerResult = planCypherQuery(graph, innerQueryIr, allParameters, inputFields, maybeRelationalRecords, queryLocalCatalog)
         val resultGraph = innerResult.graph
         catalog.store(targetGraph.qualifiedGraphName, resultGraph)
         RelationalCypherResult.empty
 
-      case CreateViewStatement(_, qgn, parameterNames, queryString) =>
+      case CreateViewStatement(qgn, parameterNames, queryString) =>
         catalog.store(qgn, parameterNames, queryString)
         RelationalCypherResult.empty
 
-      case DeleteGraphStatement(_, qgn) =>
+      case DeleteGraphStatement(qgn) =>
         catalog.dropGraph(qgn)
         RelationalCypherResult.empty
 
-      case DeleteViewStatement(_, qgn) =>
+      case DeleteViewStatement(qgn) =>
         catalog.dropView(qgn)
         RelationalCypherResult.empty
     }
+
+    processIR(ir)
   }
 
   protected def planCypherQuery(
@@ -228,9 +255,8 @@ abstract class RelationalCypherSession[T <: Table[T] : TypeTag] extends CypherSe
   ): Result = {
     logStageProgress("Relational planning ... ", newLine = false)
 
-    def queryLocalGraphAt(qgn: QualifiedGraphName): Option[RelationalCypherGraph[T]] = {
-      Try(new RichPropertyGraph(queryLocalCatalog.graph(qgn)).asRelational[T]).toOption
-    }
+    def queryLocalGraphAt(qgn: QualifiedGraphName): Option[RelationalCypherGraph[T]] =
+      Some(new RichPropertyGraph(queryLocalCatalog.graph(qgn)).asRelational[T])
 
     implicit val context: RelationalRuntimeContext[T] = RelationalRuntimeContext(queryLocalGraphAt, maybeDrivingTable, parameters)
 

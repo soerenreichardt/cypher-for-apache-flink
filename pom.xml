@@ -6,7 +6,7 @@
 
   <groupId>org.opencypher</groupId>
   <artifactId>okapi</artifactId>
-  <version>0.2.1-SNAPSHOT</version>
+  <version>0.2.4-SNAPSHOT</version>
 
   <name>Okapi - openCypher query compilation API and pipeline</name>
   <packaging>pom</packaging>
@@ -49,7 +49,7 @@
     <project.scala.binary.version>2.11</project.scala.binary.version>
     <project.scala.version>${project.scala.binary.version}.12</project.scala.version>
     <project.rootdir>${project.basedir}</project.rootdir>
-    <project.artifact.classifier>standalone</project.artifact.classifier>
+    <project.artifact.classifier>cluster</project.artifact.classifier>
     <java9.exports></java9.exports>
 
     <!-- Used plugins -->
@@ -60,7 +60,6 @@
     <plugin.maven-resources.version>2.7</plugin.maven-resources.version>
     <plugin.maven-scala.version>3.2.1</plugin.maven-scala.version>
     <plugin.maven-scalastyle.version>0.8.0</plugin.maven-scalastyle.version>
-    <plugin.maven-scalatest.version>2.0.0</plugin.maven-scalatest.version>
     <plugin.maven-shade.version>3.1.1</plugin.maven-shade.version>
     <plugin.maven-surefire.version>2.20.1</plugin.maven-surefire.version>
 
@@ -69,11 +68,10 @@
     <dep.eff.version>5.0.0</dep.eff.version>
     <dep.fastparse.version>1.0.0</dep.fastparse.version>
     <dep.hadoop.version>2.7.0</dep.hadoop.version>
-    <dep.neo4j.version>3.4.6</dep.neo4j.version>
-    <dep.neo4j.driver.version>1.6.1</dep.neo4j.driver.version>
-    <dep.opencypher.front-end.version>9.0.20180914</dep.opencypher.front-end.version>
-    <dep.spark.version>2.2.1</dep.spark.version>
-    <dep.spark.scope>compile</dep.spark.scope>
+    <dep.neo4j.version>3.4.10</dep.neo4j.version>
+    <dep.neo4j.driver.version>1.7.2</dep.neo4j.driver.version>
+    <dep.opencypher.front-end.version>9.0.20181030</dep.opencypher.front-end.version>
+    <dep.spark.version>2.2.2</dep.spark.version>
     <dep.flink.version>1.7.0</dep.flink.version>
     <dep.flink.scope>compile</dep.flink.scope>
     <dep.upickle.version>0.6.6</dep.upickle.version>
@@ -82,26 +80,47 @@
 
     <!-- Test scope dependencies -->
     <dep.bouncycastle.version>1.59</dep.bouncycastle.version>
-    <dep.junit.version>5.0.2</dep.junit.version>
+    <dep.h2.version>1.4.196</dep.h2.version>
+    <dep.junit.version>4.12</dep.junit.version>
     <dep.junit.platform.version>1.0.2</dep.junit.platform.version>
-    <dep.junit.vintage.version>4.12.2</dep.junit.vintage.version>
     <dep.mockito.version>1.10.19</dep.mockito.version>
     <dep.scalatest.version>3.0.5</dep.scalatest.version>
     <dep.scalacheck.version>1.13.5</dep.scalacheck.version>
     <dep.spark-measure.version>0.11</dep.spark-measure.version>
+
+    <skipDocs>false</skipDocs>
   </properties>
+
+  <modules>
+    <module>licensecheck-config</module>
+    <module>okapi-api</module>
+    <module>okapi-testing</module>
+    <module>okapi-neo4j-io</module>
+    <module>okapi-neo4j-io-testing</module>
+    <module>okapi-ir</module>
+    <module>okapi-neo4j-procedures</module>
+    <module>okapi-logical</module>
+    <module>okapi-relational</module>
+    <module>okapi-tck</module>
+    <module>okapi-trees</module>
+    <module>spark-cypher</module>
+    <module>spark-cypher-examples</module>
+    <module>spark-cypher-tck</module>
+    <module>spark-cypher-testing</module>
+    <module>graph-ddl</module>
+  </modules>
 
   <build>
     <resources>
       <resource>
         <directory>${basedir}/src/main/resources</directory>
-        <filtering>true</filtering>
+        <filtering>false</filtering>
       </resource>
     </resources>
     <testResources>
       <testResource>
         <directory>${basedir}/src/test/resources</directory>
-        <filtering>true</filtering>
+        <filtering>false</filtering>
       </testResource>
     </testResources>
 
@@ -223,7 +242,7 @@
         <artifactId>scala-maven-plugin</artifactId>
         <version>${plugin.maven-scala.version}</version>
         <configuration>
-          <recompileMode>incremental</recompileMode>
+          <!--<recompileMode>incremental</recompileMode>-->
           <scalaVersion>${project.scala.version}</scalaVersion>
           <scalaCompatVersion>${project.scala.binary.version}</scalaCompatVersion>
           <encoding>${project.build.encoding}</encoding>
@@ -257,8 +276,17 @@
             <goals>
               <goal>add-source</goal>
               <goal>compile</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>scala-doc-jar</id>
+            <phase>process-resources</phase>
+            <goals>
               <goal>doc-jar</goal>
             </goals>
+            <configuration>
+              <skip>${skipDocs}</skip>
+            </configuration>
           </execution>
           <execution>
             <id>scala-test-compile</id>
@@ -322,37 +350,17 @@
         </configuration>
       </plugin>
 
-      <!-- disable surefire -->
+      <!-- We run tests with surefire -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <version>${plugin.maven-surefire.version}</version>
-        <configuration>
-          <skipTests>true</skipTests>
-        </configuration>
       </plugin>
 
-      <!-- enable scalatest -->
+      <!-- License header checking -->
       <plugin>
-        <groupId>org.scalatest</groupId>
-        <artifactId>scalatest-maven-plugin</artifactId>
-        <version>${plugin.maven-scalatest.version}</version>
-        <configuration>
-          <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
-          <junitxml>.</junitxml>
-          <filereports>WDF TestSuite.txt</filereports>
-          <tagsToExclude>CAPSPatternGraphFactory</tagsToExclude>
-          <!-- Enable full exception stack traces -->
-          <stdout>F</stdout>
-        </configuration>
-        <executions>
-          <execution>
-            <id>test</id>
-            <goals>
-              <goal>test</goal>
-            </goals>
-          </execution>
-        </executions>
+        <groupId>com.mycila</groupId>
+        <artifactId>license-maven-plugin</artifactId>
       </plugin>
 
     </plugins>
@@ -360,51 +368,16 @@
   </build>
 
   <profiles>
-
     <profile>
-      <activation>
-        <activeByDefault>true</activeByDefault>
-      </activation>
-      <id>testing</id>
-      <properties>
-        <dep.spark.scope>compile</dep.spark.scope>
-        <dep.flink.scope>compile</dep.flink.scope>
-      </properties>
-
-      <!-- No license listing for this profile -->
-      <modules>
-        <module>okapi-api</module>
-        <module>okapi-testing</module>
-        <module>okapi-neo4j-io</module>
-        <module>okapi-neo4j-io-testing</module>
-        <module>okapi-ir</module>
-        <module>okapi-neo4j-procedures</module>
-        <module>okapi-logical</module>
-        <module>okapi-relational</module>
-        <module>okapi-tck</module>
-        <module>okapi-trees</module>
-        <module>spark-cypher</module>
-        <module>spark-cypher-examples</module>
-        <module>spark-cypher-tck</module>
-        <module>spark-cypher-testing</module>
-        <module>sql-ddl</module>
-        <module>flink-cypher</module>
-        <module>flink-cypher-tck</module>
-        <module>flink-cypher-testing</module>
-      </modules>
-    </profile>
-
-    <profile>
-      <id>check-licenses</id>
+      <!-- Disable plugin for parent module -->
+      <id>no-license-listing-for-parent-module</id>
       <activation>
         <activeByDefault>false</activeByDefault>
         <file>
           <exists>src/main/scala</exists>
         </file>
-        <property>
-          <name>cluster</name>
-        </property>
       </activation>
+
       <build>
         <plugins>
           <!-- License file checking-->
@@ -412,101 +385,23 @@
             <groupId>org.neo4j.build.plugins</groupId>
             <artifactId>licensing-maven-plugin</artifactId>
           </plugin>
-
-          <!-- License header checking -->
-          <plugin>
-            <groupId>com.mycila</groupId>
-            <artifactId>license-maven-plugin</artifactId>
-          </plugin>
         </plugins>
       </build>
     </profile>
 
     <profile>
-      <id>cluster-package</id>
-      <properties>
-        <project.artifact.classifier>cluster</project.artifact.classifier>
-        <dep.spark.scope>provided</dep.spark.scope>
-        <!--<dep.flink.scope>provided</dep.flink.scope>-->
-      </properties>
+      <!-- Fast local build -->
+      <id>fast</id>
       <activation>
-        <property>
-          <name>cluster</name>
-        </property>
+        <activeByDefault>false</activeByDefault>
       </activation>
 
-      <modules>
-        <module>licensecheck-config</module>
-        <module>okapi-api</module>
-        <module>okapi-testing</module>
-        <module>okapi-neo4j-io</module>
-        <module>okapi-neo4j-io-testing</module>
-        <module>okapi-ir</module>
-        <module>okapi-neo4j-procedures</module>
-        <module>okapi-logical</module>
-        <module>okapi-relational</module>
-        <module>okapi-tck</module>
-        <module>okapi-trees</module>
-        <module>spark-cypher</module>
-        <module>flink-cypher</module>
-        <module>spark-cypher-testing</module>
-        <module>sql-ddl</module>
-      </modules>
-
-      <build>
-        <plugins>
-          <!-- shade plugin -->
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-shade-plugin</artifactId>
-            <version>${plugin.maven-shade.version}</version>
-            <executions>
-              <!-- run shade goal on package phase -->
-              <execution>
-                <phase>package</phase>
-                <goals>
-                  <goal>shade</goal>
-                </goals>
-                <configuration>
-                  <shadedArtifactAttached>true</shadedArtifactAttached>
-                  <shadedClassifierName>${project.artifact.classifier}</shadedClassifierName>
-                  <createDependencyReducedPom>true</createDependencyReducedPom>
-                  <artifactSet>
-                    <excludes>
-                      <exclude>junit:junit</exclude>
-                      <exclude>jmock:*</exclude>
-                      <exclude>org.scala-lang:*</exclude>
-                      <exclude>org.scalatest:*</exclude>
-                      <exclude>org.scalacheck:*</exclude>
-                      <exclude>org.apache.maven:lib:tests</exclude>
-                      <exclude>commons-beanutils:*</exclude>
-                      <exclude>aopalliance:*</exclude>
-                      <exclude>javax.inject:*</exclude>
-                    </excludes>
-                  </artifactSet>
-                  <filters>
-
-                    <filter>
-                      <artifact>*:*</artifact>
-                      <excludes>
-                        <exclude>META-INF/*.SF</exclude>
-                        <exclude>META-INF/*.DSA</exclude>
-                        <exclude>META-INF/*.RSA</exclude>
-                        <!--Exclude Java 9 modules-->
-                        <exclude>**/module-info.class</exclude>
-                        <exclude>META-INF/versions/9/**/*</exclude>
-                      </excludes>
-                    </filter>
-
-                  </filters>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
+      <properties>
+        <skipDocs>true</skipDocs> <!-- Skip scala-doc -->
+        <skipTests>true</skipTests> <!-- Skip tests -->
+        <license.skip>true</license.skip> <!-- Skip license header checks -->
+      </properties>
     </profile>
-
   </profiles>
 
   <dependencies>
