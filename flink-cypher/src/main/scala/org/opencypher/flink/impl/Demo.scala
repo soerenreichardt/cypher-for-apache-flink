@@ -277,6 +277,7 @@ object IntegerBug extends App {
   val capfNodeTable2 = CAPFNodeTable.fromMapping(nodeMapping2, nodeTable2)
   val capfRelTable = CAPFRelationshipTable.fromMapping(relMapping, relTable)
 
+  PrintRelationalPlan.set()
   val graph = session.readFrom(capfNodeTable1, capfRelTable, capfNodeTable2)
   graph.cypher("MATCH (n0)-->(n1) RETURN n0").show
 }

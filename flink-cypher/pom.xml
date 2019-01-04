@@ -30,29 +30,29 @@
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-table_${project.scala.binary.version}</artifactId>
             <version>${dep.flink.version}</version>
-            <!--<scope>${dep.flink.scope}</scope>-->
+            <scope>compile</scope>
         </dependency>
 
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-scala_${project.scala.binary.version}</artifactId>
             <version>${dep.flink.version}</version>
-            <!--<scope>${dep.flink.scope}</scope>-->
+            <scope>compile</scope>
         </dependency>
 
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-streaming-scala_${project.scala.binary.version}</artifactId>
             <version>${dep.flink.version}</version>
-            <!--<scope>${dep.flink.scope}</scope>-->
+            <scope>compile</scope>
         </dependency>
 
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-orc_${project.scala.binary.version}</artifactId>
             <version>${dep.flink.version}</version>
-            <!--<scope>${dep.flink.scope}</scope>-->
         </dependency>
+
 
         <!-- Neo4j -->
         <dependency>

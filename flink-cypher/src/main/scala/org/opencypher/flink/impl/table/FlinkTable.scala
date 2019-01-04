@@ -166,8 +166,8 @@ object FlinkCypherTable {
     }
 
     override def unionAll(other: FlinkTable): FlinkTable = {
-      val leftTypes = table.getSchema.getFieldTypes.flatMap(_.toCypherType)
-      val rightTypes = other.table.getSchema.getFieldTypes.flatMap(_.toCypherType)
+      val leftTypes = table.getSchema.getFieldTypes.flatMap(_.toCypherType())
+      val rightTypes = other.table.getSchema.getFieldTypes.flatMap(_.toCypherType())
 
       leftTypes.zip(rightTypes).foreach {
         case (leftType, rightType) if !leftType.nullable.couldBeSameTypeAs(rightType.nullable) =>
@@ -178,7 +178,7 @@ object FlinkCypherTable {
         case _ =>
       }
 
-      table.union(other.table)
+      table.withCypherCompatibleTypes.union(other.table.withCypherCompatibleTypes)
     }
 
     override def join(other: FlinkTable, joinType: JoinType, joinCols: (String, String)*): FlinkTable = {
