@@ -30,8 +30,8 @@ import org.apache.flink.api.common.typeinfo.TypeInformation
 import org.apache.flink.table.api.scala._
 import org.apache.flink.table.api.{Table, Types}
 import org.apache.flink.table.expressions
-import org.apache.flink.table.expressions.{Expression, If}
-import org.apache.flink.table.functions.{ScalarFunction, TableFunction}
+import org.apache.flink.table.expressions.Expression
+import org.apache.flink.table.functions.ScalarFunction
 import org.opencypher.flink.impl.TableOps._
 import org.opencypher.flink.impl.convert.FlinkConversions._
 import org.opencypher.okapi.api.types._
@@ -94,6 +94,13 @@ object FlinkSQLExprMapper {
         case ListLit(exprs) =>
           val flinkExpressions = exprs.map(_.asFlinkSQLExpr)
           array(flinkExpressions.head, flinkExpressions.tail: _*)
+
+        case DateTime(expr) => {
+          expr match {
+            case Some(e) => e.asFlinkSQLExpr.toTimestamp
+            case None => currentTimestamp()
+          }
+        }
 
         case n: NullLit =>
           val tpe = n.cypherType.getFlinkType
