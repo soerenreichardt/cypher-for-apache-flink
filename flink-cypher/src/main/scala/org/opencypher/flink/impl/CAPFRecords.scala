@@ -94,8 +94,9 @@ case class CAPFRecordsFactory(implicit capf: CAPFSession) extends RelationalCyph
     CAPFRecords(compatibleTable.getSchema.toRecordHeader, compatibleTable)
   }
 
-  private case class EmptyRow()
 }
+
+case class EmptyRow()
 
 case class CAPFRecords(
   header: RecordHeader,

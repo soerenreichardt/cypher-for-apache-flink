@@ -26,6 +26,8 @@
  */
 package org.opencypher.flink.impl
 
+import java.net.URI
+
 import org.apache.flink.api.scala._
 import org.apache.flink.table.api.scala._
 import org.opencypher.flink.api.io.{CAPFNodeTable, CAPFRelationshipTable}
@@ -81,7 +83,8 @@ object Demo extends App {
 //  println("Execution: " +  execution._2)
 //  println("Flink execution: " + session.env.getLastJobExecutionResult.getNetRuntime)
 //  println(session.tableEnv.explain(planning._1.getRecords.asCapf.table))
-  graph.cypher("MATCH (n:Person)-[r:KNOWS*1..2]->(n2:Person) RETURN n.name, n2.name").show                   // var expand
+//  graph.cypher("MATCH (n:Person)-[r:KNOWS*1..2]->(n2:Person) RETURN n.name, n2.name").show                   // var expand
+  graph.cypher("RETURN coalesce([null, null, 2, 3])").show
 //  graph.cypher("MATCH (n:Person) WHERE (n)--({age: 29}) RETURN n.name").show                               // exists
 //  graph.cypher("MATCH (n:Person) OPTIONAL MATCH (n)-[:KNOWS]->(b {age: 29}) RETURN n.name, b.name").show   // optional match
 
@@ -147,7 +150,7 @@ object OrcDemo extends App {
 
   implicit val session: CAPFSession = CAPFSession.local()
 
-  val orcFolder = getClass.getResource("/orc").getPath
+  val orcFolder = new URI("/home/soeren/Dev/s3/orc").getPath
   session.registerSource(Namespace("orc"), GraphSources.fs(orcFolder).orc)
 
   session.cypher(

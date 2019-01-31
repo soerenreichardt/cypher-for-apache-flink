@@ -35,6 +35,7 @@ import org.apache.flink.table.api.Table
 import org.apache.flink.table.expressions.ResolvedFieldReference
 import org.apache.flink.table.sinks.CsvTableSink
 import org.apache.flink.table.sources.CsvTableSource
+import org.apache.hadoop.conf.Configuration
 import org.apache.orc.TypeDescription
 import org.opencypher.flink.api.CAPFSession
 import org.opencypher.flink.api.io.json.JsonSerialization
@@ -86,9 +87,11 @@ class FSGraphSource(
     val typeDescription = schema.foldLeft(new TypeDescription(TypeDescription.Category.STRUCT)) {
       case (acc, fieldRef) => acc.addField(fieldRef.name, fieldRef.resultType.getOrcType)
     }
+    val config = new Configuration
     val orcSource = OrcTableSource.builder()
       .path(path)
       .forOrcSchema(typeDescription)
+      .withConfiguration(config)
       .build()
     capf.tableEnv.registerTableSource(tableSourceName, orcSource)
     capf.tableEnv.scan(tableSourceName)
