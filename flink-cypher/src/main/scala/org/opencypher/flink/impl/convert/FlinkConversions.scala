@@ -151,7 +151,7 @@ object FlinkConversions {
   implicit class TableSchemaOps(val tableSchema: TableSchema) {
     def toRecordHeader: RecordHeader = {
       val exprToColumn = tableSchema.getFieldNames.map { columnName =>
-        val cypherType = tableSchema.getFieldType(columnName).orElse(
+        val cypherType = tableSchema.getFieldType(columnName).orElseGet(
           throw IllegalStateException(s"a missing TypeInformation for column $columnName")
         ).toCypherType() match {
           case Some(ct) => ct

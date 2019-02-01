@@ -190,9 +190,19 @@ object FlinkSQLExprMapper {
 
         case ep: ExistsPatternExpr => ep.targetField.asFlinkSQLExpr
 
-        case Coalesce(es) =>
+        case c@Coalesce(es) =>
           val columns = es.map(_.asFlinkSQLExpr)
-          columns.find(_.isNotNull == true).get
+          val tpe = c.cypherType.toFlinkType.get
+          val normalizedColumns = columns.map(_.cast(tpe))
+
+          def coalesceFromIfElse(columnsTail: IndexedSeq[Expression]): Expression = {
+            columnsTail.headOption match {
+              case Some(head) => head.isNotNull ? (head, coalesceFromIfElse(columnsTail.tail))
+              case None => expressions.Null(tpe)
+            }
+          }
+
+          coalesceFromIfElse(normalizedColumns)
 
         case c: CaseExpr =>
           val alternatives = c.alternatives.map {

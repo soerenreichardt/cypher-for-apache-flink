@@ -113,7 +113,7 @@ object FlinkCypherTable {
         if (by.nonEmpty) {
           by.flatMap { expr =>
             val withChildren = header.ownedBy(expr)
-            withChildren.map(e => UnresolvedFieldReference(header.column(e)))
+            withChildren.map(e => withInnerExpr(e)(identity))
           }
         } else null
 
