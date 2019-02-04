@@ -30,14 +30,16 @@ import org.apache.flink.table.api.scala._
 import org.apache.flink.table.api.{Table, Types}
 import org.apache.flink.table.expressions
 import org.apache.flink.table.expressions.{Expression, UnresolvedFieldReference}
+import org.opencypher.flink.api.CAPFSession
 import org.opencypher.flink.impl.FlinkSQLExprMapper._
 import org.opencypher.flink.impl.TableOps._
 import org.opencypher.flink.impl.convert.FlinkConversions._
 import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.api.value.CypherValue
 import org.opencypher.okapi.api.value.CypherValue.{CypherMap, CypherValue}
-import org.opencypher.okapi.impl.exception.{IllegalArgumentException, NotImplementedException, UnsupportedOperationException}
+import org.opencypher.okapi.impl.exception.{IllegalArgumentException, IllegalStateException, NotImplementedException, UnsupportedOperationException}
 import org.opencypher.okapi.ir.api.expr._
+import org.opencypher.okapi.relational.api.graph.RelationalCypherSession
 import org.opencypher.okapi.relational.api.table.{Table => RelationalTable}
 import org.opencypher.okapi.relational.impl.planning._
 import org.opencypher.okapi.relational.impl.table.RecordHeader
@@ -70,7 +72,7 @@ object FlinkCypherTable {
 
     override def skip(n: Long): FlinkTable = table.offset(n.toInt)
 
-    override def show(rows: Int): Unit = ???
+    override def show(rows: Int): Unit = table.show()
 
     override def withColumns(columns: (Expr, String)*)
       (implicit header: RecordHeader, parameters: CypherMap): FlinkTable = {
@@ -195,8 +197,13 @@ object FlinkCypherTable {
         case LeftOuterJoin => table.leftOuterJoin(other.table, joinExpr)
         case RightOuterJoin => table.rightOuterJoin(other.table, joinExpr)
         case FullOuterJoin => table.fullOuterJoin(other.table, joinExpr)
-        case CrossJoin => throw IllegalArgumentException("An implementation of cross that is called earlier.", "")
+        case CrossJoin => throw IllegalStateException("This should never happen, cross joins resolve to a cross operator.")
       }
+    }
+
+    override def cross(other: FlinkTable)(implicit session: RelationalCypherSession[FlinkTable]): FlinkTable = {
+      implicit val capf = session.asInstanceOf[CAPFSession]
+      table.cross(other.table)
     }
 
     override def distinct: FlinkTable =

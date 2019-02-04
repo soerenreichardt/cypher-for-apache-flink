@@ -33,6 +33,7 @@ import org.opencypher.okapi.api.value.CypherValue
 import org.opencypher.okapi.api.value.CypherValue.{CypherMap, CypherValue}
 import org.opencypher.okapi.impl.exception.{IllegalArgumentException, NotImplementedException, UnsupportedOperationException}
 import org.opencypher.okapi.ir.api.expr.{Expr, _}
+import org.opencypher.okapi.relational.api.graph.RelationalCypherSession
 import org.opencypher.okapi.relational.api.table.Table
 import org.opencypher.okapi.relational.impl.planning._
 import org.opencypher.okapi.relational.impl.table.RecordHeader
@@ -227,6 +228,9 @@ object SparkTable {
           potentiallyCorruptedResult.select("*")
       }
     }
+
+    override def cross(other: DataFrameTable)(implicit session: RelationalCypherSession[DataFrameTable]): DataFrameTable =
+      df.join(other, CrossJoin)
 
     override def distinct: DataFrameTable =
       df.distinct

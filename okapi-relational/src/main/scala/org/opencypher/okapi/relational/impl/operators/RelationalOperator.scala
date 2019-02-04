@@ -442,7 +442,10 @@ final case class Join[T <: Table[T] : TypeTag](
 
   override lazy val _table: T = {
     val joinCols = joinExprs.map { case (l, r) => header.column(l) -> rhs.header.column(r) }
-    lhs.table.join(rhs.table, joinType, joinCols: _*)
+    joinType match {
+      case CrossJoin => lhs.table.cross(rhs.table)(context.session)
+      case other => lhs.table.join(rhs.table, other, joinCols: _*)
+    }
   }
 }
 

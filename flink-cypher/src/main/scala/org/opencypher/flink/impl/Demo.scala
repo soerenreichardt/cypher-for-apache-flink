@@ -85,7 +85,12 @@ object Demo extends App {
 //  println(session.tableEnv.explain(planning._1.getRecords.asCapf.table))
 //  graph.cypher("MATCH (n:Person)-[r:KNOWS*1..2]->(n2:Person) RETURN n.name, n2.name").show                   // var expand
 //  graph.cypher("MATCH (n:Person)-[:KNOWS]->(n2:Person) RETURN count(n.age), n2").show
-  graph.cypher("RETURN coalesce(Null, Null, '3', 'test')").show
+//  graph.cypher("RETURN coalesce(Null, Null, '3', 'test')").show
+  graph.cypher(
+    """
+      |MATCH (n:Person)
+      |MATCH (p:Person)
+      |RETURN n, p""".stripMargin).show
 //  val table = session.sql("SELECT COALESCE(null, null, 3, 5)")
 //  println(session.tableEnv.explain(table.table.table))
 //  graph.cypher("MATCH (n:Person) WHERE (n)--({age: 29}) RETURN n.name").show                               // exists
@@ -111,7 +116,7 @@ object Demo extends App {
 //      |WHERE b.age = age
 //      |RETURN b
 //    """.stripMargin).getRecords.show
-//  graph.cypher("WITH 'foo' AS bar UNWIND [1, 2, 3] AS x RETURN x, bar").getRecords.show
+//  graph.cypher("WITH 'foo' AS bar UNWIND [1, 2, 3] AS x RETURN x, bar").show
 //  graph.cypher("MATCH (n:Employee), (m: Person) RETURN (n)-[]->(m)").getRecords.show
 //  graph.cypher("MATCH (n:Employee) RETURN n").getRecords.show
 }
