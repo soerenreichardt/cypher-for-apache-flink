@@ -26,9 +26,12 @@
  */
 package org.opencypher.flink.api
 
+import org.apache.calcite.tools.RuleSets
 import org.apache.flink.api.scala.{DataSet, ExecutionEnvironment}
 import org.apache.flink.table.api.scala.BatchTableEnvironment
 import org.apache.flink.table.api.{Table, TableEnvironment}
+import org.apache.flink.table.calcite.{CalciteConfig, CalciteConfigBuilder}
+import org.apache.flink.table.plan.rules.FlinkRuleSets
 import org.opencypher.flink.api.io.CAPFEntityTableFactory
 import org.opencypher.flink.impl.graph.CAPFGraphFactory
 import org.opencypher.flink.impl.table.FlinkCypherTable.FlinkTable
@@ -39,7 +42,11 @@ import org.opencypher.okapi.impl.exception.UnsupportedOperationException
 import org.opencypher.okapi.relational.api.graph.RelationalCypherSession
 import org.opencypher.okapi.relational.api.planning.RelationalCypherResult
 
-sealed class CAPFSession(
+import scala.collection.JavaConverters._
+
+trait Foo extends TableEnvironment
+
+sealed class CAPFSession private(
   val env: ExecutionEnvironment,
   val tableEnv: BatchTableEnvironment
 ) extends RelationalCypherSession[FlinkTable] with Serializable {
@@ -62,10 +69,29 @@ sealed class CAPFSession(
 
 object CAPFSession extends Serializable {
 
-  def create(implicit env: ExecutionEnvironment): CAPFSession =
-    new CAPFSession(env, TableEnvironment.getTableEnvironment(env))
+  final val deactivatedLogicalRules = Seq(
+    "ProjectMergeRule:force_mode",
+    "PushFilterIntoTableSourceScanRule"
+  )
+
+  def create(implicit env: ExecutionEnvironment): CAPFSession = {
+    val tableEnv = TableEnvironment.getTableEnvironment(env)
+
+    tableEnv.config.setCalciteConfig(configureCalcite(tableEnv.config.getCalciteConfig))
+    new CAPFSession(env, tableEnv)
+  }
 
   def local(): CAPFSession = create(ExecutionEnvironment.getExecutionEnvironment)
+
+  private def configureCalcite(config: CalciteConfig): CalciteConfig = {
+    val logicalRules = FlinkRuleSets.LOGICAL_OPT_RULES
+    val filteredRules = logicalRules.iterator().asScala.filterNot(rule => deactivatedLogicalRules.contains(rule.toString)).toList
+
+    config.replacesDecoRuleSet
+    new CalciteConfigBuilder()
+      .replaceLogicalOptRuleSet(RuleSets.ofList(filteredRules: _*))
+      .build()
+  }
 
   implicit class RecordsAsTable(val records: CypherRecords) extends AnyVal {
 

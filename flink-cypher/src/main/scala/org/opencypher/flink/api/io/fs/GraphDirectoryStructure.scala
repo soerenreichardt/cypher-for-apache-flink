@@ -30,7 +30,6 @@ import org.apache.flink.core.fs.Path
 import org.opencypher.okapi.api.graph.GraphName
 import org.opencypher.okapi.impl.util.StringEncodingUtilities._
 
-
 trait GraphDirectoryStructure {
 
   def dataSourceRootPath: String

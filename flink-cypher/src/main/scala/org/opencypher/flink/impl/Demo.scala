@@ -85,18 +85,20 @@ object Demo extends App {
 //  println(session.tableEnv.explain(planning._1.getRecords.asCapf.table))
 //  graph.cypher("MATCH (n:Person)-[r:KNOWS*1..2]->(n2:Person) RETURN n.name, n2.name").show                   // var expand
 //  graph.cypher("MATCH (n:Person)-[:KNOWS]->(n2:Person) RETURN count(n.age), n2").show
+  val t = graph.cypher("MATCH (n:Person {name: 'Bob'})-[:KNOWS]->(n2:Person) RETURN n, n2").records.asInstanceOf[CAPFRecords].table.table
+  println(session.tableEnv.explain(t))
 //  graph.cypher("RETURN coalesce(Null, Null, '3', 'test')").show
-  graph.cypher(
-    """
-      |MATCH (n:Person)
-      |MATCH (p:Person)
-      |RETURN n, p""".stripMargin).show
+//  graph.cypher(
+//    """
+//      |MATCH (n:Person)
+//      |MATCH (p:Person)
+//      |RETURN n, p""".stripMargin).show
 //  val table = session.sql("SELECT COALESCE(null, null, 3, 5)")
 //  println(session.tableEnv.explain(table.table.table))
 //  graph.cypher("MATCH (n:Person) WHERE (n)--({age: 29}) RETURN n.name").show                               // exists
 //  graph.cypher("MATCH (n:Person) OPTIONAL MATCH (n)-[:KNOWS]->(b {age: 29}) RETURN n.name, b.name").show   // optional match
 
-//  graph.cypher("MATCH (n) RETURN CASE n.age WHEN 26 THEN 'Alice' WHEN 23 THEN 'Bob' ELSE 'other' END AS name").getRecords.show
+//  graph.cypher("MATCH (n) RETURN CASE n.age WHEN 26 THEN 'Alice' WHEN 23 THEN 'Bob' ELSE 'other' END AS name").show
 
 //  graph.cypher(
 //    """
@@ -158,16 +160,31 @@ object OrcDemo extends App {
 
   implicit val session: CAPFSession = CAPFSession.local()
 
+//  val fs = FileSystem.get(new URI("hdfs://foo"))
+
   val orcFolder = new URI("/home/soeren/Dev/s3/orc").getPath
   session.registerSource(Namespace("orc"), GraphSources.fs(orcFolder).orc)
 
-  session.cypher(
+  PrintRelationalPlan.set
+
+//  session.cypher(
+//    """
+//      |FROM GRAPH orc.sf1
+//      |MATCH (person:Person {id:10995116278874})-[:KNOWS]-(friend:Person)
+//      |RETURN person, friend
+//    """.stripMargin
+//  ).show
+
+  val t = session.cypher(
     """
       |FROM GRAPH orc.sf1
-      |MATCH (n:Person)
-      |RETURN n.firstName
+      |MATCH (p:Post)-[:HAS_CREATOR]-(t:Person)
+      |RETURN p, t
     """.stripMargin
-  ).show
+  ).records.asInstanceOf[CAPFRecords]
+  println(session.tableEnv.explain(t.table.table))
+  t.show
+
 }
 
 object CircularDemo extends App {
@@ -231,11 +248,15 @@ object CircularDemo extends App {
   val graph = session.readFrom(capfNodeTable, capfRelTable)
 
   PrintRelationalPlan.set()
-  val (records, time) =  Measurement.time(graph.cypher(
-    """
-      |MATCH (n0)-[e0]->(n1)-[e1]->(n2)-[e2]->(n3)-[e3]->(n0) RETURN *
-    """.stripMargin).records
-  )
+  val (records, time) =  Measurement.time {
+    val records = graph.cypher(
+      """
+        |MATCH (n0)-[e0]->(n1)-[e1]->(n2)-[e2]->(n3)-[e3]->(n0) RETURN *
+      """.stripMargin).records
+
+    records.show
+    records
+  }
   println(session.tableEnv.explain(records.asCapf.table.table))
   //  records.show
   println(time)

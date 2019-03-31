@@ -72,7 +72,7 @@ object FlinkCypherTable {
 
     override def skip(n: Long): FlinkTable = table.offset(n.toInt)
 
-    override def show(rows: Int): Unit = table.show()
+    override def show(rows: Int): Unit = ???
 
     override def withColumns(columns: (Expr, String)*)
       (implicit header: RecordHeader, parameters: CypherMap): FlinkTable = {

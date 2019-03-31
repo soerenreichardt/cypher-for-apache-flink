@@ -28,11 +28,60 @@ Third-party licenses
 --------------------
 
 Apache Software License, Version 2.0
+  Apache Commons BeanUtils
+  Apache Commons Codec
+  Apache Commons Collections
+  Apache Commons Compress
+  Apache Commons Configuration
+  Apache Commons IO
   Apache Commons Lang
+  Apache Commons Logging
+  Apache Commons Text
+  Apache HttpClient
+  Apache HttpCore
   Apache Log4j API
   Apache Log4j Core
+  Apache Shiro :: Cache
+  Apache Shiro :: Configuration :: Core
+  Apache Shiro :: Configuration :: OGDL
+  Apache Shiro :: Core
+  Apache Shiro :: Cryptography :: Ciphers
+  Apache Shiro :: Cryptography :: Core
+  Apache Shiro :: Cryptography :: Hashing
+  Apache Shiro :: Event
+  Apache Shiro :: Lang
+  Caffeine cache
+  Commons Lang
+  ConcurrentLinkedHashMap
+  Data Mapper for Jackson
+  Graphite Integration for Metrics
+  hazelcast-all
+  Jackson
+  Java Servlet API
+  JAX-RS provider for JSON content type
+  Jetty :: Http Utility
+  Jetty :: IO Utility
+  Jetty :: Security
+  Jetty :: Server Core
+  Jetty :: Servlet Handling
+  Jetty :: Utilities
+  Jetty :: Webapp Application Support
+  Jetty :: XML utilities
+  jPowerShell
+  jProcesses
+  Lucene codecs
+  Lucene Common Analyzers
+  Lucene Core
+  Lucene Memory
+  Lucene QueryParsers
+  LZ4 and xxHash
+  Metrics Core
+  Netty
+  Netty/All-in-One
   Okapi - openCypher API
+  Okapi Test Utilities
   Okapi Trees - Tree rewriting framework for Okapi
+  opencsv
   openCypher AST for the Cypher Query Language
   openCypher Expressions
   openCypher Front End
@@ -41,13 +90,32 @@ Apache Software License, Version 2.0
   openCypher Utils
   parboiled-core
   parboiled-scala
+  Prometheus Java Simpleclient
+  Prometheus Java Simpleclient Common
+  Prometheus Java Simpleclient Dropwizard
+  Prometheus Java Simpleclient Httpserver
   Scala 2.11 wrapper for Log4j API
+  WMI4Java
 
 BSD License
+  asm
+  asm-analysis
+  asm-tree
+  asm-util
+  Hamcrest Core
+  JLine
   Scala Compiler
   Scala Library
   scala-parser-combinators
   scala-xml
+
+Bouncy Castle License
+  Bouncy Castle JSSE provider and TLS/DTLS API
+  Bouncy Castle PKIX, CMS, EAC, TSP, PKCS, OCSP, CMP, and CRMF APIs
+  Bouncy Castle Provider
+
+Eclipse Public License 1.0
+  JUnit
 
 MIT-license
   Cats core
@@ -57,7 +125,15 @@ MIT-license
   fastparse
   fastparse-utils
   machinist
+  Mockito
+  scallop
+  SLF4J API Module
+  SLF4J NOP Binding
   sourcecode
   ujson_2.11
   upickle_2.11
+
+Mozilla Public License, Version 2.0
+  kiama
+  Mozilla Rhino
 

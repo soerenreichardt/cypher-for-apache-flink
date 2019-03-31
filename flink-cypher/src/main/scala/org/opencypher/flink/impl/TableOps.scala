@@ -128,8 +128,8 @@ object TableOps {
       val renamedColumns = table.columns.map { col =>
           col match {
             case _ if col == oldName =>
-              Symbol(oldName) as Symbol(newName)
-            case _ => Symbol(col) as Symbol(col)
+              ResolvedFieldReference(oldName, table.getSchema.getFieldType(oldName).get) as Symbol(newName)
+            case colName => ResolvedFieldReference(colName, table.getSchema.getFieldType(colName).get)
           }
       }
 
@@ -142,7 +142,7 @@ object TableOps {
 
       val namePairs = oldNames zip newNames
       val renames = namePairs.map(_ match {
-        case (oldName: String, newName: String) => Symbol(oldName) as Symbol(newName)
+        case (oldName: String, newName: String) => UnresolvedFieldReference(oldName) as Symbol(newName)
       })
 
       table.select(renames: _*)

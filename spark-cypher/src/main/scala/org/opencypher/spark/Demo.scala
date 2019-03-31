@@ -26,12 +26,15 @@
  */
 package org.opencypher.spark
 
+import java.net.URI
+
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
+import org.opencypher.okapi.api.graph.Namespace
 import org.opencypher.okapi.api.io.conversion.{NodeMapping, RelationshipMapping}
 import org.opencypher.okapi.impl.util.Measurement
 import org.opencypher.okapi.relational.api.configuration.CoraConfiguration.PrintRelationalPlan
-import org.opencypher.spark.api.CAPSSession
+import org.opencypher.spark.api.{CAPSSession, GraphSources}
 import org.opencypher.spark.api.io.{CAPSNodeTable, CAPSRelationshipTable}
 
 import scala.collection.JavaConverters._
@@ -102,6 +105,26 @@ object CircularDemo extends App {
     """.stripMargin).records.show)
   println(time)
 
+}
+
+object OrcDemo extends App {
+
+  implicit val session: CAPSSession = CAPSSession.local()
+
+  //  val fs = FileSystem.get(new URI("hdfs://foo"))
+
+  val orcFolder = new URI("/home/soeren/Dev/s3/orc").getPath
+  session.registerSource(Namespace("orc"), GraphSources.fs(orcFolder).orc)
+
+  PrintRelationalPlan.set
+
+  session.cypher(
+    """
+      |FROM GRAPH orc.sf1
+      |MATCH (person:Person {id:10995116278874})-[:KNOWS]-(friend:Person)
+      |RETURN person, friend
+    """.stripMargin
+  ).show
 }
 
 object IntegerBug1 extends App {

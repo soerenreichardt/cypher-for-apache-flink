@@ -28,31 +28,169 @@ Third-party licenses
 --------------------
 
 Apache Software License, Version 2.0
+  aircompressor
+  akka-actor
+  akka-protobuf
+  akka-slf4j
+  akka-stream
+  An open source Java toolkit for Amazon S3
+  Apache Avro
   Apache Commons Lang
+  Apache Commons Text
+  Apache Directory API ASN.1 API
+  Apache Directory LDAP API Utilities
+  Apache Hadoop Annotations
+  Apache Hadoop Auth
+  Apache Hadoop Common
+  Apache Log4j
   Apache Log4j API
   Apache Log4j Core
-  Graph DDL
-  Okapi - Neo4j IO
+  Apache Shiro :: Cache
+  Apache Shiro :: Configuration :: Core
+  Apache Shiro :: Configuration :: OGDL
+  Apache Shiro :: Core
+  Apache Shiro :: Cryptography :: Ciphers
+  Apache Shiro :: Cryptography :: Core
+  Apache Shiro :: Cryptography :: Hashing
+  Apache Shiro :: Event
+  Apache Shiro :: Lang
+  ApacheDS I18n
+  ApacheDS Protocol Kerberos Codec
+  Caffeine cache
+  chill
+  chill-java
+  Commons BeanUtils Core
+  Commons CLI
+  Commons Codec
+  Commons Collections
+  Commons Compress
+  Commons Configuration
+  Commons IO
+  Commons Lang
+  Commons Logging
+  Commons Math
+  Commons Net
+  commons-beanutils
+  ConcurrentLinkedHashMap
+  config
+  Curator Client
+  Curator Framework
+  Curator Recipes
+  Data Mapper for Jackson
+  Digester
+  FindBugs-jsr305
+  flink-annotations
+  flink-clients
+  flink-core
+  flink-hadoop-fs
+  flink-java
+  flink-metrics-core
+  flink-optimizer
+  flink-orc
+  flink-queryable-state-client-java
+  flink-runtime
+  flink-scala
+  flink-shaded-asm-5
+  flink-shaded-asm-6
+  flink-shaded-guava-18
+  flink-shaded-jackson-2
+  flink-shaded-netty-4
+  flink-streaming-java
+  flink-streaming-scala
+  flink-table
+  force-shading
+  Graphite Integration for Metrics
+  Gson
+  Guava: Google Core Libraries for Java
+  hazelcast-all
+  Hive Storage API
+  htrace-core
+  HttpClient
+  HttpCore
+  Jackson
+  Java Servlet API
+  java-xmlbuilder
+  Javassist
+  JAX-RS provider for JSON content type
+  Jettison
+  Jetty :: Http Utility
+  Jetty :: IO Utility
+  Jetty :: Security
+  Jetty :: Server Core
+  Jetty :: Servlet Handling
+  Jetty :: Utilities
+  Jetty :: Webapp Application Support
+  Jetty :: XML utilities
+  Jetty Server
+  Jetty Utilities
+  jPowerShell
+  jProcesses
+  Lucene codecs
+  Lucene Common Analyzers
+  Lucene Core
+  Lucene Memory
+  Lucene QueryParsers
+  LZ4 and xxHash
+  Metrics Core
+  Netty/All-in-One
+  Objenesis
   Okapi - openCypher API
   Okapi IR - Declarative representation of Cypher queries
   Okapi Logical - Logical representation of Cypher queries
   Okapi Relational - Relational Algebra for Cypher
+  Okapi Test Utilities
   Okapi Trees - Tree rewriting framework for Okapi
+  opencsv
   openCypher AST for the Cypher Query Language
   openCypher Expressions
   openCypher Front End
   openCypher Parser
   openCypher Rewriting
   openCypher Utils
+  ORC Core
   parboiled-core
   parboiled-scala
+  Prometheus Java Simpleclient
+  Prometheus Java Simpleclient Common
+  Prometheus Java Simpleclient Dropwizard
+  Prometheus Java Simpleclient Httpserver
   Scala 2.11 wrapper for Log4j API
+  servlet-api
+  Snappy for Java
+  ssl-config-core
+  The Netty Project
+  WMI4Java
+  Xml Compatibility extensions for Jackson
+  zookeeper
 
 BSD License
+  asm
+  ASM Core
+  asm-analysis
+  asm-tree
+  asm-util
+  grizzled-slf4j
+  Hamcrest Core
+  JLine
+  JSch
+  Kryo
+  MinLog
+  ParaNamer Core
+  Protocol Buffer Java API
   Scala Compiler
   Scala Library
+  scala-java8-compat
   scala-parser-combinators
   scala-xml
+  xmlenc Library
+
+Bouncy Castle License
+  Bouncy Castle JSSE provider and TLS/DTLS API
+  Bouncy Castle PKIX, CMS, EAC, TSP, PKCS, OCSP, CMP, and CRMF APIs
+  Bouncy Castle Provider
+
+Eclipse Public License 1.0
+  JUnit
 
 MIT-license
   Cats core
@@ -62,7 +200,20 @@ MIT-license
   fastparse
   fastparse-utils
   machinist
+  Mockito
+  scallop
+  scopt
+  SLF4J API Module
+  SLF4J LOG4J-12 Binding
+  SLF4J NOP Binding
   sourcecode
   ujson_2.11
   upickle_2.11
+
+Mozilla Public License, Version 2.0
+  kiama
+  Mozilla Rhino
+
+Public-domain
+  XZ for Java
 
