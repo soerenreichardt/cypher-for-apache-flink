@@ -67,25 +67,35 @@ sealed class CAPFSession private(
     records.wrap(tableEnv.sqlQuery(query))
 }
 
+case class CAPFSessionBuilder(
+  deactivatedRules: Seq[String]
+) {
+
+  def create(implicit env: ExecutionEnvironment): CAPFSession = CAPFSession.create(env, deactivatedRules)
+
+}
+
 object CAPFSession extends Serializable {
 
   final val deactivatedLogicalRules = Seq(
-    "ProjectMergeRule:force_mode",
-    "PushFilterIntoTableSourceScanRule"
+    "ProjectMergeRule:force_mode"
+//    "PushFilterIntoTableSourceScanRule"
   )
 
-  def create(implicit env: ExecutionEnvironment): CAPFSession = {
+  def withDeactivatedRules(rules: Seq[String]): CAPFSessionBuilder = CAPFSessionBuilder(deactivatedLogicalRules ++ rules)
+
+  def create(implicit env: ExecutionEnvironment, deactivatedRules: Seq[String] = deactivatedLogicalRules): CAPFSession = {
     val tableEnv = TableEnvironment.getTableEnvironment(env)
 
-    tableEnv.config.setCalciteConfig(configureCalcite(tableEnv.config.getCalciteConfig))
+    tableEnv.config.setCalciteConfig(configureCalcite(tableEnv.config.getCalciteConfig, deactivatedRules))
     new CAPFSession(env, tableEnv)
   }
 
   def local(): CAPFSession = create(ExecutionEnvironment.getExecutionEnvironment)
 
-  private def configureCalcite(config: CalciteConfig): CalciteConfig = {
+  private def configureCalcite(config: CalciteConfig, deactivatedRules: Seq[String]): CalciteConfig = {
     val logicalRules = FlinkRuleSets.LOGICAL_OPT_RULES
-    val filteredRules = logicalRules.iterator().asScala.filterNot(rule => deactivatedLogicalRules.contains(rule.toString)).toList
+    val filteredRules = logicalRules.iterator().asScala.filterNot(rule => deactivatedRules.contains(rule.toString)).toList
 
     config.replacesDecoRuleSet
     new CalciteConfigBuilder()
