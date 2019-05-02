@@ -19,3 +19,6 @@ metastore_*
 caps-core/.project
 caps-core/.classpath
 .project
+
+# gradle
+/gradle/*
