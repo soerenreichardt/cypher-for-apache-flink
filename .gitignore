@@ -22,3 +22,5 @@ caps-core/.classpath
 
 # gradle
 /gradle/*
+gradlew
+gradlew.bat
