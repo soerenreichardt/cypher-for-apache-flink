@@ -29,7 +29,8 @@ package org.opencypher.flink.api.io.fs
 import java.io.{BufferedReader, BufferedWriter, InputStreamReader, OutputStreamWriter}
 
 import org.apache.flink.core.fs.FileSystem.WriteMode
-import org.apache.flink.core.fs.{FileSystem, Path}
+//import org.apache.flink.core.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.opencypher.flink.api.io.util.FileSystemUtils._
 
 object FlinkFSHelpers {
@@ -46,7 +47,7 @@ object FlinkFSHelpers {
       val p = new Path(path)
       createDirectoryIfNotExists(p)
       fileSystem.listStatus(p)
-        .filter(_.isDir)
+        .filter(_.isDirectory)
         .map(_.getPath.getName)
         .toList
     }
@@ -66,7 +67,7 @@ object FlinkFSHelpers {
       val p = new Path(path)
       val parentDirectory = p.getParent
       createDirectoryIfNotExists(parentDirectory)
-      using(fileSystem.create(p, WriteMode.OVERWRITE)) { outputStream =>
+      using(fileSystem.create(p)) { outputStream =>
         using(new BufferedWriter(new OutputStreamWriter(outputStream, "UTF-8"))) { bufferedWriter =>
           bufferedWriter.write(content)
         }
