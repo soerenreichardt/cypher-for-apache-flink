@@ -151,10 +151,7 @@ object FlinkCypherTable {
             case Sum(expr) =>
               withInnerExpr(expr)(_.sum.as(columnName))
 
-            case Collect(expr, _) => withInnerExpr(expr) { column =>
-              val list = array(column)
-              list as columnName
-            }
+            case Collect(expr, _) => withInnerExpr(expr)(_.collect as columnName)
 
             case x =>
               throw NotImplementedException(s"Aggregation function $x")

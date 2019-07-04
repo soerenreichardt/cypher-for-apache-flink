@@ -167,23 +167,49 @@ object OrcDemo extends App {
 
   PrintRelationalPlan.set
 
-//  session.cypher(
-//    """
-//      |FROM GRAPH orc.sf1
-//      |MATCH (person:Person {id:10995116278874})-[:KNOWS]-(friend:Person)
-//      |RETURN person, friend
-//    """.stripMargin
-//  ).show
-
-  val t = session.cypher(
+  session.cypher(
     """
       |FROM GRAPH orc.sf1
-      |MATCH (p:Post)-[:HAS_CREATOR]-(t:Person)
-      |RETURN p, t
+      |MATCH (countryX:Country {name: 'Puerto_Rico'}),
+      |      (countryY:Country {name: 'Republic_of_Macedonia'}),
+      |      (person:Person {id: 15393162790207})
+      |WITH person, countryX, countryY
+      |MATCH (city:City)-[:IS_PART_OF]->(country:Country)
+      |WHERE country IN [countryX, countryY]
+      |WITH person, countryX, countryY, collect(id(city)) AS cities
+      |MATCH (person)-[:KNOWS*1..2]-(friend:Person)-[:PERSON_IS_LOCATED_IN]->(city:City)
+      |WHERE NOT person=friend AND NOT id(city) IN cities
+      |WITH DISTINCT friend, countryX, countryY
+      |MATCH (friend)<-[:POST_HAS_CREATOR|COMMENT_HAS_CREATOR]-(message:Message),
+      |      (message)-[:POST_IS_LOCATED_IN|COMMENT_IS_LOCATED_IN]->(country:Country)
+      |WHERE 30 > message.creationDate >= 1291161600000
+      |AND id(country) IN [id(countryX), id(countryY)]
+      |WITH friend,
+      |    CASE WHEN country=countryX THEN 1 ELSE 0 END AS messageX,
+      |    CASE WHEN country=countryY THEN 1 ELSE 0 END AS messageY
+      |WITH friend, sum(messageX) AS xCount, sum(messageY) AS yCount
+      |WHERE xCount>0 AND yCount>0
+      |RETURN friend.id AS friendId,
+      |       friend.firstName AS friendFirstName,
+      |       friend.lastName AS friendLastName,
+      |       xCount,
+      |       yCount,
+      |       xCount + yCount AS xyCount
+      |ORDER BY xyCount DESC, friendId ASC
+      |LIMIT 20
+
     """.stripMargin
-  ).records.asInstanceOf[CAPFRecords]
-  println(session.tableEnv.explain(t.table.table))
-  t.show
+  ).show
+
+//  val t = session.cypher(
+//    """
+//      |FROM GRAPH orc.sf1
+//      |MATCH (p:Post)-[:HAS_CREATOR]-(t:Person)
+//      |RETURN p, t
+//    """.stripMargin
+//  ).records.asInstanceOf[CAPFRecords]
+//  println(session.tableEnv.explain(t.table.table))
+//  t.show
 
 }
 

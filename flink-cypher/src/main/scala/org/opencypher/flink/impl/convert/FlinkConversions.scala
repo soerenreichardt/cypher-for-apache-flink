@@ -27,7 +27,7 @@
 package org.opencypher.flink.impl.convert
 
 import org.apache.flink.api.common.typeinfo.{BasicArrayTypeInfo, PrimitiveArrayTypeInfo, TypeInformation}
-import org.apache.flink.api.java.typeutils.ObjectArrayTypeInfo
+import org.apache.flink.api.java.typeutils.{MultisetTypeInfo, ObjectArrayTypeInfo}
 import org.apache.flink.table.api.{TableSchema, Types}
 import org.apache.flink.table.expressions.ResolvedFieldReference
 import org.apache.orc.TypeDescription
@@ -87,6 +87,7 @@ object FlinkConversions {
         case Types.LONG => Some(CTInteger)
         case Types.BOOLEAN => Some(CTBoolean)
         case Types.DOUBLE => Some(CTFloat)
+        case multiSet: MultisetTypeInfo[_] => Some(CTList(multiSet.getElementTypeInfo.toCypherType().get))
         case PrimitiveArrayTypeInfo.BOOLEAN_PRIMITIVE_ARRAY_TYPE_INFO => Some(CTList(CTBoolean))
         case PrimitiveArrayTypeInfo.DOUBLE_PRIMITIVE_ARRAY_TYPE_INFO => Some(CTList(CTFloat))
         case PrimitiveArrayTypeInfo.FLOAT_PRIMITIVE_ARRAY_TYPE_INFO => Some(CTList(CTFloat))

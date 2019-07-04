@@ -45,7 +45,8 @@ object FlinkSQLExprMapper {
   implicit class RichExpression(expr: Expr) {
 
     def verify(implicit header: RecordHeader): Unit = {
-      if (header.expressionsFor(expr).isEmpty) throw IllegalStateException(s"No slot for expression $expr")
+      if (header.expressionsFor(expr).isEmpty)
+        throw IllegalStateException(s"No slot for expression $expr")
     }
 
     def compare(comparator: Expression => (Expression => Expression), lhs: Expr, rhs: Expr)
@@ -68,7 +69,7 @@ object FlinkSQLExprMapper {
         case p@Param(name) if p.cypherType.subTypeOf(CTList(CTAny)).maybeTrue =>
           parameters(name) match {
             case CypherList(l) =>
-              val expressionList = l.unwrap.map( elem => expressions.Literal(elem, TypeInformation.of(elem.getClass)))
+              val expressionList = l.unwrap.map(elem => expressions.Literal(elem, TypeInformation.of(elem.getClass)))
               if (expressionList.isEmpty)
                 throw new NotImplementedException("Empty lists are not yet supported by Flink")
 
@@ -78,7 +79,7 @@ object FlinkSQLExprMapper {
         case Param(name) =>
           expressions.Literal(parameters(name).unwrap, TypeInformation.of(parameters(name).unwrap.getClass))
 
-        case _: Var | _: Param | _:Property | _: HasLabel | _: HasType | _: StartNode | _: EndNode =>
+        case _: Var | _: Param | _: Property | _: HasLabel | _: HasType | _: StartNode | _: EndNode =>
           verify
 
           val colName = header.column(expr)
@@ -127,9 +128,27 @@ object FlinkSQLExprMapper {
           exprs.map(_.asFlinkSQLExpr).foldLeft(expressions.Literal(false, Types.BOOLEAN): Expression)(_ || _)
 
         case In(lhs, rhs) =>
+          def extractList(expr: Expr): Seq[Expression] = {
+            rhs match {
+              case p@Param(name) if p.cypherType.subTypeOf(CTList(CTAny)).maybeTrue =>
+                parameters(name) match {
+                  case CypherList(l) =>
+                    val expressionList = l.unwrap.map(elem => expressions.Literal(elem, TypeInformation.of(elem.getClass)))
+                    if (expressionList.isEmpty)
+                      throw new NotImplementedException("Empty lists are not yet supported by Flink")
+
+                    expressionList
+                  case notAList => throw IllegalArgumentException("a Cypher list", notAList)
+                }
+              case ListLit(exprs) => exprs.map(_.asFlinkSQLExpr)
+              case other => throw IllegalArgumentException("a Cypher list", other)
+            }
+          }
+
           val element = lhs.asFlinkSQLExpr
-          val array = rhs.asFlinkSQLExpr
-          element in array
+          val exprList = extractList(rhs)
+
+          element.in(exprList: _*)
 
         case LessThan(lhs, rhs) => compare(lt, lhs, rhs)
         case LessThanOrEqual(lhs, rhs) => compare(lteq, lhs, rhs)
@@ -143,7 +162,7 @@ object FlinkSQLExprMapper {
 
         case Exists(e) => e.asFlinkSQLExpr.isNotNull
         case Id(e) => e.asFlinkSQLExpr
-        case Labels(e)=>
+        case Labels(e) =>
           val node = e.owner.get
           val labelExprs = header.labelsFor(node)
           val (labelNames, labelColumns) = labelExprs

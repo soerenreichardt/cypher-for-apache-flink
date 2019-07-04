@@ -38,6 +38,7 @@ import upickle.Js
 import scala.reflect.{ClassTag, classTag}
 import scala.util.Try
 import scala.util.hashing.MurmurHash3
+import scala.collection.JavaConverters._
 
 object CypherValue {
 
@@ -62,6 +63,7 @@ object CypherValue {
       case js: java.lang.String => js.toString
       case jb: java.lang.Boolean => jb.booleanValue
       case jl: java.util.List[_] => seqToCypherList(jl.toArray)
+      case hm: java.util.HashMap[_, _] => this(hm.asScala.toMap)
       case dt: java.sql.Date => dt
       case ts: java.sql.Timestamp => ts
       case a: Array[_] => seqToCypherList(a)
