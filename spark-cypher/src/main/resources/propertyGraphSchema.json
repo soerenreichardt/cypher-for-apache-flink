@@ -1,0 +1,277 @@
+{
+    "version": 1,
+    "labelPropertyMap": [
+        {
+            "labels": [
+                "Person"
+            ],
+            "properties": {
+                "birthday": "INTEGER?",
+                "email": "LIST(STRING)?",
+                "locationIP": "STRING",
+                "birthday_month": "INTEGER",
+                "lastName": "STRING",
+                "firstName": "STRING",
+                "id": "INTEGER",
+                "languages": "LIST(STRING)?",
+                "browserUsed": "STRING",
+                "creationDate": "INTEGER",
+                "birthday_day": "INTEGER",
+                "gender": "STRING"
+            }
+        },
+        {
+            "labels": [
+                "Company"
+            ],
+            "properties": {
+                "name": "STRING",
+                "id": "INTEGER"
+            }
+        },
+        {
+            "labels": [
+                "Country"
+            ],
+            "properties": {
+                "name": "STRING",
+                "id": "INTEGER"
+            }
+        },
+        {
+            "labels": [
+                "TagClass"
+            ],
+            "properties": {
+                "name": "STRING"
+            }
+        },
+        {
+            "labels": [
+                "Comment",
+                "Message"
+            ],
+            "properties": {
+                "locationIP": "STRING",
+                "id": "INTEGER",
+                "browserUsed": "STRING",
+                "content": "STRING",
+                "creationDate": "INTEGER",
+                "length": "INTEGER"
+            }
+        },
+        {
+            "labels": [
+                "University"
+            ],
+            "properties": {
+                "name": "STRING",
+                "id": "INTEGER"
+            }
+        },
+        {
+            "labels": [
+                "Post",
+                "Message"
+            ],
+            "properties": {
+                "imageFile": "STRING?",
+                "locationIP": "STRING",
+                "id": "INTEGER",
+                "language": "STRING?",
+                "browserUsed": "STRING",
+                "content": "STRING?",
+                "creationDate": "INTEGER",
+                "length": "INTEGER"
+            }
+        },
+        {
+            "labels": [
+                "Continent"
+            ],
+            "properties": {
+                "name": "STRING",
+                "id": "INTEGER"
+            }
+        },
+        {
+            "labels": [
+                "Tag"
+            ],
+            "properties": {
+                "name": "STRING",
+                "id": "INTEGER"
+            }
+        },
+        {
+            "labels": [
+                "Forum"
+            ],
+            "properties": {
+                "creationDate": "INTEGER",
+                "title": "STRING",
+                "id": "INTEGER"
+            }
+        },
+        {
+            "labels": [
+                "City"
+            ],
+            "properties": {
+                "name": "STRING",
+                "id": "INTEGER"
+            }
+        },
+        {
+            "labels": [
+                "GraphMetaData"
+            ],
+            "properties": {
+                "neo4jSchema": "STRING",
+                "relationshipTimestampResolution": "STRING",
+                "id": "INTEGER",
+                "dateFormat": "STRING"
+            }
+        }
+    ],
+    "relTypePropertyMap": [
+        {
+            "relType": "PERSON_IS_LOCATED_IN",
+            "properties": {
+                
+            }
+        },
+        {
+            "relType": "REPLY_OF_COMMENT",
+            "properties": {
+                
+            }
+        },
+        {
+            "relType": "POST_HAS_CREATOR",
+            "properties": {
+                
+            }
+        },
+        {
+            "relType": "POST_HAS_TAG",
+            "properties": {
+                
+            }
+        },
+        {
+            "relType": "HAS_MODERATOR",
+            "properties": {
+                
+            }
+        },
+        {
+            "relType": "WORKS_AT",
+            "properties": {
+                "workFrom": "INTEGER"
+            }
+        },
+        {
+            "relType": "IS_SUBCLASS_OF",
+            "properties": {
+                
+            }
+        },
+        {
+            "relType": "POST_IS_LOCATED_IN",
+            "properties": {
+                
+            }
+        },
+        {
+            "relType": "ORGANISATION_IS_LOCATED_IN",
+            "properties": {
+                
+            }
+        },
+        {
+            "relType": "CONTAINER_OF",
+            "properties": {
+                
+            }
+        },
+        {
+            "relType": "COMMENT_HAS_TAG",
+            "properties": {
+                
+            }
+        },
+        {
+            "relType": "STUDY_AT",
+            "properties": {
+                "classYear": "INTEGER"
+            }
+        },
+        {
+            "relType": "LIKES_COMMENT",
+            "properties": {
+                "creationDate": "INTEGER"
+            }
+        },
+        {
+            "relType": "REPLY_OF_POST",
+            "properties": {
+                
+            }
+        },
+        {
+            "relType": "COMMENT_HAS_CREATOR",
+            "properties": {
+                
+            }
+        },
+        {
+            "relType": "IS_PART_OF",
+            "properties": {
+                
+            }
+        },
+        {
+            "relType": "HAS_INTEREST",
+            "properties": {
+                
+            }
+        },
+        {
+            "relType": "LIKES_POST",
+            "properties": {
+                "creationDate": "INTEGER"
+            }
+        },
+        {
+            "relType": "COMMENT_IS_LOCATED_IN",
+            "properties": {
+                
+            }
+        },
+        {
+            "relType": "HAS_TYPE",
+            "properties": {
+                
+            }
+        },
+        {
+            "relType": "FORUM_HAS_TAG",
+            "properties": {
+                
+            }
+        },
+        {
+            "relType": "KNOWS",
+            "properties": {
+                "creationDate": "INTEGER"
+            }
+        },
+        {
+            "relType": "HAS_MEMBER",
+            "properties": {
+                "joinDate": "INTEGER"
+            }
+        }
+    ]
+}
