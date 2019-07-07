@@ -29,8 +29,7 @@ package org.opencypher.flink.api.io.fs
 import java.net.URI
 import java.util.UUID
 
-//import org.apache.flink.core.fs.FileSystem
-import org.apache.hadoop.fs.FileSystem
+import org.apache.flink.core.fs.FileSystem
 import org.apache.flink.orc.OrcTableSource
 import org.apache.flink.table.api.Table
 import org.apache.flink.table.expressions.ResolvedFieldReference
@@ -56,10 +55,8 @@ class FSGraphSource(
 
   import directoryStructure._
 
-  private val configuration = new Configuration
-
   protected lazy val fileSystem: FileSystem = {
-    FileSystem.get(new URI(rootPath), configuration)
+    FileSystem.get(new URI(rootPath))
   }
 
   protected def listDirectories(path: String): List[String] = fileSystem.listDirectories(path)
@@ -90,10 +87,11 @@ class FSGraphSource(
     val typeDescription = schema.foldLeft(new TypeDescription(TypeDescription.Category.STRUCT)) {
       case (acc, fieldRef) => acc.addField(fieldRef.name, fieldRef.resultType.getOrcType)
     }
+    val config = new Configuration
     val orcSource = OrcTableSource.builder()
       .path(path)
       .forOrcSchema(typeDescription)
-      .withConfiguration(configuration)
+      .withConfiguration(config)
       .build()
     capf.tableEnv.registerTableSource(tableSourceName, orcSource)
     capf.tableEnv.scan(tableSourceName)

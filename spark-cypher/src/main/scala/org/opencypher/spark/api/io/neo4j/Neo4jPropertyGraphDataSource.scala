@@ -154,11 +154,14 @@ case class Neo4jPropertyGraphDataSource(
       session.run(s"CREATE CONSTRAINT ON (n:$metaLabel) ASSERT n.$metaPropertyKey IS UNIQUE").consume()
     }
 
-    val writesCompleted = for {
-      _ <- Future.sequence(Writers.writeNodes(graph, metaLabel, config))
-      _ <- Future.sequence(Writers.writeRelationships(graph, metaLabel, config))
-    } yield Future {}
-    Await.result(writesCompleted, Duration.Inf)
+//    val writesCompleted = for {
+//      _ <- Future.sequence(Writers.writeNodes(graph, metaLabel, config))
+//      _ <- Future.sequence(Writers.writeRelationships(graph, metaLabel, config))
+//    } yield Future {}
+//    Await.result(writesCompleted, Duration.Inf)
+
+    Writers.writeNodes(graph, metaLabel, config)
+    Writers.writeRelationships(graph, metaLabel, config)
 
     schemaCache += graphName -> graph.schema.asCaps
     graphNameCache += graphName
@@ -171,23 +174,22 @@ case class Neo4jPropertyGraphDataSource(
 
 case object Writers {
   def writeNodes(graph: PropertyGraph, metaLabel: String, config: Neo4jConfig)
-    (implicit caps: CAPSSession): Set[Future[Unit]] = {
-    val result: Set[Future[Unit]] = graph.schema.labelCombinations.combos.map { combo =>
+    (implicit caps: CAPSSession): Unit = {
+    graph.schema.labelCombinations.combos.foreach { combo =>
       val nodeScan = graph.nodes("n", CTNode(combo), exactLabelMatch = true).asCaps
       val mapping = computeMapping(nodeScan)
       nodeScan
         .df
         .rdd
-        .foreachPartitionAsync{ i =>
+        .foreachPartition { i =>
           if (i.nonEmpty) EntityWriter.createNodes(i, mapping, config, combo + metaLabel)(rowToListValue)
         }
     }
-    result
   }
 
   def writeRelationships(graph: PropertyGraph, metaLabel: String, config: Neo4jConfig)
-    (implicit caps: CAPSSession): Set[Future[Unit]] = {
-    graph.schema.relationshipTypes.map { relType =>
+    (implicit caps: CAPSSession): Unit = {
+    graph.schema.relationshipTypes.foreach { relType =>
       val relScan = graph.relationships("r", CTRelationship(relType)).asCaps
       val mapping = computeMapping(relScan)
 
@@ -203,7 +205,7 @@ case object Writers {
       relScan
         .df
         .rdd
-        .foreachPartitionAsync { i =>
+        .foreachPartition { i =>
           if (i.nonEmpty) {
             EntityWriter.createRelationships(
               i,
