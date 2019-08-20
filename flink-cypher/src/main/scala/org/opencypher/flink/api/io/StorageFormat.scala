@@ -24,16 +24,22 @@
  * described as "implementation extensions to Cypher" or as "proposed changes to
  * Cypher that are not yet approved by the openCypher community".
  */
-package org.opencypher.okapi.relational.impl.planning
+package org.opencypher.flink.api.io
 
-sealed trait JoinType
+trait StorageFormat {
+  def name: String = getClass.getSimpleName.dropRight(7).toLowerCase
+}
 
-case object InnerJoin extends JoinType
-case object LeftOuterJoin extends JoinType
-case object RightOuterJoin extends JoinType
-case object FullOuterJoin extends JoinType
+case object CsvFormat extends StorageFormat
 
-sealed trait Order
+case object AvroFormat extends StorageFormat
 
-case object  Ascending extends Order
-case object  Descending extends Order
+case object ParquetFormat extends StorageFormat
+
+case object OrcFormat extends StorageFormat
+
+case object JdbcFormat extends StorageFormat
+
+case object HiveFormat extends StorageFormat
+
+case object Neo4jFormat extends StorageFormat

@@ -24,16 +24,19 @@
  * described as "implementation extensions to Cypher" or as "proposed changes to
  * Cypher that are not yet approved by the openCypher community".
  */
-package org.opencypher.okapi.relational.impl.planning
+package org.opencypher.flink.api.io.metadata
 
-sealed trait JoinType
+import upickle.default._
 
-case object InnerJoin extends JoinType
-case object LeftOuterJoin extends JoinType
-case object RightOuterJoin extends JoinType
-case object FullOuterJoin extends JoinType
+object CAPFGraphMetaData {
+  implicit def rw: ReadWriter[CAPFGraphMetaData] = macroRW
 
-sealed trait Order
+  def fromJson(jsonString: String): CAPFGraphMetaData =
+    upickle.default.read[CAPFGraphMetaData](jsonString)
+}
 
-case object  Ascending extends Order
-case object  Descending extends Order
+case class CAPFGraphMetaData(tableStorageFormat: String, tags: Set[Int] = Set(0)) {
+
+  def toJson: String =
+    upickle.default.write[CAPFGraphMetaData](this, indent = 4)
+}

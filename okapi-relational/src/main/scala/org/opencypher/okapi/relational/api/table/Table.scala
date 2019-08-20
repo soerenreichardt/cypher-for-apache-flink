@@ -29,6 +29,7 @@ package org.opencypher.okapi.relational.api.table
 import org.opencypher.okapi.api.table.CypherTable
 import org.opencypher.okapi.api.value.CypherValue.CypherMap
 import org.opencypher.okapi.ir.api.expr.{Aggregator, Expr, Var}
+import org.opencypher.okapi.relational.api.graph.RelationalCypherSession
 import org.opencypher.okapi.relational.impl.planning.{JoinType, Order}
 import org.opencypher.okapi.relational.impl.table.RecordHeader
 
@@ -96,6 +97,14 @@ trait Table[T <: Table[T]] extends CypherTable {
     * @return joined table
     */
   def join(other: T, joinType: JoinType, joinCols: (String, String)*): T
+
+  /**
+   * Computes a cross-product between the current and the given table.
+   *
+   * @param other    table to join
+   * @return joined table
+   */
+  def cross(other: T)(implicit session: RelationalCypherSession[T]): T
 
   /**
     * Computes the union of the current table and the given table. Requires both tables to have identical column layouts.

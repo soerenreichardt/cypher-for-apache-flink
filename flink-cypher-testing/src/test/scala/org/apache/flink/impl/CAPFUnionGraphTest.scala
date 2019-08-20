@@ -24,16 +24,22 @@
  * described as "implementation extensions to Cypher" or as "proposed changes to
  * Cypher that are not yet approved by the openCypher community".
  */
-package org.opencypher.okapi.relational.impl.planning
+package org.apache.flink.impl
 
-sealed trait JoinType
+import org.opencypher.flink.test.CAPFTestSuite
+import org.opencypher.flink.test.fixture.{GraphConstructionFixture, RecordsVerificationFixture, TeamDataFixture}
 
-case object InnerJoin extends JoinType
-case object LeftOuterJoin extends JoinType
-case object RightOuterJoin extends JoinType
-case object FullOuterJoin extends JoinType
+class CAPFUnionGraphTest extends CAPFTestSuite
+  with GraphConstructionFixture
+  with RecordsVerificationFixture
+  with TeamDataFixture {
 
-sealed trait Order
+  import CAPFGraphTestData._
 
-case object  Ascending extends Order
-case object  Descending extends Order
+  def testGraph1 = initGraph("CREATE (:Person {name: 'Mats'})")
+  def testGraph2 = initGraph("CREATE (:Person {name: 'Phil'})")
+
+  it("supports UNION ALL") {
+    testGraph1.unionAll(testGraph2).cypher("""MATCH (n) RETURN DISTINCT id(n)""").getRecords.size should equal(2)
+  }
+}

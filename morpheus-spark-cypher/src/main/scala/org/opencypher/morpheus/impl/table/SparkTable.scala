@@ -31,6 +31,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
+import org.opencypher.morpheus.api.MorpheusSession
 import org.opencypher.morpheus.impl.MorpheusFunctions
 import org.opencypher.morpheus.impl.MorpheusFunctions.{partitioned_id_assignment, serialize}
 import org.opencypher.morpheus.impl.SparkSQLExprMapper._
@@ -42,6 +43,7 @@ import org.opencypher.okapi.api.value.CypherValue.{CypherMap, CypherValue}
 import org.opencypher.okapi.impl.exception.{IllegalArgumentException, UnsupportedOperationException}
 import org.opencypher.okapi.impl.util.Measurement.printTiming
 import org.opencypher.okapi.ir.api.expr.{Expr, _}
+import org.opencypher.okapi.relational.api.graph.RelationalCypherSession
 import org.opencypher.okapi.relational.api.table.Table
 import org.opencypher.okapi.relational.impl.planning._
 import org.opencypher.okapi.relational.impl.table.RecordHeader
@@ -179,12 +181,9 @@ object SparkTable {
         case LeftOuterJoin => "left_outer"
         case RightOuterJoin => "right_outer"
         case FullOuterJoin => "full_outer"
-        case CrossJoin => "cross"
       }
 
       joinType match {
-        case CrossJoin =>
-          df.crossJoin(other.df)
 
         case LeftOuterJoin
           if joinCols.isEmpty && df.sparkSession.conf.get("spark.sql.crossJoin.enabled", "false") == "false" =>
@@ -193,6 +192,10 @@ object SparkTable {
         case _ =>
           df.safeJoin(other.df, joinCols, joinTypeString)
       }
+    }
+
+    override def cross(other: DataFrameTable)(implicit session: RelationalCypherSession[DataFrameTable]): DataFrameTable = {
+      df.crossJoin(other.df)
     }
 
     override def distinct: DataFrameTable = df.dropDuplicates()

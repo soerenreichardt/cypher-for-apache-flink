@@ -1,0 +1,17 @@
+apply plugin: 'ch.kk7.spawn'
+
+description = 'Cypher for Apache Flink - Test Utilities'
+
+dependencies {
+    compile project(':flink-cypher')
+    compile project(':okapi-testing')
+    compile project(':okapi-neo4j-io-testing')
+
+    compile group: 'org.apache.flink', name: "flink-table".scala(), version: ver.flink
+    compile group: 'org.apache.flink', name: "flink-scala".scala(), version: ver.flink
+    compile group: 'org.apache.flink', name: "flink-streaming-scala".scala(), version: ver.flink
+    testCompile project(':okapi-api').sourceSets.test.output
+}
+
+tasks.test.dependsOn(":okapi-neo4j-io-testing:neo4jStart")
+tasks.test.finalizedBy(":okapi-neo4j-io-testing:neo4jStop")

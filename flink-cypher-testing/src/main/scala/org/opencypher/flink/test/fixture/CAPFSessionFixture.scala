@@ -24,16 +24,20 @@
  * described as "implementation extensions to Cypher" or as "proposed changes to
  * Cypher that are not yet approved by the openCypher community".
  */
-package org.opencypher.okapi.relational.impl.planning
+package org.opencypher.flink.test.fixture
 
-sealed trait JoinType
+import org.opencypher.flink.api.CAPFSession
+import org.opencypher.okapi.testing.{BaseTestFixture, BaseTestSuite}
 
-case object InnerJoin extends JoinType
-case object LeftOuterJoin extends JoinType
-case object RightOuterJoin extends JoinType
-case object FullOuterJoin extends JoinType
+trait CAPFSessionFixture extends BaseTestFixture {
+  self: FlinkSessionFixture with BaseTestSuite =>
 
-sealed trait Order
+  implicit lazy val capf: CAPFSession = CAPFSession.local()
 
-case object  Ascending extends Order
-case object  Descending extends Order
+  abstract override protected def afterEach(): Unit = {
+    capf.catalog.source(capf.catalog.sessionNamespace).graphNames.map(_.value).foreach(capf.catalog.dropGraph)
+    capf.catalog.store(capf.emptyGraphQgn, capf.graphs.empty)
+    super.afterEach()
+  }
+
+}

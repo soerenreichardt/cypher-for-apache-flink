@@ -24,16 +24,16 @@
  * described as "implementation extensions to Cypher" or as "proposed changes to
  * Cypher that are not yet approved by the openCypher community".
  */
-package org.opencypher.okapi.relational.impl.planning
+package org.opencypher.flink.impl.io
 
-sealed trait JoinType
+import org.opencypher.okapi.api.graph.GraphName
+import org.opencypher.okapi.api.io.PropertyGraphDataSource
+import org.opencypher.okapi.impl.exception.GraphAlreadyExistsException
 
-case object InnerJoin extends JoinType
-case object LeftOuterJoin extends JoinType
-case object RightOuterJoin extends JoinType
-case object FullOuterJoin extends JoinType
+trait CAPFPropertyGraphDataSource extends PropertyGraphDataSource {
 
-sealed trait Order
-
-case object  Ascending extends Order
-case object  Descending extends Order
+  protected def checkStorable(name: GraphName): Unit = {
+    if (hasGraph(name))
+      throw GraphAlreadyExistsException(s"A graph with name $name is already stored in this graph data source.")
+  }
+}

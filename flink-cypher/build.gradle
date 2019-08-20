@@ -1,0 +1,34 @@
+apply plugin: 'com.github.johnrengelman.shadow'
+
+description = 'Cypher for Apache Flink - CAPF'
+
+dependencies {
+    compile project(':okapi-relational')
+    compile project(':okapi-neo4j-io')
+    compile project(':graph-ddl')
+
+    compile group: 'org.neo4j.driver', name: 'neo4j-java-driver', version: ver.neo4j.driver
+
+    compile group: 'org.apache.flink', name: "flink-scala".scala(), version: ver.flink
+    compile group: 'org.apache.flink', name: "flink-table".scala(), version: ver.flink
+    compile group: 'org.apache.flink', name: "flink-clients".scala(), version: ver.flink
+    compileOnly group: 'org.apache.flink', name: "flink-streaming-scala".scala(), version: ver.flink
+    compile group: 'org.apache.flink', name: "flink-orc".scala(), version: ver.flink
+    compile group: 'org.apache.hadoop', name: "hadoop-common", version: ver.hadoop
+    compile("org.eclipse.ecf:org.apache.log4j:1.2.15.v201012070815")
+}
+
+shadowJar {
+    classifier = 'all'
+
+    from project.sourceSets.main.output
+    configurations = [project.configurations.runtime]
+
+    dependencies {
+        exclude(dependency('org.scala-lang:'))
+        exclude(dependency('org.scala-lang.modules:'))
+    }
+    exclude "META-INF/versions/**/*"
+}
+
+pub.full.artifacts += 'allJar'

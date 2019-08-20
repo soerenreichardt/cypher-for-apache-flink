@@ -24,16 +24,12 @@
  * described as "implementation extensions to Cypher" or as "proposed changes to
  * Cypher that are not yet approved by the openCypher community".
  */
-package org.opencypher.okapi.relational.impl.planning
+package org.opencypher.flink.configuration
 
-sealed trait JoinType
+import org.opencypher.okapi.impl.configuration.{ConfigCaching, ConfigFlag}
 
-case object InnerJoin extends JoinType
-case object LeftOuterJoin extends JoinType
-case object RightOuterJoin extends JoinType
-case object FullOuterJoin extends JoinType
+object CAPFConfiguration {
 
-sealed trait Order
+  object DebugPhysicalOperators extends ConfigFlag("capf.debugPhysicalOperators") with ConfigCaching[Boolean]
 
-case object  Ascending extends Order
-case object  Descending extends Order
+}

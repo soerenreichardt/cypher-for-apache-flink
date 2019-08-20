@@ -24,16 +24,15 @@
  * described as "implementation extensions to Cypher" or as "proposed changes to
  * Cypher that are not yet approved by the openCypher community".
  */
-package org.opencypher.okapi.relational.impl.planning
+package org.opencypher.flink.test.fixture
 
-sealed trait JoinType
+import org.apache.flink.api.scala.ExecutionEnvironment
+import org.apache.flink.table.api.{BatchTableEnvironment, TableEnvironment}
+import org.opencypher.okapi.testing.{BaseTestFixture, BaseTestSuite}
 
-case object InnerJoin extends JoinType
-case object LeftOuterJoin extends JoinType
-case object RightOuterJoin extends JoinType
-case object FullOuterJoin extends JoinType
+trait FlinkSessionFixture extends BaseTestFixture {
+  self: BaseTestSuite =>
 
-sealed trait Order
-
-case object  Ascending extends Order
-case object  Descending extends Order
+  implicit val sessionEnv: ExecutionEnvironment = ExecutionEnvironment.getExecutionEnvironment
+  implicit val sessionTableEnv: BatchTableEnvironment = TableEnvironment.getTableEnvironment(sessionEnv)
+}

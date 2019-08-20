@@ -24,16 +24,24 @@
  * described as "implementation extensions to Cypher" or as "proposed changes to
  * Cypher that are not yet approved by the openCypher community".
  */
-package org.opencypher.okapi.relational.impl.planning
+package org.opencypher.flink.test
 
-sealed trait JoinType
+import org.opencypher.flink.impl.table.FlinkCypherTable.FlinkTable
+import org.opencypher.flink.test.fixture.{CAPFSessionFixture, FlinkSessionFixture}
+import org.opencypher.flink.test.support.{GraphMatchingTestSupport, RecordMatchingTestSupport}
+import org.opencypher.okapi.api.graph.QualifiedGraphName
+import org.opencypher.okapi.relational.api.graph.RelationalCypherGraph
+import org.opencypher.okapi.relational.api.planning.RelationalRuntimeContext
+import org.opencypher.okapi.testing.BaseTestSuite
 
-case object InnerJoin extends JoinType
-case object LeftOuterJoin extends JoinType
-case object RightOuterJoin extends JoinType
-case object FullOuterJoin extends JoinType
+abstract class CAPFTestSuite
+  extends BaseTestSuite
+  with FlinkSessionFixture
+  with CAPFSessionFixture
+  with GraphMatchingTestSupport
+  with RecordMatchingTestSupport {
 
-sealed trait Order
+  def catalog(qgn: QualifiedGraphName): Option[RelationalCypherGraph[FlinkTable]] = None
 
-case object  Ascending extends Order
-case object  Descending extends Order
+  implicit val context: RelationalRuntimeContext[FlinkTable] = RelationalRuntimeContext(catalog)
+}

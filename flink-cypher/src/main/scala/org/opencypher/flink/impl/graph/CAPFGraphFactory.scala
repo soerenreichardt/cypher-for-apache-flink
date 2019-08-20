@@ -24,16 +24,12 @@
  * described as "implementation extensions to Cypher" or as "proposed changes to
  * Cypher that are not yet approved by the openCypher community".
  */
-package org.opencypher.okapi.relational.impl.planning
+package org.opencypher.flink.impl.graph
 
-sealed trait JoinType
+import org.opencypher.flink.api.CAPFSession
+import org.opencypher.flink.impl.table.FlinkCypherTable.FlinkTable
+import org.opencypher.okapi.relational.api.graph.{RelationalCypherGraph, RelationalCypherGraphFactory}
 
-case object InnerJoin extends JoinType
-case object LeftOuterJoin extends JoinType
-case object RightOuterJoin extends JoinType
-case object FullOuterJoin extends JoinType
-
-sealed trait Order
-
-case object  Ascending extends Order
-case object  Descending extends Order
+case class CAPFGraphFactory()(implicit val session: CAPFSession) extends RelationalCypherGraphFactory[FlinkTable] {
+  override type Graph = RelationalCypherGraph[FlinkTable]
+}

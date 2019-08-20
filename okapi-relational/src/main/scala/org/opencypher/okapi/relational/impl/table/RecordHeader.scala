@@ -38,6 +38,8 @@ object RecordHeader {
 
   def empty: RecordHeader = RecordHeader(Map.empty)
 
+  def empty(escaping: CharacterEscaping): RecordHeader = RecordHeader(Map.empty, Some(escaping))
+
   def from[T <: Expr](expr: T, exprs: T*): RecordHeader = empty.withExprs(expr, exprs: _*)
 
   def from[T <: Expr](exprs: Set[T]): RecordHeader = empty.withExprs(exprs)
@@ -59,7 +61,11 @@ object RecordHeader {
   }
 }
 
-case class RecordHeader(exprToColumn: Map[Expr, String]) {
+trait CharacterEscaping {
+  def replaceCharactersInColumnName(columnName: String): String
+}
+
+case class RecordHeader(exprToColumn: Map[Expr, String], escaping: Option[CharacterEscaping] = None) {
 
   // ==============
   // Lookup methods
@@ -296,11 +302,17 @@ case class RecordHeader(exprToColumn: Map[Expr, String]) {
       else candidateName
     }
 
-    val firstColumnNameCandidate = expr.toString
-      .replaceAll("-", "_")
-      .replaceAll(":", "_")
-      .replaceAll("\\.", "_")
+    val firstColumnNameCandidate = escaping.getOrElse(new CharacterEscaping {
+      override def replaceCharactersInColumnName(columnName: String): String = columnName
+        .replaceAll("-", "_")
+        .replaceAll(":", "_")
+        .replaceAll("\\.", "_")
+    }).replaceCharactersInColumnName(expr.toString)
     recConflictFreeColumnName(firstColumnNameCandidate)
+  }
+
+  def withCharacterEscaping(characterEscaping: CharacterEscaping): RecordHeader = {
+    copy(escaping = Some(characterEscaping))
   }
 
   def withExpr(expr: Expr): RecordHeader = {
