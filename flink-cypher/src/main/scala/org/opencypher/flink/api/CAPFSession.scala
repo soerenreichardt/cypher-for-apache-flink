@@ -59,7 +59,7 @@ sealed class CAPFSession private(
 
   override val graphs: CAPFGraphFactory = CAPFGraphFactory()
 
-  override val elementTables: CAPFElementTableFactory.type = CAPFElementTableFactory
+  override val elementTables: CAPFElementTableFactory = CAPFElementTableFactory(capf)
 
   def sql(query: String): CAPFRecords =
     records.wrap(tableEnv.sqlQuery(query))

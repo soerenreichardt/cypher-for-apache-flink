@@ -445,7 +445,7 @@ final case class Cross[T <: Table[T] : TypeTag](
   override lazy val header: RecordHeader = lhs.header join rhs.header
 
   override lazy val _table: T = {
-    lhs.table.cross(rhs.table)(context.session)
+    lhs.table.cross(rhs.table)
   }
 }
 

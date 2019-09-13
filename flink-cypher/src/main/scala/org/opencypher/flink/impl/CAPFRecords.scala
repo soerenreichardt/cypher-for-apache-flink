@@ -107,11 +107,13 @@ case class CAPFRecords(
   override val logicalColumns: Option[Seq[String]]= None
 )(implicit val capf: CAPFSession) extends RelationalCypherRecords[FlinkTable] with RecordBehaviour {
 
+  override implicit val session: CAPFSession = capf
+
   override type Records = CAPFRecords
 
   def flinkTable: Table = table.table
 
-  override def cache(): CAPFRecords = throw new UnsupportedOperationException("cache()")
+  override def cache(): CAPFRecords = throw UnsupportedOperationException("cache()")
 
   override def toString: String = {
     if (header.isEmpty) {
@@ -124,6 +126,8 @@ case class CAPFRecords(
 }
 
 trait RecordBehaviour extends RelationalCypherRecords[FlinkTable] {
+
+  implicit val session: CAPFSession
 
   override lazy val columnType: Map[String, CypherType] = table.table.columnType
 

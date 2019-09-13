@@ -43,7 +43,7 @@ import org.opencypher.okapi.relational.api.configuration.CoraConfiguration.Print
 
 object Demo extends App {
 
-  val session = CAPFSession.local()
+  implicit val session = CAPFSession.local()
 
   private val nodeDataSet = session.env.fromCollection(DemoData.nodes)
   val relsDataSet = session.env.fromCollection(DemoData.rels)
@@ -290,7 +290,7 @@ object IntegerBug extends App {
     (23L, 9L, 10L)
   )
 
-  val session = CAPFSession.local()
+  implicit val session = CAPFSession.local()
   val nodeTable1 = session.tableEnv.fromDataSet(
     session.env.fromCollection(nodes1),
     'node_id, 'prop1
@@ -339,7 +339,7 @@ object ThesisDemo extends App {
     (7L, 3L, 1L)
   )
 
-  val session = CAPFSession.local()
+  implicit val session = CAPFSession.local()
 
   val musicTable = session.tableEnv.fromDataSet(
     session.env.fromCollection(musicNodes),

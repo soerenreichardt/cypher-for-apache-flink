@@ -37,7 +37,7 @@ import org.opencypher.flink.impl.convert.FlinkConversions._
 import org.opencypher.okapi.api.types._
 import org.opencypher.okapi.api.value.CypherValue
 import org.opencypher.okapi.api.value.CypherValue.{CypherMap, CypherValue}
-import org.opencypher.okapi.impl.exception.{IllegalArgumentException, IllegalStateException, NotImplementedException, UnsupportedOperationException}
+import org.opencypher.okapi.impl.exception.IllegalArgumentException
 import org.opencypher.okapi.ir.api.expr._
 import org.opencypher.okapi.relational.api.graph.RelationalCypherSession
 import org.opencypher.okapi.relational.api.table.{Table => RelationalTable}
@@ -46,7 +46,7 @@ import org.opencypher.okapi.relational.impl.table.RecordHeader
 
 object FlinkCypherTable {
 
-  implicit class FlinkTable(val table: Table) extends RelationalTable[FlinkTable] {
+  implicit class FlinkTable(val table: Table)(implicit val session: CAPFSession) extends RelationalTable[FlinkTable] {
 
     private case class EmptyRow()
 
@@ -185,10 +185,7 @@ object FlinkCypherTable {
       }
     }
 
-    override def cross(other: FlinkTable)(implicit session: RelationalCypherSession[FlinkTable]): FlinkTable = {
-      implicit val capf = session.asInstanceOf[CAPFSession]
-      table.cross(other.table)
-    }
+    override def cross(other: FlinkTable): FlinkTable = table.cross(other.table)
 
     override def distinct: FlinkTable =
       table.distinct()

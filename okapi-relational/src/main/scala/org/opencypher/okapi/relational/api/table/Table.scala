@@ -104,7 +104,7 @@ trait Table[T <: Table[T]] extends CypherTable {
    * @param other    table to join
    * @return joined table
    */
-  def cross(other: T)(implicit session: RelationalCypherSession[T]): T
+  def cross(other: T): T
 
   /**
     * Computes the union of the current table and the given table. Requires both tables to have identical column layouts.

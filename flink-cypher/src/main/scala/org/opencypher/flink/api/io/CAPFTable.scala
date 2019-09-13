@@ -38,21 +38,25 @@ import org.opencypher.okapi.impl.util.StringEncodingUtilities._
 import org.opencypher.okapi.relational.api.io.ElementTable
 import org.opencypher.okapi.relational.api.table.RelationalElementTableFactory
 
-case object CAPFElementTableFactory extends RelationalElementTableFactory[FlinkTable] {
+case class CAPFElementTableFactory(session: CAPFSession) extends RelationalElementTableFactory[FlinkTable] {
   override def elementTable(
     nodeMapping: ElementMapping,
     table: FlinkTable
   ): ElementTable[FlinkTable] = {
-    CAPFElementTable.create(nodeMapping, table)
+    CAPFElementTable.create(nodeMapping, table)(session)
   }
+
 }
 
 case class CAPFElementTable private[flink](
   override val mapping: ElementMapping,
   override val table: FlinkTable
-) extends ElementTable[FlinkTable] with RecordBehaviour {
+)(implicit val capf: CAPFSession) extends ElementTable[FlinkTable] with RecordBehaviour {
 
   override type Records = CAPFElementTable
+
+
+  override implicit val session: CAPFSession = capf
 
   private[flink] def records(implicit capf: CAPFSession): CAPFRecords = capf.records.fromElementTable(elementTable = this)
 
@@ -69,7 +73,7 @@ case class CAPFElementTable private[flink](
 }
 
 object CAPFElementTable {
-  def create(mapping: ElementMapping, table: FlinkTable): CAPFElementTable = {
+  def create(mapping: ElementMapping, table: FlinkTable)(implicit capf: CAPFSession): CAPFElementTable = {
     val sourceIdColumns = mapping.allSourceIdKeys
     val idCols = sourceIdColumns.map(UnresolvedFieldReference)
     val remainingCols = mapping.allSourcePropertyKeys.map(UnresolvedFieldReference)
@@ -90,7 +94,7 @@ object CAPFNodeTable {
     * @param nodeTable         node data
     * @return a node table with inferred node mapping
     */
-  def apply(impliedLabels: Set[String], nodeTable: Table): CAPFElementTable = {
+  def apply(impliedLabels: Set[String], nodeTable: Table)(implicit session: CAPFSession): CAPFElementTable = {
     val propertyColumnNames = nodeTable.columns.filter(_ != GraphElement.sourceIdKey).toSet
     val propertyKeyMapping = propertyColumnNames.map(p => p.toProperty -> p)
 
@@ -120,7 +124,7 @@ object CAPFRelationshipTable {
     * @param relationshipTable   relationship data
     * @return a relationship table with inferred relationship mapping
     */
-  def apply(relationshipType: String, relationshipTable: Table): CAPFElementTable = {
+  def apply(relationshipType: String, relationshipTable: Table)(implicit session: CAPFSession) = {
     val propertyColumnNames = relationshipTable.columns.filter(!Relationship.nonPropertyAttributes.contains(_)).toSet
     val propertyKeyMapping = propertyColumnNames.map(p => p.toProperty -> p)
 
