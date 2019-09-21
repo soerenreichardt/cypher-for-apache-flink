@@ -160,6 +160,9 @@ subprojects {
  'morpheus-tck',
  'morpheus-testing',
  'morpheus-jmh',
+ 'flink-cypher',
+ 'flink-cypher-testing',
+ 'flink-cypher-tck',
  'documentation',
 ].each {
     project(it).tasks.validateLicenses.enabled = false

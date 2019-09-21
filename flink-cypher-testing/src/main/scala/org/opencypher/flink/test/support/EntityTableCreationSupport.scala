@@ -28,14 +28,14 @@ package org.opencypher.flink.test.support
 
 import org.apache.flink.table.api.Table
 import org.opencypher.flink.api.io.CAPFElementTable
-import org.opencypher.okapi.api.graph.{IdKey, Pattern, SourceEndNodeKey, SourceIdKey, SourceStartNodeKey}
-import org.opencypher.okapi.api.io.conversion.EntityMapping
+import org.opencypher.okapi.api.graph._
+import org.opencypher.okapi.api.io.conversion.ElementMapping
 import org.opencypher.okapi.impl.util.StringEncodingUtilities._
 
 trait EntityTableCreationSupport {
 
   def constructEntityTable(pattern: Pattern, table: Table): CAPFElementTable = {
-    val mapping = pattern.entities.foldLeft(EntityMapping.empty(pattern)) {
+    val mapping = pattern.elements.foldLeft(ElementMapping.empty(pattern)) {
       case (acc, entity) =>
 
         val entityColumns = table.getSchema.getFieldNames.filter(_.startsWith(s"${entity.name}_"))

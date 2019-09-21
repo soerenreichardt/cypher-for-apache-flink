@@ -32,25 +32,23 @@ import org.apache.flink.table.expressions.{ResolvedFieldReference, UnresolvedFie
 import org.apache.flink.types.Row
 import org.opencypher.flink.api.CAPFSession
 import org.opencypher.flink.api.io.CAPFElementTable
-import org.opencypher.flink.api.io.GraphEntity.sourceIdKey
 import org.opencypher.flink.impl.convert.FlinkConversions._
 import org.opencypher.flink.impl.table.FlinkCypherTable.FlinkTable
 import org.opencypher.flink.schema.CAPFSchema._
 import org.opencypher.flink.test.support.EntityTableCreationSupport
+import org.opencypher.flink.test.support.creation.graphs.TestGraphFactory
 import org.opencypher.okapi.api.graph._
+import org.opencypher.okapi.api.schema.PropertyGraphSchema
 import org.opencypher.okapi.api.schema.PropertyKeys.PropertyKeys
-import org.opencypher.okapi.api.schema.Schema
 import org.opencypher.okapi.api.types.{CTNode, CTRelationship}
-import org.opencypher.okapi.api.value.CypherValue.{CypherEntity, CypherValue}
+import org.opencypher.okapi.api.value.CypherValue.{CypherValue, Element}
 import org.opencypher.okapi.impl.exception.{IllegalArgumentException, IllegalStateException}
 import org.opencypher.okapi.impl.util.StringEncodingUtilities._
 import org.opencypher.okapi.relational.api.graph.RelationalCypherGraph
 import org.opencypher.okapi.relational.impl.graph.ScanGraph
 import org.opencypher.okapi.testing.propertygraph.{InMemoryTestGraph, InMemoryTestNode, InMemoryTestRelationship}
 
-object CAPFScanGraphFactory extends CAPFTestGraphFactory with EntityTableCreationSupport {
-
-  val tableEntityKey = s"___$sourceIdKey"
+object CAPFScanGraphFactory extends TestGraphFactory with EntityTableCreationSupport {
 
   override def apply(propertyGraph: InMemoryTestGraph, additionalPatterns: Seq[Pattern])
     (implicit capf: CAPFSession): RelationalCypherGraph[FlinkTable] = {
@@ -70,10 +68,10 @@ object CAPFScanGraphFactory extends CAPFTestGraphFactory with EntityTableCreatio
 
   override def name: String = "CAPFScanGraphFactory"
 
-  private def extractEmbeddings(pattern: Pattern, graph: InMemoryTestGraph, schema: Schema)
-    (implicit capf: CAPFSession): Seq[Map[Entity, CypherEntity[Long]]] = {
+  private def extractEmbeddings(pattern: Pattern, graph: InMemoryTestGraph, schema: PropertyGraphSchema)
+    (implicit capf: CAPFSession): Seq[Map[PatternElement, Element[Long]]] = {
 
-    val candidates = pattern.entities.map { entity =>
+    val candidates = pattern.elements.map { entity =>
       entity.cypherType match {
         case CTNode(labels, _) =>
           entity -> graph.nodes.filter(_.labels == labels)
@@ -84,9 +82,9 @@ object CAPFScanGraphFactory extends CAPFTestGraphFactory with EntityTableCreatio
     }.toMap
 
     val unitEmbedding = Seq(
-      Map.empty[Entity, CypherEntity[Long]]
+      Map.empty[PatternElement, Element[Long]]
     )
-    val initialEmbeddings = pattern.entities.foldLeft(unitEmbedding) {
+    val initialEmbeddings = pattern.elements.foldLeft(unitEmbedding) {
       case (acc, entity) =>
         val entityCandidates = candidates(entity)
 
@@ -119,13 +117,13 @@ object CAPFScanGraphFactory extends CAPFTestGraphFactory with EntityTableCreatio
 
   private def createEntityTable(
     pattern: Pattern,
-    embeddings: Seq[Map[Entity, CypherEntity[Long]]],
-    schema: Schema
+    embeddings: Seq[Map[PatternElement, Element[Long]]],
+    schema: PropertyGraphSchema
   )(implicit capf: CAPFSession): CAPFElementTable = {
 
     val unitData: Seq[Seq[Any]] = Seq(embeddings.indices.map(_ => Seq.empty[Any]): _*)
 
-    val (columns, data) = pattern.entities.foldLeft(Seq.empty[ResolvedFieldReference] -> unitData) {
+    val (columns, data) = pattern.elements.foldLeft(Seq.empty[ResolvedFieldReference] -> unitData) {
       case ((accFieldRefs, accData), entity) =>
 
         entity.cypherType match {
@@ -186,9 +184,9 @@ object CAPFScanGraphFactory extends CAPFTestGraphFactory with EntityTableCreatio
     constructEntityTable(pattern, table)
   }
 
-  protected def getPropertyFields(entity: Entity, propKeys: PropertyKeys): Seq[ResolvedFieldReference] = {
+  protected def getPropertyFields(patternElement: PatternElement, propKeys: PropertyKeys): Seq[ResolvedFieldReference] = {
     propKeys.foldLeft(Seq.empty[ResolvedFieldReference]) {
-      case (fields, key) => fields :+ ResolvedFieldReference(s"${entity.name}_${key._1.encodeSpecialCharacters}_property", key._2.getFlinkType)
+      case (fields, key) => fields :+ ResolvedFieldReference(s"${patternElement.name}_${key._1.encodeSpecialCharacters}_property", key._2.getFlinkType)
     }
   }
 

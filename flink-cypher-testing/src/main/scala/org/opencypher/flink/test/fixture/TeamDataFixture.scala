@@ -29,10 +29,10 @@ package org.opencypher.flink.test.fixture
 import org.apache.flink.api.scala._
 import org.apache.flink.table.api.Table
 import org.apache.flink.types.Row
-import org.opencypher.flink.api.io.{CAPFElementTable, CAPFNodeTable, CAPFRelationshipTable}
+import org.opencypher.flink.api.io.CAPFElementTable
 import org.opencypher.flink.api.value.{CAPFNode, CAPFRelationship}
-import org.opencypher.okapi.api.io.conversion.{EntityMapping, NodeMappingBuilder, RelationshipMappingBuilder}
-import org.opencypher.okapi.api.schema.Schema
+import org.opencypher.okapi.api.io.conversion.{ElementMapping, NodeMappingBuilder, RelationshipMappingBuilder}
+import org.opencypher.okapi.api.schema.PropertyGraphSchema
 import org.opencypher.okapi.api.types.{CTInteger, CTList, CTString, CTVoid}
 import org.opencypher.okapi.api.value.CypherValue.{CypherList, CypherMap}
 import org.opencypher.okapi.testing.Bag
@@ -55,7 +55,7 @@ trait TeamDataFixture extends TestDataFixture {
       |       CREATE (c)-[:KNOWS {since: 2016}]->(d)
     """.stripMargin
 
-  lazy val dataFixtureSchema: Schema = Schema.empty
+  lazy val dataFixtureSchema: PropertyGraphSchema = PropertyGraphSchema.empty
     .withNodePropertyKeys("Person", "German")("name" -> CTString, "luckyNumber" -> CTInteger,  "languages" -> CTList(CTString).nullable)
     .withNodePropertyKeys("Person", "Swede")("name" -> CTString, "luckyNumber" -> CTInteger)
     .withNodePropertyKeys("Person")("name" -> CTString, "luckyNumber" -> CTInteger, "languages" -> CTList(CTVoid))
@@ -142,7 +142,7 @@ trait TeamDataFixture extends TestDataFixture {
     mutable.WrappedArray.make(s)
   }
 
-  private lazy val personMapping: EntityMapping = NodeMappingBuilder
+  private lazy val personMapping: ElementMapping = NodeMappingBuilder
     .on("ID")
     .withImpliedLabel("Person")
     .withPropertyKey("name" -> "NAME")
@@ -162,7 +162,7 @@ trait TeamDataFixture extends TestDataFixture {
 
   lazy val personTable = CAPFElementTable.create(personMapping, personDF)
 
-  private lazy val knowsMapping: EntityMapping = RelationshipMappingBuilder
+  private lazy val knowsMapping: ElementMapping = RelationshipMappingBuilder
     .on("ID").from("SRC").to("DST").relType("KNOWS").withPropertyKey("since" -> "SINCE").build
 
   protected lazy val knowsDF: Table = capf.tableEnv.fromDataSet(

@@ -28,16 +28,17 @@ package org.opencypher.flink.test.support.capf
 
 import org.apache.flink.api.scala._
 import org.apache.flink.table.api.scala._
-import org.opencypher.flink.api.io.{CAPFElementTable, CAPFNodeTable, CAPFRelationshipTable}
+import org.opencypher.flink.api.io.CAPFElementTable
 import org.opencypher.flink.test.CAPFTestSuite
 import org.opencypher.flink.test.support.GraphMatchingTestSupport
+import org.opencypher.flink.test.support.creation.graphs.TestGraphFactory
 import org.opencypher.okapi.api.io.conversion.{NodeMappingBuilder, RelationshipMappingBuilder}
-import org.opencypher.okapi.api.schema.Schema
+import org.opencypher.okapi.api.schema.PropertyGraphSchema
 import org.opencypher.okapi.api.types.CTString
 import org.opencypher.okapi.testing.propertygraph.CreateGraphFactory
 
 abstract class CAPFTestGraphFactoryTest extends CAPFTestSuite with GraphMatchingTestSupport {
-  def factory: CAPFTestGraphFactory
+  def factory: TestGraphFactory
 
   val createQuery: String =
     """
@@ -109,7 +110,7 @@ abstract class CAPFTestGraphFactoryTest extends CAPFTestSuite with GraphMatching
 
   test("testSchema") {
     val propertyGraph = CreateGraphFactory(createQuery)
-    CAPFScanGraphFactory(propertyGraph).schema should equal(Schema.empty
+    factory(propertyGraph).schema should equal(PropertyGraphSchema.empty
       .withNodePropertyKeys("Person", "Astronaut")("name" -> CTString)
       .withNodePropertyKeys("Person", "Martian")("name" -> CTString)
       .withNodePropertyKeys("Language")("title" -> CTString)
@@ -127,5 +128,5 @@ abstract class CAPFTestGraphFactoryTest extends CAPFTestSuite with GraphMatching
 //}
 
 class CAPFScanGraphFactoryTest extends CAPFTestGraphFactoryTest {
-  override def factory: CAPFTestGraphFactory = CAPFScanGraphFactory
+  override def factory: TestGraphFactory = CAPFScanGraphFactory
 }

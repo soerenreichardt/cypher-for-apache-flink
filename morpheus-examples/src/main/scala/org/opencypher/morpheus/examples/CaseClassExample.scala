@@ -27,6 +27,7 @@
 // tag::full-example[]
 package org.opencypher.morpheus.examples
 
+import org.apache.spark.sql.SparkSession
 import org.opencypher.morpheus.api.MorpheusSession
 import org.opencypher.morpheus.api.io.{Node, Relationship, RelationshipType}
 import org.opencypher.morpheus.util.App
@@ -38,7 +39,7 @@ import org.opencypher.morpheus.util.App
 object CaseClassExample extends App {
 
   // 1) Create Morpheus session
-  implicit val morpheus: MorpheusSession = MorpheusSession.local()
+  implicit val morpheus: MorpheusSession = MorpheusSession.create(SparkSession.builder().master("local[*]").getOrCreate())
 
   // 2) Load social network data via case class instances
   val socialNetwork = morpheus.readFrom(SocialNetworkData.persons, SocialNetworkData.friendships)
