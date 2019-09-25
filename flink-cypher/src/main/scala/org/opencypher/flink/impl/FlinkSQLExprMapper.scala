@@ -69,6 +69,7 @@ object FlinkSQLExprMapper {
       expr match {
 
         case _: ListLit => array(convertedChildren.head, convertedChildren.tail: _*)
+        case n: NullLit => expressions.Literal(null, n.cypherType.getFlinkType)
         case l: Lit[_] => expressions.Literal(l.v, TypeInformation.of(l.v.getClass))
         case _: AliasExpr => child0
         case Param(name) =>parameters(name).toFlinkLiteral

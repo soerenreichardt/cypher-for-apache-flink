@@ -155,7 +155,7 @@ abstract class VarLengthExpandPlanner[T <: Table[T] : TypeTag] {
     val alignedOps = unalignedOps.map { expansion =>
       val nullExpressions = targetHeader.expressions -- expansion.header.expressions
 
-      val expWithNullLits = expansion.addInto(nullExpressions.map(expr => NullLit -> expr).toSeq: _*)
+      val expWithNullLits = expansion.addInto(nullExpressions.map(expr => NullLit(expr.cypherType) -> expr).toSeq: _*)
       val exprsToRename = nullExpressions.filterNot(expr =>
         expWithNullLits.header.column(expr) == targetHeader.column(expr)
       )
@@ -201,7 +201,7 @@ abstract class VarLengthExpandPlanner[T <: Table[T] : TypeTag] {
     val childMapping: Set[(Expr, Expr)] = sourceChildren.map(expr => expr -> expr.withOwner(correctTarget))
     val missingMapping = (targetChildren -- childMapping.map(_._2) - correctTarget).map {
       case l: HasLabel => FalseLit -> l
-      case p: Property => NullLit -> p
+      case p: Property => NullLit(p.cypherType) -> p
       case other => throw RecordHeaderException(s"$correctTarget can only own HasLabel and Property but found $other")
     }
 

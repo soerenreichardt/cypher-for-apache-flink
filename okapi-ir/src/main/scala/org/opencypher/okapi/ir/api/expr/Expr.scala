@@ -1290,11 +1290,8 @@ case object FalseLit extends BoolLit(false) {
   override val cypherType: CypherType = CTFalse
 }
 
-case object NullLit extends Lit[Null] {
-
-  override val cypherType: CypherType = CTNull
-
-  override def v: Null = null
+case class NullLit(cypherType: CypherType = CTNull) extends Lit[Null] {
+    override def v: Null = null
 }
 
 // Pattern Predicate Expression

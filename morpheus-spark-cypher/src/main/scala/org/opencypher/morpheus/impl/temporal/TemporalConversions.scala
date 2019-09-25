@@ -143,7 +143,7 @@ object TemporalConversions extends Logging {
 
           Some(Right(s))
 
-        case NullLit => None
+        case _: NullLit => None
 
         case other =>
           throw NotImplementedException(s"Parsing temporal values is currently only supported for Literal-Maps and String literals, got $other")

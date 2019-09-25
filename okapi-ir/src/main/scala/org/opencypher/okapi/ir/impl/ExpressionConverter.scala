@@ -102,7 +102,7 @@ final class ExpressionConverter(context: IRBuilderContext) {
         val owner = child0
         val key = PropertyKey(name)
         owner.cypherType.material match {
-          case CTVoid => NullLit
+          case CTVoid => NullLit()
           // This means that the node can have any possible label combination, as the user did not specify any constraints
           case CTNode =>
             val propertyType = schema.allCombinations
@@ -356,7 +356,7 @@ final class ExpressionConverter(context: IRBuilderContext) {
         }
         ContainerIndex(convertedContainer, convert(index))(elementType)
 
-      case ast.Null() => NullLit
+      case ast.Null() => NullLit()
 
       case ast.RegexMatch(lhs, rhs) => RegexMatch(convert(lhs), convert(rhs))
 

@@ -506,7 +506,7 @@ object RelationalPlanner {
       // Fill in missing properties
       val missingProperties = targetHeader.propertiesFor(targetVar) -- withFalseRelTypes.header.propertiesFor(targetVar)
       val withProperties = withFalseRelTypes.addInto(
-        missingProperties.map(propertyExpr => NullLit -> propertyExpr).toSeq: _*
+        missingProperties.map(propertyExpr => NullLit(propertyExpr.cypherType) -> propertyExpr).toSeq: _*
       )
 
       import Expr._

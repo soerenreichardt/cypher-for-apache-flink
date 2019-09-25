@@ -88,7 +88,13 @@ object FlinkCypherTable {
       val initialColumnNameToFieldReference: Map[String, Expression] =
         table.columns.map(c => c -> UnresolvedFieldReference(c)).toMap
       val updatedColumns = columns.foldLeft(initialColumnNameToFieldReference) { case (columnMap, (expr, columnName)) =>
-        val column = expr.asFlinkSQLExpr(header, table, parameters).as(Symbol(columnName))
+        val column = expr match {
+          case _: NullLit =>
+            expr.asFlinkSQLExpr(header, table, parameters)
+              .cast(expr.cypherType.getFlinkType)
+//              .as(Symbol(columnName))
+          case other => other.asFlinkSQLExpr(header, table, parameters).as(Symbol(columnName))
+        }
         columnMap + (columnName -> column)
       }
       val existingColumnNames = table.columns
