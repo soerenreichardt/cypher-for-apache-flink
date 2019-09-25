@@ -307,6 +307,12 @@ case class RecordHeader(exprToColumn: Map[Expr, String], escaping: Option[Charac
         .replaceAll("-", "_")
         .replaceAll(":", "_")
         .replaceAll("\\.", "_")
+        .replace('(', '_')
+        .replace(')', '_')
+        .replace('@', '_')
+        .replace(" ", "")
+        .replace("?", "")
+        .replace("|", "_or_")
     }).replaceCharactersInColumnName(expr.toString)
     recConflictFreeColumnName(firstColumnNameCandidate)
   }
