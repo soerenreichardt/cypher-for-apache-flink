@@ -182,10 +182,9 @@ object FlinkCypherTable {
         case LeftOuterJoin => table.leftOuterJoin(other.table, joinExpr)
         case RightOuterJoin => table.rightOuterJoin(other.table, joinExpr)
         case FullOuterJoin => table.fullOuterJoin(other.table, joinExpr)
+        case CrossJoin => table.cross(other.table)
       }
     }
-
-    override def cross(other: FlinkTable): FlinkTable = table.cross(other.table)
 
     override def distinct: FlinkTable =
       table.distinct()

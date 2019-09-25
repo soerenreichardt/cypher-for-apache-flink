@@ -99,14 +99,6 @@ trait Table[T <: Table[T]] extends CypherTable {
   def join(other: T, joinType: JoinType, joinCols: (String, String)*): T
 
   /**
-   * Computes a cross-product between the current and the given table.
-   *
-   * @param other    table to join
-   * @return joined table
-   */
-  def cross(other: T): T
-
-  /**
     * Computes the union of the current table and the given table. Requires both tables to have identical column layouts.
     *
     * @param other table to union with

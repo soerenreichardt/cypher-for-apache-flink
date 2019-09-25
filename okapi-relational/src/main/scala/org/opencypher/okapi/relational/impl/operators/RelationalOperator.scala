@@ -437,18 +437,6 @@ final case class Join[T <: Table[T] : TypeTag](
   }
 }
 
-final case class Cross[T <: Table[T] : TypeTag](
-  lhs: RelationalOperator[T],
-  rhs: RelationalOperator[T]
-) extends RelationalOperator[T] {
-
-  override lazy val header: RecordHeader = lhs.header join rhs.header
-
-  override lazy val _table: T = {
-    lhs.table.cross(rhs.table)
-  }
-}
-
 /**
   * Computes the union of the two input operators. The two inputs must have identical headers.
   * This operation does not remove duplicates.

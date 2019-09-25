@@ -181,6 +181,7 @@ object SparkTable {
         case LeftOuterJoin => "left_outer"
         case RightOuterJoin => "right_outer"
         case FullOuterJoin => "full_outer"
+        case CrossJoin => "cross"
       }
 
       joinType match {
@@ -192,10 +193,6 @@ object SparkTable {
         case _ =>
           df.safeJoin(other.df, joinCols, joinTypeString)
       }
-    }
-
-    override def cross(other: DataFrameTable)(implicit session: RelationalCypherSession[DataFrameTable]): DataFrameTable = {
-      df.crossJoin(other.df)
     }
 
     override def distinct: DataFrameTable = df.dropDuplicates()

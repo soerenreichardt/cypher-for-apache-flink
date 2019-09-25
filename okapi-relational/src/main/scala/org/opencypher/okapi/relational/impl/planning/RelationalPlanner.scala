@@ -59,7 +59,7 @@ object RelationalPlanner {
 
     input match {
       case logical.CartesianProduct(lhs, rhs, _) =>
-        process[T](lhs).cross(process[T](rhs))
+        process[T](lhs).join(process[T](rhs), Seq.empty, CrossJoin)
 
       case logical.Select(fields, in, _) =>
 
@@ -365,10 +365,6 @@ object RelationalPlanner {
 
     def join(other: RelationalOperator[T], joinExprs: Seq[(Expr, Expr)], joinType: JoinType): RelationalOperator[T] = {
       relational.Join(op, other.withDisjointColumnNames(op.header), joinExprs, joinType)
-    }
-
-    def cross(other: RelationalOperator[T]): RelationalOperator[T] = {
-      relational.Cross(op, other)
     }
 
     def graphUnionAll(other: RelationalOperator[T]): RelationalOperator[T] = {
