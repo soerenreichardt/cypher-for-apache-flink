@@ -46,6 +46,8 @@ object FlinkConversions {
         case CTInteger => Some(Types.LONG)
         case CTBoolean => Some(Types.BOOLEAN)
         case CTFloat => Some(Types.DOUBLE)
+        case CTIdentity => Some(Types.LONG)
+        case CTDate => Some(Types.LONG)
         case _: CTNode => Some(Types.LONG)
         case _: CTRelationship => Some(Types.LONG)
         case l: CTList =>
@@ -63,7 +65,7 @@ object FlinkConversions {
 
     def getFlinkType: TypeInformation[_] = toFlinkType match {
       case Some(t) => t
-      case None => throw NotImplementedException(s"Mapping of CypherType $ct to Spark type")
+      case None => throw NotImplementedException(s"Mapping of CypherType $ct to Flink type")
     }
 
     def isFlinkCompatible: Boolean = toFlinkType.isDefined

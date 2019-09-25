@@ -12,7 +12,7 @@ dependencies {
     compile group: 'org.apache.flink', name: "flink-scala".scala(), version: ver.flink
     compile group: 'org.apache.flink', name: "flink-table".scala(), version: ver.flink
     compile group: 'org.apache.flink', name: "flink-clients".scala(), version: ver.flink
-    compileOnly group: 'org.apache.flink', name: "flink-streaming-scala".scala(), version: ver.flink
+    compile group: 'org.apache.flink', name: "flink-streaming-scala".scala(), version: ver.flink
     compile group: 'org.apache.flink', name: "flink-orc".scala(), version: ver.flink
     compile group: 'org.apache.hadoop', name: "hadoop-common", version: ver.hadoop
     compile("org.eclipse.ecf:org.apache.log4j:1.2.15.v201012070815")

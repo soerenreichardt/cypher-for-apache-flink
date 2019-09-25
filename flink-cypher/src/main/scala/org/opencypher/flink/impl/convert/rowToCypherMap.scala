@@ -56,7 +56,11 @@ final case class rowToCypherMap(exprToColumn: Seq[(Expr, String)], columnNameToI
         collectComplexList(row, v)
 
       case _ =>
-        val raw = row.getField(columnNameToIndex(header.column(v)))
+        import scala.collection.JavaConverters._
+        val raw = row.getField(columnNameToIndex(header.column(v))) match {
+          case map: java.util.HashMap[_, _] => map.asScala.toMap
+          case other => other
+        }
         CypherValue(raw)
     }
   }
