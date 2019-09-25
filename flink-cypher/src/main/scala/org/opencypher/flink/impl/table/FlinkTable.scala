@@ -92,7 +92,7 @@ object FlinkCypherTable {
           case _: NullLit =>
             expr.asFlinkSQLExpr(header, table, parameters)
               .cast(expr.cypherType.getFlinkType)
-//              .as(Symbol(columnName))
+              .as(Symbol(columnName))
           case other => other.asFlinkSQLExpr(header, table, parameters).as(Symbol(columnName))
         }
         columnMap + (columnName -> column)

@@ -222,6 +222,8 @@ object FlinkSQLExprMapper {
 
         case ep: ExistsPatternExpr => ep.targetField.asFlinkSQLExpr
 
+        case Length(expr) => expr.asFlinkSQLExpr.cardinality()
+
         case c@Coalesce(es) =>
           val columns = es.map(_.asFlinkSQLExpr)
           val tpe = c.cypherType.toFlinkType.get

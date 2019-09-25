@@ -224,6 +224,8 @@ final class ExpressionConverter(context: IRBuilderContext) {
           case functions.Head => Head(child0)
           case functions.Tail => ListSliceFrom(child0, IntegerLit(1))
 
+          case functions.Length => Length(child0)
+
           // Logarithmic functions
           case functions.Sqrt => Sqrt(child0)
           case functions.Log => Log(child0)
