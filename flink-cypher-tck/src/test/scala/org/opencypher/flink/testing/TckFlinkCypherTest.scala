@@ -29,7 +29,8 @@ package org.opencypher.flink.testing
 import java.io.File
 
 import org.opencypher.flink.test.CAPFTestSuite
-import org.opencypher.flink.test.support.capf.{CAPFScanGraphFactory, CAPFTestGraphFactory}
+import org.opencypher.flink.test.support.capf.CAPFScanGraphFactory
+import org.opencypher.flink.test.support.creation.graphs.TestGraphFactory
 import org.opencypher.okapi.tck.test.Tags.{BlackList, WhiteList}
 import org.opencypher.okapi.tck.test.{ScenariosFor, TCKGraph}
 import org.opencypher.tools.tck.api.CypherTCK
@@ -47,7 +48,7 @@ class TckFlinkCypherTest extends CAPFTestSuite {
     (CAPFScanGraphFactory, Set.empty[String])
   )
 
-  private val defaultFactory: CAPFTestGraphFactory = CAPFScanGraphFactory
+  private val defaultFactory: TestGraphFactory = CAPFScanGraphFactory
 
   private val blacklistFile = getClass.getResource("/scenario_blacklist").getFile
   private val scenarios = ScenariosFor(blacklistFile)

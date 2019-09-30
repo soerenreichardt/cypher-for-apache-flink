@@ -27,6 +27,7 @@
 package org.opencypher.flink.test.support
 
 import org.apache.flink.table.api.Table
+import org.opencypher.flink.api.CAPFSession
 import org.opencypher.flink.api.io.CAPFElementTable
 import org.opencypher.okapi.api.graph._
 import org.opencypher.okapi.api.io.conversion.ElementMapping
@@ -34,7 +35,7 @@ import org.opencypher.okapi.impl.util.StringEncodingUtilities._
 
 trait EntityTableCreationSupport {
 
-  def constructEntityTable(pattern: Pattern, table: Table): CAPFElementTable = {
+  def constructEntityTable(pattern: Pattern, table: Table)(implicit session: CAPFSession): CAPFElementTable = {
     val mapping = pattern.elements.foldLeft(ElementMapping.empty(pattern)) {
       case (acc, entity) =>
 
