@@ -56,7 +56,7 @@ object TableOps {
       expr match {
         case Param(name) => context.parameters(name)
         case _ =>
-          header.getColumn(expr).headOption match {
+          header.getColumn(expr) match {
             case None => throw IllegalArgumentException(s"slot for $expr")
             case Some(column) => CypherValue(r.getField(columnNameToIndex(column)))
           }
@@ -94,7 +94,7 @@ object TableOps {
           case (r1: Row, r2: Row) =>
             val r1Fields = Range(0, r1.getArity).map(r1.getField)
             val r2Fields = Range(0, r2.getArity).map(r2.getField)
-            Row.of((r1Fields ++ r2Fields): _*)
+            Row.of(r1Fields ++ r2Fields: _*)
         }
       }(Types.ROW(crossedTableTypes: _*), null)
 
@@ -105,12 +105,10 @@ object TableOps {
       require(!table.columns.contains(newName),
         s"Cannot rename column `$oldName` to `$newName`. A column with name `$newName` exists already.")
 
-      val renamedColumns = table.columns.map { col =>
-          col match {
-            case _ if col == oldName =>
-              ResolvedFieldReference(oldName, table.getSchema.getFieldType(oldName).get) as Symbol(newName)
-            case colName => ResolvedFieldReference(colName, table.getSchema.getFieldType(colName).get)
-          }
+      val renamedColumns = table.columns.map {
+        case col if col == oldName =>
+          ResolvedFieldReference(oldName, table.getSchema.getFieldType(oldName).get) as Symbol(newName)
+        case colName => ResolvedFieldReference(colName, table.getSchema.getFieldType(colName).get)
       }
 
       table.select(renamedColumns: _*)
@@ -121,9 +119,9 @@ object TableOps {
         s"Cannot rename columns `$oldNames` to `$newNames`. One or more columns of `$newNames` exist already.")
 
       val namePairs = oldNames zip newNames
-      val renames = namePairs.map(_ match {
+      val renames = namePairs.map {
         case (oldName: String, newName: String) => UnresolvedFieldReference(oldName) as Symbol(newName)
-      })
+      }
 
       table.select(renames: _*)
     }
@@ -131,7 +129,7 @@ object TableOps {
     def safeDropColumn(name: String): Table = {
       require(table.columns.contains(name),
         s"Cannot drop column `$name`. No column with that name exists.")
-      val columnSelect = table.columns.filterNot(_ == (name))
+      val columnSelect = table.columns.filterNot(_ == name)
       table.select(columnSelect.map(UnresolvedFieldReference): _*)
     }
 
@@ -141,7 +139,7 @@ object TableOps {
         s"Cannot drop column(s) ${nonExistentColumns.map(c => s"`$c`").mkString(", ")}. They do not exist.")
 
       val dropColumnsToSelectExpression = table.columns.filter(!names.contains(_))
-        .map(UnresolvedFieldReference(_))
+        .map(UnresolvedFieldReference)
       table.select(dropColumnsToSelectExpression: _*)
     }
 
@@ -205,9 +203,10 @@ object TableOps {
 
       val mergeOp = new Merge(",")
       val expressions = nameToTypeMap.map { pair =>
-        arrayTypes.map(_._1).toSet.contains(pair._1) match {
-          case true => mergeOp(UnresolvedFieldReference(pair._1)).cast(Types.STRING) as Symbol(pair._1)
-          case false => UnresolvedFieldReference(pair._1)
+        if (arrayTypes.keySet.contains(pair._1)) {
+          mergeOp(UnresolvedFieldReference(pair._1)).cast(Types.STRING) as Symbol(pair._1)
+        } else {
+          UnresolvedFieldReference(pair._1)
         }
       }.toSeq
 

@@ -68,7 +68,7 @@ sealed class CAPFSession private(
 object CAPFSession extends Serializable {
 
   private val deactivatedLogicalRules = Seq(
-    "ProjectMergeRule:force_mode"
+//    "ProjectMergeRule:force_mode"
   )
 
   def create(implicit env: ExecutionEnvironment): CAPFSession = {
