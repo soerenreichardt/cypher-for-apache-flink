@@ -60,13 +60,13 @@ object MorpheusNode {
   def apply(
     id: Long,
     labels: Set[String]
-  ): MorpheusNode = MorpheusNode(id.encodeAsMorpheusId, labels)
+  ): MorpheusNode = MorpheusNode(id, labels)
 
   def apply(
     id: Long,
     labels: Set[String],
     properties: CypherMap
-  ): MorpheusNode = MorpheusNode(id.encodeAsMorpheusId, labels, properties)
+  ): MorpheusNode = MorpheusNode(id, labels, properties)
 
 }
 
@@ -78,17 +78,17 @@ object MorpheusNode {
   * @param properties the properties of the node.
   */
 case class MorpheusNode(
-  override val id: Seq[Byte],
+  override val id: Long,
   override val labels: Set[String] = Set.empty,
   override val properties: CypherMap = CypherMap.empty
-) extends Node[Seq[Byte]] {
+) extends Node[Long] {
 
   override type I = MorpheusNode
 
-  override def copy(id: Seq[Byte] = id, labels: Set[String] = labels, properties: CypherMap = properties): MorpheusNode = {
+  override def copy(id: Long = id, labels: Set[String] = labels, properties: CypherMap = properties): MorpheusNode = {
     MorpheusNode(id, labels, properties)
   }
-  override def toString: String = s"${getClass.getSimpleName}(id=${id.toHex}, labels=$labels, properties=$properties)"
+  override def toString: String = s"${getClass.getSimpleName}(id=${id}, labels=$labels, properties=$properties)"
 }
 
 object MorpheusRelationship {
@@ -98,7 +98,7 @@ object MorpheusRelationship {
     startId: Long,
     endId: Long,
     relType: String
-  ): MorpheusRelationship = MorpheusRelationship(id.encodeAsMorpheusId, startId.encodeAsMorpheusId, endId.encodeAsMorpheusId, relType)
+  ): MorpheusRelationship = MorpheusRelationship(id, startId, endId, relType)
 
   def apply(
     id: Long,
@@ -106,7 +106,7 @@ object MorpheusRelationship {
     endId: Long,
     relType: String,
     properties: CypherMap
-  ): MorpheusRelationship = MorpheusRelationship(id.encodeAsMorpheusId, startId.encodeAsMorpheusId, endId.encodeAsMorpheusId, relType, properties)
+  ): MorpheusRelationship = MorpheusRelationship(id, startId, endId, relType, properties)
 }
 
 /**
@@ -119,23 +119,23 @@ object MorpheusRelationship {
   * @param properties the properties of the node.
   */
 case class MorpheusRelationship(
-  override val id: Seq[Byte],
-  override val startId: Seq[Byte],
-  override val endId: Seq[Byte],
+  override val id: Long,
+  override val startId: Long,
+  override val endId: Long,
   override val relType: String,
   override val properties: CypherMap = CypherMap.empty
-) extends Relationship[Seq[Byte]] {
+) extends Relationship[Long] {
 
   override type I = MorpheusRelationship
 
   override def copy(
-    id: Seq[Byte] = id,
-    startId: Seq[Byte] = startId,
-    endId: Seq[Byte] = endId,
+    id: Long = id,
+    startId: Long = startId,
+    endId: Long = endId,
     relType: String = relType,
     properties: CypherMap = properties
   ): MorpheusRelationship = MorpheusRelationship(id, startId, endId, relType, properties)
 
-  override def toString: String = s"${getClass.getSimpleName}(id=${id.toHex}, startId=${startId.toHex}, endId=${endId.toHex}, relType=$relType, properties=$properties)"
+  override def toString: String = s"${getClass.getSimpleName}(id=${id}, startId=${startId}, endId=${endId}, relType=$relType, properties=$properties)"
 
 }

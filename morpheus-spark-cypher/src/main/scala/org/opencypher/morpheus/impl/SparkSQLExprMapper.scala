@@ -200,8 +200,8 @@ object SparkSQLExprMapper {
         case PrefixId(_, prefix) => child0.addPrefix(lit(prefix))
         case ToId(e) =>
           e.cypherType.material match {
-            case CTInteger => child0.encodeLongAsMorpheusId
-            case ct if ct.toSparkType.contains(BinaryType) => child0
+            case CTInteger => child0
+//            case ct if ct.toSparkType.contains(BinaryType) => child0
             case other => throw IllegalArgumentException("a type that may be converted to an ID", other)
           }
 

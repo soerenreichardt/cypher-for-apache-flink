@@ -131,8 +131,9 @@ trait RecordBehaviour extends RelationalCypherRecords[DataFrameTable] {
     toCypherMaps.foreachPartition(f)
   }
 
-  override def collect: Array[CypherMap] =
+  override def collect: Array[CypherMap] = {
     toCypherMaps.collect()
+  }
 
 
   def toCypherMaps: Dataset[CypherMap] = {

@@ -26,12 +26,13 @@
  */
 package org.opencypher.morpheus.api.io
 
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, functions}
 import org.opencypher.morpheus.api.MorpheusSession
 import org.opencypher.morpheus.impl.table.SparkTable.{DataFrameTable, _}
 import org.opencypher.morpheus.impl.util.Annotation
 import org.opencypher.morpheus.impl.{MorpheusRecords, RecordBehaviour}
 import org.opencypher.okapi.api.io.conversion.{ElementMapping, NodeMappingBuilder, RelationshipMappingBuilder}
+import org.opencypher.okapi.api.types.CTInteger
 import org.opencypher.okapi.impl.util.StringEncodingUtilities._
 import org.opencypher.okapi.relational.api.io.ElementTable
 import org.opencypher.okapi.relational.api.table.RelationalElementTableFactory
@@ -60,12 +61,18 @@ case class MorpheusElementTable private[morpheus](
     table.cache()
     this
   }
+
+  override protected def verify(): Unit = {
+    mapping.idKeys.values.toSeq.flatten.foreach {
+      case (_, column) => table.verifyColumnType(column, CTInteger, "id key")
+    }
+  }
 }
 
 object MorpheusElementTable {
   def create(mapping: ElementMapping, table: DataFrameTable): MorpheusElementTable = {
     val sourceIdColumns = mapping.allSourceIdKeys
-    val idCols = table.df.encodeIdColumns(sourceIdColumns: _*)
+    val idCols = sourceIdColumns.map(functions.column)
     val remainingCols = mapping.allSourcePropertyKeys.map(table.df.col)
     val colsToSelect = idCols ++ remainingCols
 

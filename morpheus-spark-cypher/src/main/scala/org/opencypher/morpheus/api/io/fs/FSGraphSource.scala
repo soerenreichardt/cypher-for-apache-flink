@@ -196,7 +196,7 @@ class CsvGraphSource(rootPath: String, filesPerTable: Option[Int] = None)(overri
   extends FSGraphSource(rootPath, FileFormat.csv, None, filesPerTable) {
 
   override protected def writeTable(path: String, table: DataFrame): Unit =
-    super.writeTable(path, table.encodeBinaryToHexString)
+    super.writeTable(path, table)
 
   protected override def readNodeTable(graphName: GraphName, labels: Set[String], sparkSchema: StructType): DataFrame =
     readElementTable(graphName, Left(labels), sparkSchema)
@@ -212,13 +212,13 @@ class CsvGraphSource(rootPath: String, filesPerTable: Option[Int] = None)(overri
     labelsOrRelKey: Either[Set[String], String],
     sparkSchema: StructType
   ): DataFrame = {
-    val readSchema = sparkSchema.convertTypes(BinaryType, StringType)
+    val readSchema = sparkSchema.convertTypes(StringType, StringType)
 
     val tableWithEncodedStrings = labelsOrRelKey match {
       case Left(labels) => super.readNodeTable(graphName, labels, readSchema)
       case Right(relKey) => super.readRelationshipTable(graphName, relKey, readSchema)
     }
 
-    tableWithEncodedStrings.decodeHexStringToBinary(sparkSchema.binaryColumns)
+    tableWithEncodedStrings//.decodeHexStringToBinary(sparkSchema.binaryColumns)
   }
 }

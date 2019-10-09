@@ -384,9 +384,9 @@ object SparkTable {
     def encodeIdColumns(idColumns: String*): Seq[Column] = {
       idColumns.map { key =>
         df.structFieldForColumn(key).dataType match {
-          case LongType => df.col(key).encodeLongAsMorpheusId(key)
-          case IntegerType => df.col(key).cast(LongType).encodeLongAsMorpheusId(key)
-          case StringType => df.col(key).cast(BinaryType)
+          case LongType => df.col(key)//.encodeLongAsMorpheusId(key)
+          case IntegerType => df.col(key).cast(LongType)//.encodeLongAsMorpheusId(key)
+          case StringType => df.col(key)//.cast(BinaryType)
           case BinaryType => df.col(key)
           case unsupportedType => throw IllegalArgumentException(
             expected = s"Column `$key` should have a valid identifier data type, such as [`$BinaryType`, `$StringType`, `$LongType`, `$IntegerType`]",

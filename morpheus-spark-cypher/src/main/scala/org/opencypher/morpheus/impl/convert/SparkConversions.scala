@@ -62,9 +62,9 @@ object SparkConversions {
           case CTLocalDateTime => Some(TimestampType)
           case CTDate => Some(DateType)
           case CTDuration => Some(CalendarIntervalType)
-          case CTIdentity => Some(BinaryType)
+          case CTIdentity => Some(LongType)
           case b if b.subTypeOf(CTBoolean) => Some(BooleanType)
-          case n if n.subTypeOf(CTElement.nullable) => Some(BinaryType)
+          case n if n.subTypeOf(CTElement.nullable) => Some(LongType)
           // Spark uses String as the default array inner type
           case CTMap(inner) => Some(StructType(inner.map { case (key, vType) => vType.toStructField(key) }.toSeq))
           case CTEmptyList => Some(ArrayType(StringType, containsNull = false))
@@ -124,9 +124,9 @@ object SparkConversions {
         case dt: DecimalType => Some(CTBigDecimal(dt.precision, dt.scale))
         case TimestampType => Some(CTLocalDateTime)
         case DateType => Some(CTDate)
+        case BinaryType => Some(CTInteger)
         case CalendarIntervalType => Some(CTDuration)
         case ArrayType(NullType, _) => Some(CTEmptyList)
-        case BinaryType => Some(CTIdentity)
         case ArrayType(elemType, containsNull) =>
           elemType.toCypherType(containsNull).map(CTList(_))
         case NullType => Some(CTNull)

@@ -65,7 +65,7 @@ final case class rowToCypherMap(exprToColumn: Seq[(Expr, String)]) extends (Row 
     val idValue = row.getAs[Any](header.column(v))
     idValue match {
       case null => CypherNull
-      case id: Array[_] =>
+      case id: Long =>
 
         val labels = header
           .labelsFor(v)
@@ -78,7 +78,7 @@ final case class rowToCypherMap(exprToColumn: Seq[(Expr, String)]) extends (Row 
           .collect { case (key, value) if !value.isNull => key -> value }
           .toMap
 
-        MorpheusNode(id.asInstanceOf[Array[Byte]], labels, properties)
+        MorpheusNode(id, labels, properties)
       case invalidID => throw UnsupportedOperationException(s"MorpheusNode ID has to be an Array[Byte] instead of ${invalidID.getClass}")
     }
   }
@@ -87,9 +87,9 @@ final case class rowToCypherMap(exprToColumn: Seq[(Expr, String)]) extends (Row 
     val idValue = row.getAs[Any](header.column(v))
     idValue match {
       case null => CypherNull
-      case id: Array[_] =>
-        val source = row.getAs[Array[_]](header.column(header.startNodeFor(v)))
-        val target = row.getAs[Array[_]](header.column(header.endNodeFor(v)))
+      case id: Long =>
+        val source = row.getAs[Long](header.column(header.startNodeFor(v)))
+        val target = row.getAs[Long](header.column(header.endNodeFor(v)))
 
         val relType = header
           .typesFor(v)
@@ -104,9 +104,9 @@ final case class rowToCypherMap(exprToColumn: Seq[(Expr, String)]) extends (Row 
           .toMap
 
         MorpheusRelationship(
-          id.asInstanceOf[Array[Byte]],
-          source.asInstanceOf[Array[Byte]],
-          target.asInstanceOf[Array[Byte]],
+          id.asInstanceOf[Long],
+          source.asInstanceOf[Long],
+          target.asInstanceOf[Long],
           relType,
           properties)
       case invalidID => throw UnsupportedOperationException(s"MorpheusRelationship ID has to be an Array[Byte] instead of ${invalidID.getClass}")

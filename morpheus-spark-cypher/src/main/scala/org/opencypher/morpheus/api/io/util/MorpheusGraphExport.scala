@@ -27,7 +27,7 @@
 package org.opencypher.morpheus.api.io.util
 
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.types.{BinaryType, StructField, StructType}
+import org.apache.spark.sql.types.{BinaryType, LongType, StructField, StructType}
 import org.opencypher.morpheus.api.io.{GraphElement, Relationship}
 import org.opencypher.morpheus.impl.convert.SparkConversions._
 import org.opencypher.morpheus.impl.table.SparkTable.DataFrameTable
@@ -43,7 +43,7 @@ object MorpheusGraphExport {
   implicit class CanonicalTableSparkSchema(val schema: PropertyGraphSchema) extends AnyVal {
 
     def canonicalNodeStructType(labels: Set[String]): StructType = {
-      val id = StructField(GraphElement.sourceIdKey, BinaryType, nullable = false)
+      val id = StructField(GraphElement.sourceIdKey, LongType, nullable = false)
       val properties = schema.nodePropertyKeys(labels).toSeq
         .map { case (propertyName, cypherType) => propertyName.toPropertyColumnName -> cypherType }
         .sortBy { case (propertyColumnName, _) => propertyColumnName }
@@ -54,9 +54,9 @@ object MorpheusGraphExport {
     }
 
     def canonicalRelStructType(relType: String): StructType = {
-      val id = StructField(GraphElement.sourceIdKey, BinaryType, nullable = false)
-      val sourceId = StructField(Relationship.sourceStartNodeKey, BinaryType, nullable = false)
-      val targetId = StructField(Relationship.sourceEndNodeKey, BinaryType, nullable = false)
+      val id = StructField(GraphElement.sourceIdKey, LongType, nullable = false)
+      val sourceId = StructField(Relationship.sourceStartNodeKey, LongType, nullable = false)
+      val targetId = StructField(Relationship.sourceEndNodeKey, LongType, nullable = false)
       val properties = schema.relationshipPropertyKeys(relType).toSeq.sortBy(_._1).map { case (propertyName, cypherType) =>
         StructField(propertyName.toPropertyColumnName, cypherType.getSparkType, cypherType.isNullable)
       }
