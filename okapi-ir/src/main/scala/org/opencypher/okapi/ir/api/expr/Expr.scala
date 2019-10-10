@@ -637,13 +637,6 @@ sealed trait UnaryFunctionExpr extends FunctionExpr {
   def signature(inputCypherTypes: Seq[CypherType]): Option[CypherType] = signature(inputCypherTypes.head)
 }
 
-final case class Length(expr: Expr) extends UnaryFunctionExpr {
-  override def signature(inputCypherType: CypherType): Option[CypherType] = inputCypherType match {
-    case CTList(inner) => Some(inner)
-    case _ => None
-  }
-}
-
 final case class Head(expr: Expr) extends UnaryFunctionExpr {
   override def signature(inputCypherType: CypherType): Option[CypherType] = inputCypherType match {
     case CTList(inner) => Some(inner)
