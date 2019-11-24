@@ -35,6 +35,8 @@ import org.opencypher.okapi.impl.exception.UnsupportedOperationException
 import org.opencypher.okapi.ir.api.expr.{Expr, ListSegment, Var}
 import org.opencypher.okapi.relational.impl.table.RecordHeader
 
+import scala.collection.convert.Wrappers.MapWrapper
+
 final case class rowToCypherMap(exprToColumn: Seq[(Expr, String)], columnNameToIndex: Map[String, Int]) extends (Row => CypherMap) {
 
   private val header = RecordHeader(exprToColumn.toMap)
@@ -58,7 +60,8 @@ final case class rowToCypherMap(exprToColumn: Seq[(Expr, String)], columnNameToI
       case _ =>
         import scala.collection.JavaConverters._
         val raw = row.getField(columnNameToIndex(header.column(v))) match {
-          case map: java.util.HashMap[_, _] => map.asScala.toMap
+          case map: java.util.HashMap[_, _] => map.asScala.toMap.keySet.toList // Flink returns a multiset when calling collect which stores too much information. Only the keyset is needed
+          case _: MapWrapper[_, _] => List.empty
           case other => other
         }
         CypherValue(raw)

@@ -1,8 +1,7 @@
 package org.opencypher.flink.test.fixture
 
 import org.opencypher.flink.impl.table.FlinkCypherTable.FlinkTable
-import org.opencypher.flink.test.support.capf.CAPFScanGraphFactory
-import org.opencypher.flink.test.support.creation.graphs.TestGraphFactory
+import org.opencypher.flink.test.support.creation.graphs.{CAPFScanGraphFactory, TestGraphFactory}
 import org.opencypher.okapi.api.graph.Pattern
 import org.opencypher.okapi.relational.api.graph.RelationalCypherGraph
 import org.opencypher.okapi.testing.BaseTestSuite

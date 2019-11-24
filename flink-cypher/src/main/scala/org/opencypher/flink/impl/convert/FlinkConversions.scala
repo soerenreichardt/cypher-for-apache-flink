@@ -37,6 +37,7 @@ import org.opencypher.okapi.ir.api.expr.Var
 import org.opencypher.okapi.relational.impl.table.RecordHeader
 
 object FlinkConversions {
+
   implicit class CypherTypeOps(val ct: CypherType) extends AnyVal {
 
     def toFlinkType: Option[TypeInformation[_]] = ct match {
@@ -91,6 +92,7 @@ object FlinkConversions {
         case Types.INT => Some(CTInteger)
         case Types.LONG => Some(CTInteger)
         case Types.BOOLEAN => Some(CTBoolean)
+        case Types.FLOAT => Some(CTFloat)
         case Types.DOUBLE => Some(CTFloat)
         case PrimitiveArrayTypeInfo.BOOLEAN_PRIMITIVE_ARRAY_TYPE_INFO => Some(CTList(CTBoolean))
         case PrimitiveArrayTypeInfo.DOUBLE_PRIMITIVE_ARRAY_TYPE_INFO => Some(CTList(CTFloat))
@@ -168,4 +170,5 @@ object FlinkConversions {
       RecordHeader(exprToColumn.toMap)
     }
   }
+
 }

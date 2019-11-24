@@ -29,7 +29,7 @@ package org.opencypher.flink.impl.table
 import org.apache.flink.table.api.scala._
 import org.apache.flink.table.api.{Table, Types}
 import org.apache.flink.table.expressions
-import org.apache.flink.table.expressions.{Expression, UnresolvedFieldReference}
+import org.apache.flink.table.expressions.{DistinctAgg, Expression, UnresolvedFieldReference}
 import org.opencypher.flink.api.CAPFSession
 import org.opencypher.flink.impl.FlinkSQLExprMapper._
 import org.opencypher.flink.impl.TableOps._
@@ -189,8 +189,11 @@ object FlinkCypherTable {
     override def distinct: FlinkTable =
       table.distinct()
 
-    override def distinct(cols: String*): FlinkTable =
-      table.distinct()
+    override def distinct(cols: String*): FlinkTable = {
+      val tableColumns: Set[Expression] = (table.columns.toSet -- cols).map(UnresolvedFieldReference)
+      val distinctOps: Seq[Expression] = cols.map(col => DistinctAgg(col))
+      table.select((tableColumns ++ distinctOps).toSeq: _*)
+    }
 
 
   }

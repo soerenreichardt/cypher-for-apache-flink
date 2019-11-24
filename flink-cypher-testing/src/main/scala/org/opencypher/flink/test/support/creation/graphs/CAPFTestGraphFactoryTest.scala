@@ -24,14 +24,13 @@
  * described as "implementation extensions to Cypher" or as "proposed changes to
  * Cypher that are not yet approved by the openCypher community".
  */
-package org.opencypher.flink.test.support.capf
+package org.opencypher.flink.test.support.creation.graphs
 
 import org.apache.flink.api.scala._
 import org.apache.flink.table.api.scala._
 import org.opencypher.flink.api.io.CAPFElementTable
 import org.opencypher.flink.test.CAPFTestSuite
 import org.opencypher.flink.test.support.GraphMatchingTestSupport
-import org.opencypher.flink.test.support.creation.graphs.TestGraphFactory
 import org.opencypher.okapi.api.io.conversion.{NodeMappingBuilder, RelationshipMappingBuilder}
 import org.opencypher.okapi.api.schema.PropertyGraphSchema
 import org.opencypher.okapi.api.types.CTString

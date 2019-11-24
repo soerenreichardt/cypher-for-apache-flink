@@ -220,6 +220,9 @@ object FlinkSQLExprMapper {
         case _: Sin => child0.sin
         case _: Tan => child0.tan
 
+        case _: StDev => child0.stddevSamp
+        case _: StDevP => child0.stddevPop
+
         case ep: ExistsPatternExpr => ep.targetField.asFlinkSQLExpr
 
         case Length(expr) => expr.asFlinkSQLExpr.cardinality()
@@ -277,6 +280,7 @@ object FlinkSQLExprMapper {
         }
 
         // Aggregators
+        case CountStar => expressions.Count(header.columns.head)
         case Count(_, _) => child0.count
         case Collect(_, _) => child0.collect
         case _: Avg => child0.avg
